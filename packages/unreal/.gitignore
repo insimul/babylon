@@ -1,0 +1,17 @@
+# Unreal build artifacts — never commit
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Build/
+
+# IDE / generated project files
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+.vs/

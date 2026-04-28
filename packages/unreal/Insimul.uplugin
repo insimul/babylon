@@ -1,0 +1,23 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0.0",
+  "FriendlyName": "Insimul",
+  "Description": "Insimul AI conversation system for Unreal Engine. Enables streaming NPC conversations, TTS/STT, quest management, and crowd character integration.",
+  "Category": "AI",
+  "CreatedBy": "Insimul",
+  "CreatedByURL": "",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "CanContainContent": true,
+  "IsBetaVersion": true,
+  "Installed": true,
+  "Modules": [
+    {
+      "Name": "InsimulRuntime",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
