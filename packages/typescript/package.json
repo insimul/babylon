@@ -1,0 +1,41 @@
+{
+  "name": "@insimul/typescript",
+  "version": "1.0.0",
+  "description": "JavaScript/TypeScript SDK for the Insimul conversation service — connect any web game to AI-powered NPC conversations with streaming text, audio, and lip sync.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "insimul",
+    "npc",
+    "conversation",
+    "ai",
+    "game",
+    "streaming",
+    "tts",
+    "stt",
+    "lip-sync"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
