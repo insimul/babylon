@@ -4,5 +4,8 @@
   "private": true,
   "description": "Insimul runtime SDK — engines and integrations that ship inside exported games. Open-source under Apache-2.0.",
   "license": "Apache-2.0",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "tau-prolog": "^0.3.4"
+  }
 }
