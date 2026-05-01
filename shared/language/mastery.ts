@@ -10,3 +10,11 @@
 export type MasteryLevel = 'new' | 'learning' | 'familiar' | 'mastered';
 
 export const MASTERY_LEVELS: MasteryLevel[] = ['new', 'learning', 'familiar', 'mastered'];
+
+/** Canonical mastery thresholds (correct uses required). */
+export const MASTERY_THRESHOLDS: Record<MasteryLevel, number> = {
+  new: 0,
+  learning: 3,
+  familiar: 5,
+  mastered: 8,
+};
