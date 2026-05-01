@@ -1,0 +1,77 @@
+{
+  "worldType": "high-fantasy",
+  "label": "High Fantasy",
+  "description": "Grand castles, towering spires, magical stonework with ornate details and vibrant colors",
+
+  "buildingPresets": {
+    "residential":       { "material": "stone", "architecture": "colonial" },
+    "commercial_food":   { "material": "stone", "architecture": "medieval" },
+    "commercial_retail": { "material": "stone", "architecture": "medieval" },
+    "commercial_service":{ "material": "stone", "architecture": "colonial" },
+    "civic":             { "material": "stone", "architecture": "colonial" },
+    "industrial":        { "material": "stone", "architecture": "industrial" },
+    "maritime":          { "material": "stone", "architecture": "medieval" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["castle_brick_01", "castle_brick_02_white", "old_stone_wall"],
+    "roof":  ["roof_slates_02", "grey_roof_tiles", "clay_roof_tiles"],
+    "door":  ["dark_wood", "wooden_gate"],
+    "floor": ["stone_floor", "marble_01"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.30, "g": 0.55, "b": 0.30 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.50, "g": 0.45, "b": 0.40 }, "texture": "cobblestone_floor_08" },
+    "sidewalk": { "color": { "r": 0.60, "g": 0.55, "b": 0.50 }, "texture": "stone_pathway" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buns", "hair_hair_simpleparted", "hair_hair_buzzed"],
+    "clothingPalette": ["#4B0082", "#8B0000", "#006400", "#191970", "#DAA520", "#CD853F", "#800080", "#2F4F4F"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#90EE90", "#ADD8E6"],
+    "animals": ["animal_horse_white", "animal_stag", "animal_deer", "animal_fox", "animal_wolf"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":        { "model": "tree_small_02" },
+      "pine":       { "model": "pine_tree_01" },
+      "jacaranda":  { "model": "jacaranda_tree" },
+      "fir":        { "model": "fir_tree_01" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "flowering":   { "model": "shrub_03" },
+      "fern":        { "model": "fern_02" },
+      "potted_plant":{ "model": "potted_plant_02" }
+    },
+    "rocks": {
+      "boulder":    { "model": "boulder_01" },
+      "mossy_rock": { "model": "rock_moss_set_02" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":       "wine_barrel_01",
+      "crate":        "wooden_crate_01",
+      "lantern":      "Lantern_01",
+      "chandelier":   "Chandelier_01",
+      "goblet":       "brass_goblets",
+      "candleholder": "brass_candleholders",
+      "books":        "book_encyclopedia_set_01",
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01",
+      "bed":          "GothicBed_01",
+      "cabinet":      "GothicCabinet_01",
+      "shelf":        "Shelf_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

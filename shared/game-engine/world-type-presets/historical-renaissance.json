@@ -1,0 +1,72 @@
+{
+  "worldType": "historical-renaissance",
+  "label": "Historical Renaissance",
+  "description": "Italian/European Renaissance — stucco palazzos, terracotta roofs, marble columns, manicured gardens",
+
+  "buildingPresets": {
+    "residential":       { "material": "stucco", "architecture": "colonial" },
+    "commercial_food":   { "material": "stucco", "architecture": "colonial" },
+    "commercial_retail": { "material": "stucco", "architecture": "colonial" },
+    "commercial_service":{ "material": "stucco", "architecture": "colonial" },
+    "civic":             { "material": "stone",  "architecture": "colonial" },
+    "industrial":        { "material": "brick",  "architecture": "industrial" },
+    "maritime":          { "material": "stucco", "architecture": "colonial" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["plastered_wall", "yellow_plaster", "white_plaster_rough_01"],
+    "roof":  ["clay_roof_tiles", "clay_roof_tiles_02", "ceramic_roof_01"],
+    "door":  ["dark_wood", "fine_grained_wood"],
+    "floor": ["marble_01", "stone_tiles"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.35, "g": 0.50, "b": 0.30 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.50, "g": 0.48, "b": 0.42 }, "texture": "cobblestone_floor_05" },
+    "sidewalk": { "color": { "r": 0.60, "g": 0.58, "b": 0.52 }, "texture": "stone_pathway" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant", "outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buns", "hair_hair_simpleparted"],
+    "clothingPalette": ["#800020", "#191970", "#006400", "#DAA520", "#4B0082", "#8B0000", "#CD853F", "#2F4F4F"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_horse", "animal_horse_white", "animal_donkey"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "flowering":   { "model": "shrub_03" },
+      "potted_plant":{ "model": "potted_plant_02" },
+      "fern":        { "model": "fern_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":       "wine_barrel_01",
+      "goblet":       "brass_goblets",
+      "candleholder": "brass_candleholders",
+      "books":        "book_encyclopedia_set_01",
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01",
+      "bed":          "GothicBed_01",
+      "cabinet":      "GothicCabinet_01",
+      "vase":         "brass_vase_01",
+      "tea_set":      "tea_set_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

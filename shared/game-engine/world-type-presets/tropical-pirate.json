@@ -1,0 +1,72 @@
+{
+  "worldType": "tropical-pirate",
+  "label": "Tropical Pirate",
+  "description": "Caribbean port town — weathered wooden docks, colonial trading posts, palm-shaded plazas, cannon emplacements",
+
+  "buildingPresets": {
+    "residential":       { "material": "wood",   "architecture": "colonial" },
+    "commercial_food":   { "material": "wood",   "architecture": "colonial" },
+    "commercial_retail": { "material": "wood",   "architecture": "colonial" },
+    "commercial_service":{ "material": "stucco", "architecture": "colonial" },
+    "civic":             { "material": "stone",  "architecture": "colonial" },
+    "industrial":        { "material": "wood",   "architecture": "rustic" },
+    "maritime":          { "material": "wood",   "architecture": "rustic" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["weathered_planks", "plastered_wall_02", "white_plaster_rough_02"],
+    "roof":  ["clay_roof_tiles", "thatch_roof_angled", "old_planks_02"],
+    "door":  ["weathered_brown_planks", "dark_wood"],
+    "floor": ["old_wood_floor", "plank_flooring"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.55, "g": 0.52, "b": 0.38 }, "texture": "aerial_beach_01" },
+    "road":     { "color": { "r": 0.50, "g": 0.45, "b": 0.35 }, "texture": "brown_mud" },
+    "sidewalk": { "color": { "r": 0.58, "g": 0.55, "b": 0.45 }, "texture": "old_planks_02" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buns", "hair_hair_buzzed", "hair_hair_simpleparted"],
+    "clothingPalette": ["#8B4513", "#F5F5DC", "#800000", "#DAA520", "#191970", "#CD853F", "#556B2F", "#2F4F4F"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#4A2511", "#3B1F0E"],
+    "animals": ["animal_fox", "animal_alpaca"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "jacaranda":  { "model": "jacaranda_tree" },
+      "oak":        { "model": "tree_small_02" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "flowering":   { "model": "shrub_03" },
+      "fern":        { "model": "fern_02" },
+      "crystalline": { "model": "crystalline_iceplant" }
+    },
+    "rocks": {
+      "boulder":    { "model": "boulder_01" },
+      "rock":       { "model": "rock_07" },
+      "mossy_rock": { "model": "rock_moss_set_01" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":   "wooden_barrels_01",
+      "bucket":   "wooden_bucket_01",
+      "crate":    "wooden_crate_02",
+      "lantern":  "wooden_lantern_01",
+      "saber":    "wooden_handle_saber",
+      "goblet":   "brass_goblets",
+      "chair":    "GreenChair_01",
+      "table":    "WoodenTable_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_katana_01"
+    }
+  }
+}

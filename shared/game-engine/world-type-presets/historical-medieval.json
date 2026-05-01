@@ -1,0 +1,74 @@
+{
+  "worldType": "historical-medieval",
+  "label": "Historical Medieval",
+  "description": "Historically grounded European Middle Ages — stone keeps, half-timber houses, thatch and slate",
+
+  "buildingPresets": {
+    "residential":       { "material": "wood",  "architecture": "medieval" },
+    "commercial_food":   { "material": "wood",  "architecture": "medieval" },
+    "commercial_retail": { "material": "wood",  "architecture": "medieval" },
+    "commercial_service":{ "material": "stone", "architecture": "medieval" },
+    "civic":             { "material": "stone", "architecture": "medieval" },
+    "industrial":        { "material": "wood",  "architecture": "rustic" },
+    "maritime":          { "material": "wood",  "architecture": "medieval" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["medieval_wood", "old_stone_wall", "half_timbered_wall_01"],
+    "roof":  ["thatch_roof_angled", "roof_slates_02", "clay_roof_tiles"],
+    "door":  ["dark_wood", "wooden_gate"],
+    "floor": ["old_wood_floor", "stone_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.35, "g": 0.45, "b": 0.25 }, "texture": "forrest_ground_01" },
+    "road":     { "color": { "r": 0.45, "g": 0.42, "b": 0.38 }, "texture": "cobblestone_floor_01" },
+    "sidewalk": { "color": { "r": 0.50, "g": 0.48, "b": 0.42 }, "texture": "cobblestone_floor_02" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant", "outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_long", "hair_hair_simpleparted", "hair_hair_buzzed", "hair_hair_buns"],
+    "clothingPalette": ["#8B4513", "#2F4F4F", "#556B2F", "#800000", "#191970", "#A0522D", "#6B8E23"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_horse", "animal_donkey", "animal_cow", "animal_bull"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":  { "model": "tree_small_02" },
+      "pine": { "model": "pine_tree_01" },
+      "fir":  { "model": "fir_tree_01" }
+    },
+    "vegetation": {
+      "shrub": { "model": "shrub_01" },
+      "bush":  { "model": "shrub_02" },
+      "fern":  { "model": "fern_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" },
+      "rock":    { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":       "wine_barrel_01",
+      "crate":        "wooden_crate_01",
+      "lantern":      "Lantern_01",
+      "chandelier":   "Chandelier_01",
+      "goblet":       "brass_goblets",
+      "candleholder": "brass_candleholders",
+      "books":        "book_encyclopedia_set_01",
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01",
+      "bed":          "GothicBed_01",
+      "bucket":       "wooden_bucket_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

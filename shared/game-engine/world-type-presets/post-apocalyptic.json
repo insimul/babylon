@@ -1,0 +1,69 @@
+{
+  "worldType": "post-apocalyptic",
+  "label": "Post-Apocalyptic",
+  "description": "Ruined civilization — crumbling concrete, rusted metal, scavenged shelters, overgrown ruins",
+
+  "buildingPresets": {
+    "residential":       { "material": "metal",  "architecture": "rustic" },
+    "commercial_food":   { "material": "metal",  "architecture": "rustic" },
+    "commercial_retail": { "material": "metal",  "architecture": "rustic" },
+    "commercial_service":{ "material": "stone",  "architecture": "rustic" },
+    "civic":             { "material": "stone",  "architecture": "rustic" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "metal",  "architecture": "rustic" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["cracked_concrete_wall", "damaged_plaster", "rusty_metal_03"],
+    "roof":  ["corrugated_iron", "rusty_metal_sheet", "rusty_metal_05"],
+    "door":  ["rusty_metal_shutter", "weathered_brown_planks"],
+    "floor": ["concrete_floor_damaged_01", "damaged_concrete_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.40, "g": 0.38, "b": 0.30 }, "texture": "dried_clay_mud" },
+    "road":     { "color": { "r": 0.35, "g": 0.33, "b": 0.28 }, "texture": "cracked_concrete" },
+    "sidewalk": { "color": { "r": 0.42, "g": 0.40, "b": 0.35 }, "texture": "concrete_debris" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_buzzed", "hair_hair_buzzedfemale", "hair_hair_long"],
+    "clothingPalette": ["#556B2F", "#8B4513", "#2F4F4F", "#696969", "#8B0000", "#3B3B3B", "#A0522D"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_wolf", "animal_husky", "animal_fox"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "dead_tree": { "model": "dead_tree_trunk" },
+      "stump":     { "model": "tree_stump_01" }
+    },
+    "vegetation": {
+      "moss":  { "model": "moss_01" },
+      "shrub": { "model": "shrub_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" },
+      "rock":    { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel_fire": "barrel_stove",
+      "barrel":      "Barrel_01",
+      "barrel_blue": "barrel_03",
+      "utility_box": "utility_box_02",
+      "axe":         "wooden_axe",
+      "stump":       "tree_stump_01",
+      "crate":       "wooden_crate_02",
+      "lamp":        "street_lamp_02"
+    },
+    "questObjects": {
+      "chest":    "metal_tool_chest",
+      "med_pack": "metal_tool_chest"
+    }
+  }
+}

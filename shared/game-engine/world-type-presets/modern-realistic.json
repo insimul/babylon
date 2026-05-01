@@ -1,0 +1,68 @@
+{
+  "worldType": "modern-realistic",
+  "label": "Modern Realistic",
+  "description": "Contemporary urban/suburban — glass offices, stucco homes, asphalt roads, manicured lawns",
+
+  "buildingPresets": {
+    "residential":       { "material": "stucco", "architecture": "modern" },
+    "commercial_food":   { "material": "glass",  "architecture": "modern" },
+    "commercial_retail": { "material": "glass",  "architecture": "modern" },
+    "commercial_service":{ "material": "glass",  "architecture": "modern" },
+    "civic":             { "material": "glass",  "architecture": "modern" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "brick",  "architecture": "modern" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["concrete_wall_005", "plastered_wall", "white_plaster_rough_01"],
+    "roof":  ["roof_tiles_14", "concrete_wall_003", "grey_roof_tiles_02"],
+    "door":  ["fine_grained_wood", "painted_metal_shutter"],
+    "floor": ["wood_floor", "plank_flooring_02"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.30, "g": 0.50, "b": 0.28 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.30, "g": 0.30, "b": 0.32 }, "texture": "asphalt_01" },
+    "sidewalk": { "color": { "r": 0.60, "g": 0.60, "b": 0.60 }, "texture": "concrete_pavement" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_simpleparted", "hair_hair_buns", "hair_hair_buzzed", "hair_hair_long"],
+    "clothingPalette": ["#2c3e50", "#34495e", "#7f8c8d", "#2980b9", "#27ae60", "#e74c3c", "#8e44ad", "#f39c12"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#4A2511", "#3B1F0E"],
+    "animals": ["animal_husky", "animal_shibainu"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "flowering":   { "model": "shrub_03" },
+      "potted_plant":{ "model": "potted_plant_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "lamp":     "street_lamp_01",
+      "chair":    "GreenChair_01",
+      "table":    "WoodenTable_01",
+      "shelf":    "Shelf_01",
+      "books":    "book_encyclopedia_set_01",
+      "boombox":  "boombox",
+      "register": "CashRegister_01",
+      "bed":      "GothicBed_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest"
+    }
+  }
+}

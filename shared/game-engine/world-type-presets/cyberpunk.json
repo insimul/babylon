@@ -1,0 +1,66 @@
+{
+  "worldType": "cyberpunk",
+  "label": "Cyberpunk",
+  "description": "Neon-soaked urban dystopia — dark metal towers, holographic signage, rain-slicked streets",
+
+  "buildingPresets": {
+    "residential":       { "material": "metal",  "architecture": "futuristic" },
+    "commercial_food":   { "material": "metal",  "architecture": "futuristic" },
+    "commercial_retail": { "material": "glass",  "architecture": "futuristic" },
+    "commercial_service":{ "material": "metal",  "architecture": "futuristic" },
+    "civic":             { "material": "metal",  "architecture": "futuristic" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "metal",  "architecture": "futuristic" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["concrete_wall_004", "concrete_wall_007", "metal_plate"],
+    "roof":  ["metal_plate_02", "rusty_metal_sheet", "concrete_wall_003"],
+    "door":  ["painted_metal_shutter", "rusty_metal_shutter"],
+    "floor": ["concrete_floor", "metal_grate_rusty"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.20, "g": 0.20, "b": 0.22 }, "texture": "concrete_floor_damaged_01" },
+    "road":     { "color": { "r": 0.15, "g": 0.15, "b": 0.18 }, "texture": "asphalt_02" },
+    "sidewalk": { "color": { "r": 0.25, "g": 0.25, "b": 0.28 }, "texture": "concrete_pavement_02" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_buzzed", "hair_hair_buzzedfemale", "hair_hair_buns"],
+    "clothingPalette": ["#0ff", "#f0f", "#ff0", "#1a1a2e", "#16213e", "#0f3460", "#e94560", "#533483"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#b0c4de", "#778899"],
+    "animals": []
+  },
+
+  "natureConfig": {
+    "trees": {},
+    "vegetation": {
+      "potted_plant": { "model": "potted_plant_02" },
+      "crystalline":  { "model": "crystalline_iceplant" }
+    },
+    "rocks": {
+      "rock": { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "lamp":          "street_lamp_01",
+      "utility_box":   "utility_box_01",
+      "utility_box_2": "utility_box_02",
+      "barrel_fire":   "barrel_stove",
+      "barrel":        "Barrel_01",
+      "barrel_blue":   "barrel_03",
+      "boombox":       "boombox",
+      "manhole":       "water_manhole_cover",
+      "console":       "ClassicConsole_01"
+    },
+    "questObjects": {
+      "data_pad": "ClassicConsole_01",
+      "chest":    "metal_tool_chest"
+    }
+  }
+}

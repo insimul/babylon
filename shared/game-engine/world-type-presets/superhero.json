@@ -1,0 +1,68 @@
+{
+  "worldType": "superhero",
+  "label": "Superhero",
+  "description": "Comic-book metropolis — tall glass towers, brick brownstones, wide avenues, dramatic skyline",
+
+  "buildingPresets": {
+    "residential":       { "material": "brick",  "architecture": "modern" },
+    "commercial_food":   { "material": "brick",  "architecture": "modern" },
+    "commercial_retail": { "material": "glass",  "architecture": "modern" },
+    "commercial_service":{ "material": "glass",  "architecture": "modern" },
+    "civic":             { "material": "glass",  "architecture": "modern" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "metal",  "architecture": "modern" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["brick_wall_001", "concrete_wall_005", "plastered_wall"],
+    "roof":  ["concrete_wall_003", "grey_roof_tiles_02", "metal_plate"],
+    "door":  ["painted_metal_shutter", "fine_grained_wood"],
+    "floor": ["concrete_floor_01", "wood_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.30, "g": 0.48, "b": 0.25 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.28, "g": 0.28, "b": 0.30 }, "texture": "asphalt_01" },
+    "sidewalk": { "color": { "r": 0.55, "g": 0.55, "b": 0.55 }, "texture": "concrete_pavement" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f", "char_superhero_male_fullbody", "char_superhero_female_fullbody"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_simpleparted", "hair_hair_buzzed", "hair_hair_long", "hair_hair_buns"],
+    "clothingPalette": ["#e74c3c", "#3498db", "#2c3e50", "#f1c40f", "#1abc9c", "#8e44ad", "#e67e22", "#ecf0f1"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#4A2511", "#3B1F0E"],
+    "animals": ["animal_husky", "animal_shibainu"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "potted_plant":{ "model": "potted_plant_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "lamp":     "street_lamp_01",
+      "manhole":  "water_manhole_cover",
+      "barrel":   "Barrel_01",
+      "crate":    "wooden_crate_01",
+      "chair":    "GreenChair_01",
+      "table":    "WoodenTable_01",
+      "boombox":  "boombox",
+      "register": "CashRegister_01"
+    },
+    "questObjects": {
+      "chest":    "metal_tool_chest",
+      "data_pad": "ClassicConsole_01"
+    }
+  }
+}

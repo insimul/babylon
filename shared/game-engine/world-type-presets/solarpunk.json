@@ -1,0 +1,70 @@
+{
+  "worldType": "solarpunk",
+  "label": "Solarpunk",
+  "description": "Utopian green future — living walls, rooftop gardens, warm wood + glass, abundant vegetation",
+
+  "buildingPresets": {
+    "residential":       { "material": "wood",   "architecture": "modern" },
+    "commercial_food":   { "material": "glass",  "architecture": "modern" },
+    "commercial_retail": { "material": "glass",  "architecture": "modern" },
+    "commercial_service":{ "material": "stucco", "architecture": "modern" },
+    "civic":             { "material": "stucco", "architecture": "modern" },
+    "industrial":        { "material": "wood",   "architecture": "modern" },
+    "maritime":          { "material": "wood",   "architecture": "modern" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["white_plaster_rough_01", "plastered_wall_02", "wood_planks"],
+    "roof":  ["wooden_planks", "roof_tiles_14"],
+    "door":  ["wood_floor", "fine_grained_wood"],
+    "floor": ["wood_floor_deck", "plank_flooring"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.35, "g": 0.60, "b": 0.30 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.55, "g": 0.55, "b": 0.50 }, "texture": "stone_pathway_02" },
+    "sidewalk": { "color": { "r": 0.65, "g": 0.62, "b": 0.55 }, "texture": "stone_pavers" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buns", "hair_hair_simpleparted"],
+    "clothingPalette": ["#27ae60", "#2ecc71", "#f39c12", "#e67e22", "#3498db", "#1abc9c", "#ecf0f1", "#f1c40f"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#4A2511", "#3B1F0E"],
+    "animals": ["animal_deer", "animal_fox", "animal_alpaca"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" },
+      "fir":       { "model": "fir_tree_01" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "flowering":   { "model": "shrub_03" },
+      "fern":        { "model": "fern_02" },
+      "potted_plant":{ "model": "potted_plant_02" },
+      "crystalline": { "model": "crystalline_iceplant" }
+    },
+    "rocks": {
+      "mossy_rock": { "model": "rock_moss_set_02" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01",
+      "shelf":        "Shelf_01",
+      "lantern":      "Lantern_01",
+      "potted_plant": "potted_plant_02",
+      "crate":        "wooden_crate_01",
+      "books":        "book_encyclopedia_set_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest"
+    }
+  }
+}

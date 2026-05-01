@@ -1,0 +1,73 @@
+{
+  "worldType": "mythological",
+  "label": "Mythological",
+  "description": "Ancient Greek/Roman mythology — marble temples, sacred groves, classical columns, golden accents",
+
+  "buildingPresets": {
+    "residential":       { "material": "stone",  "architecture": "colonial" },
+    "commercial_food":   { "material": "stone",  "architecture": "medieval" },
+    "commercial_retail": { "material": "stone",  "architecture": "medieval" },
+    "commercial_service":{ "material": "stone",  "architecture": "colonial" },
+    "civic":             { "material": "stone",  "architecture": "colonial" },
+    "industrial":        { "material": "stone",  "architecture": "rustic" },
+    "maritime":          { "material": "wood",   "architecture": "medieval" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["white_sandstone_blocks_02", "marble_01", "large_sandstone_blocks"],
+    "roof":  ["clay_roof_tiles", "ceramic_roof_01"],
+    "door":  ["dark_wood", "fine_grained_wood"],
+    "floor": ["marble_01", "stone_tiles"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.35, "g": 0.52, "b": 0.30 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.62, "g": 0.60, "b": 0.55 }, "texture": "stone_pathway" },
+    "sidewalk": { "color": { "r": 0.70, "g": 0.68, "b": 0.62 }, "texture": "marble_01" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant", "outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buns", "hair_hair_simpleparted"],
+    "clothingPalette": ["#DAA520", "#800020", "#F5F5DC", "#191970", "#CD853F", "#4B0082", "#006400", "#FFDAB9"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_stag", "animal_horse_white", "animal_wolf", "animal_deer", "animal_fox"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" },
+      "fir":       { "model": "fir_tree_01" }
+    },
+    "vegetation": {
+      "shrub":     { "model": "shrub_01" },
+      "flowering": { "model": "shrub_03" },
+      "fern":      { "model": "fern_02" },
+      "moss":      { "model": "moss_01" }
+    },
+    "rocks": {
+      "boulder":    { "model": "boulder_01" },
+      "mossy_rock": { "model": "rock_moss_set_02" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "vase":         "brass_vase_01",
+      "pot":          "brass_pot_01",
+      "goblet":       "brass_goblets",
+      "candleholder": "brass_candleholders",
+      "fire_pit":     "stone_fire_pit",
+      "barrel":       "wine_barrel_01",
+      "books":        "book_encyclopedia_set_01",
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

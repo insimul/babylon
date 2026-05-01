@@ -1,0 +1,71 @@
+{
+  "worldType": "steampunk",
+  "label": "Steampunk",
+  "description": "Victorian industrial revolution meets brass clockwork — brick factories, copper pipes, gas lamps",
+
+  "buildingPresets": {
+    "residential":       { "material": "brick",  "architecture": "colonial" },
+    "commercial_food":   { "material": "brick",  "architecture": "colonial" },
+    "commercial_retail": { "material": "brick",  "architecture": "colonial" },
+    "commercial_service":{ "material": "brick",  "architecture": "colonial" },
+    "civic":             { "material": "stone",  "architecture": "colonial" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "brick",  "architecture": "industrial" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["brick_wall_001", "factory_brick", "red_brick_03"],
+    "roof":  ["roof_slates_02", "grey_roof_tiles", "corrugated_iron"],
+    "door":  ["dark_wood", "wooden_gate"],
+    "floor": ["old_wood_floor", "stone_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.35, "g": 0.32, "b": 0.25 }, "texture": "cobblestone_floor_01" },
+    "road":     { "color": { "r": 0.40, "g": 0.38, "b": 0.30 }, "texture": "cobblestone_floor_02" },
+    "sidewalk": { "color": { "r": 0.50, "g": 0.45, "b": 0.38 }, "texture": "cobblestone_floor_04" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_simpleparted", "hair_hair_buns", "hair_hair_long"],
+    "clothingPalette": ["#8B4513", "#DAA520", "#B8860B", "#556B2F", "#2F4F4F", "#800000", "#4B0082", "#CD853F"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_horse", "animal_husky"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":  { "model": "tree_small_02" },
+      "pine": { "model": "pine_tree_01" }
+    },
+    "vegetation": {
+      "shrub": { "model": "shrub_01" },
+      "fern":  { "model": "fern_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" },
+      "rock":    { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "clock":        "vintage_grandfather_clock_01",
+      "lamp":         "street_lamp_01",
+      "oil_lamp":     "vintage_oil_lamp",
+      "candleholder": "brass_candleholders",
+      "chair":        "ArmChair_01",
+      "console":      "ClassicConsole_01",
+      "tea_set":      "tea_set_01",
+      "drawer":       "vintage_wooden_drawer_01",
+      "books":        "book_encyclopedia_set_01",
+      "blowtorch":    "brass_blowtorch"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

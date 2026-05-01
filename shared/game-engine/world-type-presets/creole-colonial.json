@@ -1,0 +1,85 @@
+{
+  "worldType": "creole-colonial",
+  "label": "Creole Colonial",
+  "description": "Antebellum New Orleans — Creole townhouses with ironwork balconies, stucco facades, hipped dormers, live oaks draped in moss",
+
+  "buildingPresets": {
+    "residential":       { "material": "stucco", "architecture": "creole" },
+    "commercial_food":   { "material": "stucco", "architecture": "creole" },
+    "commercial_retail": { "material": "brick",  "architecture": "creole" },
+    "commercial_service":{ "material": "stucco", "architecture": "creole" },
+    "civic":             { "material": "stone",  "architecture": "colonial" },
+    "industrial":        { "material": "brick",  "architecture": "colonial" },
+    "maritime":          { "material": "wood",   "architecture": "colonial" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["blue_painted_planks", "dark_wooden_planks", "green_rough_planks", "wood_plank_wall", "wooden_rough_planks"],
+    "roof":  ["red_slate_roof_tiles_01", "roof_slates_03", "roof_slates_02", "grey_roof_01", "corrugated_iron"],
+    "door":  ["dark_wood", "fine_grained_wood"],
+    "floor": ["old_wood_floor", "plank_flooring"]
+  },
+
+  "categoryTextures": {
+    "residential":        { "wall": "blue_painted_planks",  "roof": "red_slate_roof_tiles_01" },
+    "commercial_food":    { "wall": "blue_painted_planks",  "roof": "red_slate_roof_tiles_01" },
+    "commercial_retail":  { "wall": "dark_wooden_planks",   "roof": "roof_slates_03" },
+    "commercial_service": { "wall": "green_rough_planks",   "roof": "roof_slates_02" },
+    "civic":              { "wall": "wood_plank_wall",      "roof": "grey_roof_01" },
+    "industrial":         { "wall": "wooden_rough_planks",  "roof": "corrugated_iron" },
+    "maritime":           { "wall": "dark_wooden_planks",   "roof": "corrugated_iron" }
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.30, "g": 0.48, "b": 0.22 }, "texture": "sparse_grass" },
+    "road":     { "color": { "r": 0.45, "g": 0.40, "b": 0.35 }, "texture": "cobblestone_floor_01" },
+    "sidewalk": { "color": { "r": 0.55, "g": 0.52, "b": 0.48 }, "texture": "brick_floor" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant", "outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buns", "hair_hair_simpleparted", "hair_hair_buzzed"],
+    "clothingPalette": ["#F5F5DC", "#8B4513", "#DAA520", "#800020", "#2F4F4F", "#556B2F", "#4B0082", "#CD853F", "#191970"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#4A2511", "#3B1F0E"],
+    "animals": ["animal_horse", "animal_horse_white", "animal_fox", "animal_alpaca"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" }
+    },
+    "vegetation": {
+      "shrub":       { "model": "shrub_01" },
+      "flowering":   { "model": "shrub_03" },
+      "fern":        { "model": "fern_02" },
+      "moss":        { "model": "moss_01" },
+      "potted_plant":{ "model": "potted_plant_02" }
+    },
+    "rocks": {
+      "mossy_rock": { "model": "rock_moss_set_02" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":       "wine_barrel_01",
+      "goblet":       "brass_goblets",
+      "candleholder": "brass_candleholders",
+      "lantern":      "Lantern_01",
+      "lamp":         "street_lamp_01",
+      "oil_lamp":     "vintage_oil_lamp",
+      "chair":        "ArmChair_01",
+      "table":        "WoodenTable_01",
+      "bed":          "GothicBed_01",
+      "cabinet":      "GothicCabinet_01",
+      "books":        "book_encyclopedia_set_01",
+      "register":     "CashRegister_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "wooden_handle_saber"
+    }
+  }
+}

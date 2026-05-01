@@ -1,0 +1,69 @@
+{
+  "worldType": "urban-fantasy",
+  "label": "Urban Fantasy",
+  "description": "Modern city with hidden magic — brick townhouses, glass storefronts, enchanted alleyways",
+
+  "buildingPresets": {
+    "residential":       { "material": "brick",  "architecture": "colonial" },
+    "commercial_food":   { "material": "brick",  "architecture": "colonial" },
+    "commercial_retail": { "material": "glass",  "architecture": "modern" },
+    "commercial_service":{ "material": "glass",  "architecture": "modern" },
+    "civic":             { "material": "glass",  "architecture": "modern" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "brick",  "architecture": "colonial" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["brick_wall_001", "red_brick_03", "plastered_wall"],
+    "roof":  ["roof_tiles_14", "grey_roof_tiles_02", "roof_slates_02"],
+    "door":  ["dark_wood", "painted_metal_shutter"],
+    "floor": ["wood_floor", "stone_tiles"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.30, "g": 0.48, "b": 0.28 }, "texture": "aerial_grass_rock" },
+    "road":     { "color": { "r": 0.28, "g": 0.28, "b": 0.30 }, "texture": "asphalt_01" },
+    "sidewalk": { "color": { "r": 0.55, "g": 0.55, "b": 0.55 }, "texture": "concrete_pavement" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant", "outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_simpleparted", "hair_hair_long", "hair_hair_buns", "hair_hair_buzzed"],
+    "clothingPalette": ["#2c3e50", "#34495e", "#8B0000", "#191970", "#27ae60", "#8e44ad", "#2F4F4F", "#f39c12"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#4A2511", "#3B1F0E"],
+    "animals": ["animal_husky", "animal_fox", "animal_shibainu"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":        { "model": "tree_small_02" },
+      "jacaranda":  { "model": "jacaranda_tree" }
+    },
+    "vegetation": {
+      "shrub":        { "model": "shrub_01" },
+      "potted_plant": { "model": "potted_plant_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":     "wine_barrel_01",
+      "crate":      "wooden_crate_01",
+      "lantern":    "Lantern_01",
+      "lamp":       "street_lamp_01",
+      "books":      "book_encyclopedia_set_01",
+      "chair":      "GreenChair_01",
+      "table":      "WoodenTable_01",
+      "bed":        "GothicBed_01",
+      "boombox":    "boombox"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

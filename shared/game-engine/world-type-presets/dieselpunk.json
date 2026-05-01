@@ -1,0 +1,69 @@
+{
+  "worldType": "dieselpunk",
+  "label": "Dieselpunk",
+  "description": "1930s-40s industrial aesthetic — heavy concrete, oil-stained metal, art deco flourishes",
+
+  "buildingPresets": {
+    "residential":       { "material": "brick",  "architecture": "industrial" },
+    "commercial_food":   { "material": "brick",  "architecture": "industrial" },
+    "commercial_retail": { "material": "metal",  "architecture": "industrial" },
+    "commercial_service":{ "material": "stone",  "architecture": "industrial" },
+    "civic":             { "material": "stone",  "architecture": "industrial" },
+    "industrial":        { "material": "metal",  "architecture": "industrial" },
+    "maritime":          { "material": "metal",  "architecture": "industrial" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["concrete_wall_001", "factory_brick", "dark_brick_wall"],
+    "roof":  ["corrugated_iron", "rusty_metal_sheet", "concrete_wall_003"],
+    "door":  ["rusty_metal_shutter", "painted_metal_shutter"],
+    "floor": ["concrete_floor", "old_wood_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.32, "g": 0.30, "b": 0.25 }, "texture": "concrete_floor_damaged_01" },
+    "road":     { "color": { "r": 0.25, "g": 0.24, "b": 0.22 }, "texture": "asphalt_03" },
+    "sidewalk": { "color": { "r": 0.38, "g": 0.36, "b": 0.32 }, "texture": "concrete_pavement" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_simpleparted", "hair_hair_buzzed", "hair_hair_buns"],
+    "clothingPalette": ["#2F4F4F", "#556B2F", "#8B4513", "#696969", "#3B3B3B", "#800000", "#191970", "#A0522D"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_horse", "animal_husky"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "dead_tree": { "model": "dead_tree_trunk" }
+    },
+    "vegetation": {
+      "shrub": { "model": "shrub_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" },
+      "rock":    { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":      "Barrel_01",
+      "barrel_blue": "barrel_03",
+      "barrel_fire": "barrel_stove",
+      "crate":       "wooden_crate_02",
+      "lamp":        "street_lamp_01",
+      "toolbox":     "metal_tool_chest",
+      "blowtorch":   "brass_blowtorch",
+      "chair":       "GreenChair_01",
+      "table":       "WoodenTable_01"
+    },
+    "questObjects": {
+      "chest":    "metal_tool_chest",
+      "data_pad": "ClassicConsole_01"
+    }
+  }
+}

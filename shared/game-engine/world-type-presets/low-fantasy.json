@@ -1,0 +1,74 @@
+{
+  "worldType": "low-fantasy",
+  "label": "Low Fantasy",
+  "description": "Grounded, gritty world with subtle magic — rough timber, thatched roofs, muddy roads",
+
+  "buildingPresets": {
+    "residential":       { "material": "wood",  "architecture": "medieval" },
+    "commercial_food":   { "material": "wood",  "architecture": "medieval" },
+    "commercial_retail": { "material": "wood",  "architecture": "medieval" },
+    "commercial_service":{ "material": "wood",  "architecture": "medieval" },
+    "civic":             { "material": "stone", "architecture": "medieval" },
+    "industrial":        { "material": "wood",  "architecture": "rustic" },
+    "maritime":          { "material": "wood",  "architecture": "rustic" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["weathered_planks", "old_stone_wall", "rough_plaster_brick"],
+    "roof":  ["thatch_roof_angled", "reed_roof_03", "old_planks_02"],
+    "door":  ["dark_wood", "weathered_brown_planks"],
+    "floor": ["old_wood_floor", "stone_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.38, "g": 0.42, "b": 0.28 }, "texture": "forrest_ground_01" },
+    "road":     { "color": { "r": 0.42, "g": 0.38, "b": 0.32 }, "texture": "brown_mud" },
+    "sidewalk": { "color": { "r": 0.48, "g": 0.44, "b": 0.38 }, "texture": "gravel_concrete" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_buzzed", "hair_hair_simpleparted", "hair_hair_long"],
+    "clothingPalette": ["#8B4513", "#556B2F", "#2F4F4F", "#696969", "#A0522D", "#3B3B3B", "#6B4423"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_horse", "animal_donkey", "animal_cow", "animal_bull"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "pine":      { "model": "pine_tree_01" },
+      "dead_tree": { "model": "dead_tree_trunk" },
+      "stump":     { "model": "tree_stump_01" }
+    },
+    "vegetation": {
+      "shrub": { "model": "shrub_01" },
+      "bush":  { "model": "shrub_02" },
+      "moss":  { "model": "moss_01" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" },
+      "rock":    { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":     "wine_barrel_01",
+      "crate":      "wooden_crate_01",
+      "lantern":    "Lantern_01",
+      "goblet":     "brass_goblets",
+      "chair":      "GreenChair_01",
+      "table":      "WoodenTable_01",
+      "bed":        "GothicBed_01",
+      "cabinet":    "GothicCabinet_01",
+      "shelf":      "Shelf_01",
+      "bucket":     "wooden_bucket_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

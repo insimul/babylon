@@ -1,0 +1,65 @@
+{
+  "worldType": "sci-fi-space",
+  "label": "Sci-Fi Space",
+  "description": "Clean space station / colony — polished metal panels, sterile white, blue accent lighting",
+
+  "buildingPresets": {
+    "residential":       { "material": "metal",  "architecture": "futuristic" },
+    "commercial_food":   { "material": "glass",  "architecture": "futuristic" },
+    "commercial_retail": { "material": "glass",  "architecture": "futuristic" },
+    "commercial_service":{ "material": "metal",  "architecture": "futuristic" },
+    "civic":             { "material": "metal",  "architecture": "futuristic" },
+    "industrial":        { "material": "metal",  "architecture": "futuristic" },
+    "maritime":          { "material": "metal",  "architecture": "futuristic" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["concrete_wall_005", "concrete_wall_008", "metal_plate_02"],
+    "roof":  ["metal_plate", "concrete_wall_003"],
+    "door":  ["painted_metal_shutter", "metal_plate"],
+    "floor": ["concrete_floor_01", "smooth_concrete_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.30, "g": 0.32, "b": 0.35 }, "texture": "concrete_floor_01" },
+    "road":     { "color": { "r": 0.25, "g": 0.27, "b": 0.30 }, "texture": "concrete_floor_02" },
+    "sidewalk": { "color": { "r": 0.40, "g": 0.42, "b": 0.45 }, "texture": "smooth_concrete_floor" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger"],
+    "hairStyles": ["hair_hair_buzzed", "hair_hair_buzzedfemale", "hair_hair_simpleparted"],
+    "clothingPalette": ["#c0c0c0", "#4682b4", "#2e2e2e", "#1a1a2e", "#e0e0e0", "#0077b6", "#48cae4"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#b8d4e3", "#7ec8e3"],
+    "animals": []
+  },
+
+  "natureConfig": {
+    "trees": {},
+    "vegetation": {
+      "potted_plant": { "model": "potted_plant_02" },
+      "crystalline":  { "model": "crystalline_iceplant" }
+    },
+    "rocks": {
+      "moon_rock": { "model": "moon_rock_01" },
+      "rock":      { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "lamp":        "street_lamp_01",
+      "utility_box": "utility_box_01",
+      "barrel":      "Barrel_01",
+      "console":     "ClassicConsole_01",
+      "med_pack":    "metal_tool_chest",
+      "toolbox":     "metal_tool_chest",
+      "battery":     "utility_box_01"
+    },
+    "questObjects": {
+      "data_pad":    "ClassicConsole_01",
+      "energy_core": "Barrel_01"
+    }
+  }
+}

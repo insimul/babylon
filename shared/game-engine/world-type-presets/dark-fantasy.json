@@ -1,0 +1,74 @@
+{
+  "worldType": "dark-fantasy",
+  "label": "Dark Fantasy",
+  "description": "Bleak, oppressive atmosphere — dark stone, crumbling walls, muted colors, perpetual twilight",
+
+  "buildingPresets": {
+    "residential":       { "material": "stone", "architecture": "medieval" },
+    "commercial_food":   { "material": "stone", "architecture": "medieval" },
+    "commercial_retail": { "material": "stone", "architecture": "medieval" },
+    "commercial_service":{ "material": "stone", "architecture": "medieval" },
+    "civic":             { "material": "stone", "architecture": "colonial" },
+    "industrial":        { "material": "stone", "architecture": "industrial" },
+    "maritime":          { "material": "stone", "architecture": "medieval" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["old_stone_wall_02", "mossy_stone_wall", "broken_brick_wall"],
+    "roof":  ["roof_slates_02", "roof_slates_03", "grey_roof_tiles"],
+    "door":  ["dark_wood", "dark_planks"],
+    "floor": ["stone_floor", "slate_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.25, "g": 0.30, "b": 0.20 }, "texture": "dark_soil" },
+    "road":     { "color": { "r": 0.30, "g": 0.28, "b": 0.25 }, "texture": "mossy_cobblestone" },
+    "sidewalk": { "color": { "r": 0.35, "g": 0.32, "b": 0.30 }, "texture": "cobblestone_floor_01" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_ranger", "outfit_female_ranger", "outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buzzed", "hair_hair_simpleparted"],
+    "clothingPalette": ["#1a1a1a", "#2d1b2e", "#3d0c02", "#1c1c3e", "#2e2e2e", "#4a0e0e", "#0d0d0d"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A", "#d3c6b5"],
+    "animals": ["animal_wolf", "animal_stag", "animal_horse"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "dead_tree": { "model": "dead_tree_trunk" },
+      "stump":     { "model": "tree_stump_01" },
+      "pine":      { "model": "pine_tree_01" },
+      "fir":       { "model": "fir_tree_01" }
+    },
+    "vegetation": {
+      "moss":  { "model": "moss_01" },
+      "shrub": { "model": "shrub_02" },
+      "fern":  { "model": "fern_02" }
+    },
+    "rocks": {
+      "boulder":    { "model": "boulder_01" },
+      "rock":       { "model": "rock_07" },
+      "mossy_rock": { "model": "rock_moss_set_01" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "barrel":       "wine_barrel_01",
+      "crate":        "wooden_crate_01",
+      "lantern":      "Lantern_01",
+      "chandelier":   "Chandelier_01",
+      "candleholder": "brass_candleholders",
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01",
+      "bed":          "GothicBed_01",
+      "books":        "book_encyclopedia_set_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}

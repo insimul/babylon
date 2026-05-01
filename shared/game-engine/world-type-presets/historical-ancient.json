@@ -1,0 +1,71 @@
+{
+  "worldType": "historical-ancient",
+  "label": "Historical Ancient",
+  "description": "Ancient civilizations — sandstone temples, marble columns, terracotta roofs, sun-baked plazas",
+
+  "buildingPresets": {
+    "residential":       { "material": "stone",  "architecture": "rustic" },
+    "commercial_food":   { "material": "stone",  "architecture": "rustic" },
+    "commercial_retail": { "material": "stone",  "architecture": "rustic" },
+    "commercial_service":{ "material": "stone",  "architecture": "colonial" },
+    "civic":             { "material": "stone",  "architecture": "colonial" },
+    "industrial":        { "material": "stone",  "architecture": "rustic" },
+    "maritime":          { "material": "stone",  "architecture": "rustic" }
+  },
+
+  "buildingTextures": {
+    "wall":  ["large_sandstone_blocks", "white_sandstone_blocks_02", "old_stone_wall"],
+    "roof":  ["clay_roof_tiles", "ceramic_roof_01", "thatch_roof_angled"],
+    "door":  ["dark_wood", "fine_grained_wood"],
+    "floor": ["marble_01", "stone_floor"]
+  },
+
+  "groundConfig": {
+    "ground":   { "color": { "r": 0.55, "g": 0.48, "b": 0.35 }, "texture": "aerial_sand" },
+    "road":     { "color": { "r": 0.50, "g": 0.45, "b": 0.38 }, "texture": "stone_pathway" },
+    "sidewalk": { "color": { "r": 0.58, "g": 0.55, "b": 0.48 }, "texture": "large_sandstone_blocks" }
+  },
+
+  "characterConfig": {
+    "bodyModels": ["anim_ual1_standard", "anim2_ual2_standard", "anim2_mannequin_f"],
+    "outfitSets": ["outfit_male_peasant", "outfit_female_peasant"],
+    "hairStyles": ["hair_hair_long", "hair_hair_buzzed", "hair_hair_simpleparted", "hair_hair_buns"],
+    "clothingPalette": ["#F5F5DC", "#DAA520", "#8B4513", "#800020", "#191970", "#CD853F", "#556B2F", "#FFDAB9"],
+    "skinTonePalette": ["#FFDFC4", "#F0C8A0", "#D4A574", "#C68642", "#8D5524", "#6B3A2A"],
+    "animals": ["animal_horse", "animal_donkey", "animal_bull", "animal_cow"]
+  },
+
+  "natureConfig": {
+    "trees": {
+      "oak":       { "model": "tree_small_02" },
+      "jacaranda": { "model": "jacaranda_tree" }
+    },
+    "vegetation": {
+      "shrub": { "model": "shrub_01" },
+      "fern":  { "model": "fern_02" }
+    },
+    "rocks": {
+      "boulder": { "model": "boulder_01" },
+      "rock":    { "model": "rock_07" }
+    }
+  },
+
+  "objectConfig": {
+    "props": {
+      "vase":         "brass_vase_01",
+      "pot":          "brass_pot_01",
+      "pan":          "brass_pan_01",
+      "goblet":       "brass_goblets",
+      "ceramic_vase": "antique_ceramic_vase_01",
+      "fire_pit":     "stone_fire_pit",
+      "bucket":       "wooden_bucket_01",
+      "barrel":       "wine_barrel_01",
+      "chair":        "GreenChair_01",
+      "table":        "WoodenTable_01"
+    },
+    "questObjects": {
+      "chest": "treasure_chest",
+      "sword": "antique_estoc"
+    }
+  }
+}
