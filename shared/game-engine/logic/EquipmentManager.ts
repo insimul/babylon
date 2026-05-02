@@ -6,7 +6,7 @@
  */
 
 import type { InventoryItem, EquipmentSlot } from '@shared/game-engine/types';
-import type { CombatSystem } from './CombatSystem';
+import type { CombatSystem } from '../rendering/CombatSystem';
 
 const EQUIPPABLE_TYPES: Record<string, EquipmentSlot> = {
   weapon: 'weapon',

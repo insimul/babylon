@@ -10,7 +10,7 @@
  */
 
 import type { AnimationState } from '@shared/game-engine/types';
-import type { NPCPersonality } from './NPCScheduleSystem';
+import type { NPCPersonality } from '../rendering/NPCScheduleSystem';
 
 // --- Types ---
 

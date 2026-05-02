@@ -15,7 +15,7 @@ import { BabylonDialogueActions } from "./BabylonDialogueActions";
 import { BabylonGesturePanel } from "./BabylonGesturePanel";
 import { HoverTranslationSystem } from "./HoverTranslationSystem";
 import type { VocabHint } from "./HoverTranslationSystem";
-import { Action } from "./types/actions";
+import { Action } from "../types";
 import { NPCTalkingIndicator } from "./NPCTalkingIndicator";
 import { buildLanguageAwareSystemPrompt, buildWorldLanguageContext, extractLanguageFluencies, getLanguageBCP47 } from "@shared/language/language-utils";
 import type { WorldLanguageContext } from "@shared/language/language-utils";
@@ -226,7 +226,7 @@ export class BabylonChatPanel {
   private _pendingListenAndRepeatPhrase: ListenAndRepeatPhrase | null = null;
   private _questTopics: Array<{ questId: string; keywords: string[] }> = [];
   private systemPromptAugmentation: ((npcId: string) => string | null) | null = null;
-  private _relationshipManager: import('./RelationshipManager').RelationshipManager | null = null;
+  private _relationshipManager: import('../logic/RelationshipManager').RelationshipManager | null = null;
   private pendingTurnInQuests: any[] = [];
   private questOfferingContext: { questTitle: string; questDescription: string; questType: string; difficulty: string; objectives: string; category: string } | null = null;
   private activeQuestFromNPC: { questTitle: string; questDescription: string; questId: string; isQuestGiver?: boolean } | null = null;
@@ -3545,7 +3545,7 @@ When the player accepts, use the QUEST_ASSIGN format. If declined, continue norm
     return bestCount >= 2 ? bestTopic : undefined;
   }
 
-  public getLanguageTracker(): import('./LanguageProgressTracker').LanguageProgressTracker | null {
+  public getLanguageTracker(): import('../logic/LanguageProgressTracker').LanguageProgressTracker | null {
     return this.languageTracker;
   }
 
@@ -3562,10 +3562,10 @@ When the player accepts, use the QUEST_ASSIGN format. If declined, continue norm
    * When set, initializeChat() will use this tracker instead of creating a new one,
    * preserving vocabulary/grammar data accumulated in prior sessions.
    */
-  public setPersistentLanguageTracker(tracker: import('./LanguageProgressTracker').LanguageProgressTracker): void {
+  public setPersistentLanguageTracker(tracker: import('../logic/LanguageProgressTracker').LanguageProgressTracker): void {
     this.persistentLanguageTracker = tracker;
   }
-  private persistentLanguageTracker: import('./LanguageProgressTracker').LanguageProgressTracker | null = null;
+  private persistentLanguageTracker: import('../logic/LanguageProgressTracker').LanguageProgressTracker | null = null;
   private _dataSource: DataSource | null = null;
   private _prologFactsProvider: (() => Array<{ predicate: string; args: Array<string | number> }>) | null = null;
   private _appearanceProvider: ((characterId: string) => string | null) | null = null;
@@ -3691,7 +3691,7 @@ When the player accepts, use the QUEST_ASSIGN format. If declined, continue norm
     this.playthroughId = id;
   }
 
-  public setRelationshipManager(manager: import('./RelationshipManager').RelationshipManager) {
+  public setRelationshipManager(manager: import('../logic/RelationshipManager').RelationshipManager) {
     this._relationshipManager = manager;
     this._cachedSystemPrompt = null; // Force prompt rebuild
   }

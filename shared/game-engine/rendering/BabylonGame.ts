@@ -16777,7 +16777,7 @@ Requirements:
   handleItemAcquired(
     item: InventoryItem,
     source: ItemAcquisitionSource,
-  ): import('./QuestCompletionEngine').CollectedItemMatch[] {
+  ): import('../logic/QuestCompletionEngine').CollectedItemMatch[] {
     // 1. Add to inventory
     this.inventory?.addItem(item);
 

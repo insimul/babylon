@@ -6,7 +6,7 @@
  * Used by: Survival, RPG, Sandbox genres.
  */
 
-import { ResourceType, ResourceSystem } from './ResourceSystem';
+import { ResourceType, ResourceSystem } from '../rendering/ResourceSystem';
 
 // Re-export engine-agnostic types from shared game-engine
 export type { ItemCategory, CraftingRecipe, CraftedItem } from '@shared/game-engine/types';
