@@ -519,7 +519,7 @@ async function findAssessmentQuest(
     if (!dataSource) throw new Error('No dataSource — save file not loaded');
     const quests = await dataSource.loadQuests(worldId);
     const { isArrivalAssessmentQuest } = await import(
-      '@shared/quests/assessment-quest-bridge.ts'
+      '@shared/quests/assessment-quest-bridge'
     );
 
     const existing = quests.find((q: any) => isArrivalAssessmentQuest(q));
