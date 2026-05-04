@@ -1,0 +1,13 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_EditorVersion: {{UNITY_VERSION}}
+  m_EditorVersionWithRevision: {{UNITY_VERSION}}
+  productName: {{WORLD_SAFE_NAME}}
+  companyName: Insimul
+  defaultScreenWidth: 1920
+  defaultScreenHeight: 1080
+  runInBackground: 1
+  activeInputHandler: 2
+  apiCompatibilityLevel: 6
