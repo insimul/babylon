@@ -1,10 +1,24 @@
 {
   "name": "@insimul/babylon-game",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Insimul Babylon.js game runtime — DataSource, save-file persistence, optimization (StartupOrchestrator/Profiler, GameDataCache, etc.), and the in-game LoadingScreen. Mounts BabylonGame in standalone exports and the editor's Play view.",
   "license": "Apache-2.0",
   "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/insimul/runtime.git",
+    "directory": "packages/babylon-game"
+  },
+  "homepage": "https://github.com/insimul/runtime/tree/main/packages/babylon-game",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "src"
+  ],
   "peerDependencies": {
     "react": "^18.0.0"
   }

@@ -1,10 +1,23 @@
 {
   "name": "@insimul/runtime",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Insimul runtime SDK — engines and integrations that ship inside exported games. Open-source under Apache-2.0.",
+  "version": "0.1.0",
+  "description": "Insimul runtime SDK — shared engine, prolog runtime, save-file format, language tracking, game-engine UI/rendering, and game-export templates that ship inside games built with the Insimul platform.",
   "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/insimul/runtime.git"
+  },
+  "homepage": "https://github.com/insimul/runtime",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "shared",
+    "packages/godot/templates",
+    "packages/unity/templates",
+    "packages/unreal/templates"
+  ],
   "dependencies": {
     "@babylonjs/core": "^8.54.1",
     "@babylonjs/gui": "^8.54.1",

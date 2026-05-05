@@ -1,8 +1,19 @@
 {
   "name": "@insimul/babylon",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Babylon.js export templates for Insimul. These files are bundled into game projects exported by the Insimul platform.",
   "license": "Apache-2.0",
-  "type": "module"
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/insimul/runtime.git",
+    "directory": "packages/babylon"
+  },
+  "homepage": "https://github.com/insimul/runtime/tree/main/packages/babylon",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "templates"
+  ]
 }

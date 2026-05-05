@@ -1,0 +1,14 @@
+; Workspace npm config for @insimul scoped packages on GitHub Packages.
+;
+; Copy this to .npmrc at the workspace root (same level as
+; insimul-runtime/ and insimul-platform/) and ensure GITHUB_TOKEN
+; is set in your shell environment.
+;
+;   export GITHUB_TOKEN=ghp_...   # personal access token with read:packages
+;
+; The .npmrc itself can stay committed (since it doesn't contain the token),
+; but committed .npmrc files at the workspace root would mean every checkout
+; needs the env var — fine for most teams. Pick whichever you prefer.
+
+@insimul:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
