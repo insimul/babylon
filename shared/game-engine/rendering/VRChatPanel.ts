@@ -19,9 +19,9 @@ import { Color3 } from '@babylonjs/core';
 import * as GUI from '@babylonjs/gui';
 import { VRUIPanel } from './VRUIPanel';
 import { VRManager } from './VRManager';
-import { SpeechRecognitionService, isSpeechRecognitionSupported, serverSideSTT } from '@/lib/speech-recognition';
-import { processRecordedAudio } from '@/lib/audio-utils';
-import { HandsFreeController } from '@/lib/hands-free-controller';
+import { SpeechRecognitionService, isSpeechRecognitionSupported, serverSideSTT } from '@shared/voice/speech-recognition';
+import { processRecordedAudio } from '@shared/voice/audio-utils';
+import { HandsFreeController } from '@shared/voice/hands-free-controller';
 
 interface VRChatMessage {
   role: 'user' | 'assistant';

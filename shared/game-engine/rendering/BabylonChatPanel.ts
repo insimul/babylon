@@ -39,10 +39,10 @@ import type { StreamingAudioChunk } from "./StreamingAudioPlayer";
 import { LipSyncController } from "./LipSyncController";
 import { logLLMChatExchange, logLLMError } from "./LLMDebugLogger";
 import { detectHagglingIntent } from "@shared/language/haggling-detection";
-import { SpeechRecognitionService, isSpeechRecognitionSupported, serverSideSTT } from "@/lib/speech-recognition";
-import { processRecordedAudio } from "@/lib/audio-utils";
-import { HandsFreeController } from "@/lib/hands-free-controller";
-import { VoiceWebSocketClient } from "@/lib/voice-websocket-client";
+import { SpeechRecognitionService, isSpeechRecognitionSupported, serverSideSTT } from "@shared/voice/speech-recognition";
+import { processRecordedAudio } from "@shared/voice/audio-utils";
+import { HandsFreeController } from "@shared/voice/hands-free-controller";
+import { VoiceWebSocketClient } from "@shared/voice/voice-websocket-client";
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
