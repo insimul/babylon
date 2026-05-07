@@ -8,7 +8,10 @@ export default defineConfig({
       '@/components/3DGame': '/src',
       '@': '/src',
       '@shared': '/src/shared',
-      '@insimul/typescript': '/src/insimul-sdk',
+      '@insimul/typescript': '/src/insimul-typescript',
+      '@insimul/babylon-game': '/src/insimul-babylon-game',
+      '@sentry/react': '/src/shared/sentry-stub.ts',
+      '@mlc-ai/web-llm': '/src/shared/empty-module-stub.ts',
     },
   },
   esbuild: {
