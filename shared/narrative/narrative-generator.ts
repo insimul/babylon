@@ -13,6 +13,7 @@
 import type { NarrativeIR } from '@shared/game-engine/ir-types';
 import { MAIN_QUEST_CHAPTERS, resolveNarrativeText } from '../quest/main-quest-chapters';
 import type { WriterNameEntry } from '../quest/main-quest-chapters';
+import { seededPick, seededShuffle } from './seeded-utils';
 
 export interface NarrativeGeneratorInput {
   worldId: string;
@@ -20,32 +21,6 @@ export interface NarrativeGeneratorInput {
   writerName: WriterNameEntry;
   settlementNames: string[];
   npcNames: string[];
-}
-
-/** Simple seeded hash for deterministic selection from arrays */
-function seededPick<T>(arr: T[], seed: string, offset: number = 0): T {
-  let hash = offset;
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  return arr[Math.abs(hash) % arr.length];
-}
-
-function seededShuffle<T>(arr: T[], seed: string): T[] {
-  const result = [...arr];
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  for (let i = result.length - 1; i > 0; i--) {
-    hash = ((hash << 5) - hash) + i;
-    hash |= 0;
-    const j = Math.abs(hash) % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
 }
 
 const BACKSTORY_TEMPLATES = [
@@ -224,6 +199,21 @@ export function generateNarrative(input: NarrativeGeneratorInput): NarrativeIR {
   }));
 
   return {
+    // Source metadata — legacy is conceptually the missing_writer narrative,
+    // so the editor sees the same "currently rendered" name. The seed
+    // pipeline emits the equivalent metadata when it materialises the
+    // missing_writer record, so editor "Delete" finds the right thing
+    // either way.
+    _sourceName: 'missing_writer',
+    _sourceTitle: 'The Missing Writer',
+    _sourceIsWorldScoped: false,
+    // Generic aliases — preferred by new consumers
+    protagonistRole: 'writer',
+    protagonistName: fullName,
+    protagonistBackstory: backstory,
+    incidentReason: disappearanceReason,
+    resolution: finalRevelation,
+    // Legacy fields (populated for backwards compat)
     writerName: fullName,
     writerFirstName: writerName.firstName,
     writerLastName: writerName.lastName,

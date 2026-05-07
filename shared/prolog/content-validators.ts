@@ -300,6 +300,78 @@ export function validateActionContent(content: string): ValidationResult {
   };
 }
 
+// ── Narrative Validator ─────────────────────────────────────────────────────
+
+/**
+ * Validates narrative content follows the canonical Insimul Prolog format.
+ *
+ * Required predicates: narrative/2 (atom, title) OR narrative/3 (atom, title, category)
+ *   Both forms are accepted. The narrative/3 form folds the category into
+ *   the main fact; older seeds use it. Newer authored content should
+ *   prefer narrative/2 + narrative_category/2 since the schema documents
+ *   them separately, but the hydrator handles either.
+ * Recommended: narrative_description/2, narrative_category/2, narrative_role/2,
+ *              narrative_participants/2, narrative_stage/4, narrative_outcome/3,
+ *              narrative_trigger/2
+ * Optional: narrative_stage_intro/3, narrative_stage_outro/3,
+ *           narrative_clue/4, narrative_red_herring/4,
+ *           narrative_prologue_pool/2, narrative_epilogue_pool/2
+ */
+export function validateNarrativeContent(content: string): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!content || content.trim().length === 0) {
+    return { isValid: false, errors: ['Content is empty'], warnings: [], detectedPredicates: [] };
+  }
+
+  const detectedPredicates = detectPredicates(content);
+
+  // Required predicate — accept narrative/2 or narrative/3
+  if (!hasPredicateWithArity(detectedPredicates, 'narrative', [2, 3])) {
+    const hasAnyNarrative = detectedPredicates.some(p => p.startsWith('narrative/'));
+    if (hasAnyNarrative) {
+      errors.push('Predicate narrative found but with unexpected arity — expected narrative/2 (atom, title) or narrative/3 (atom, title, category)');
+    } else {
+      errors.push('Missing required predicate: narrative/2 — declares the narrative (atom, title)');
+    }
+  }
+
+  // Recommended predicates
+  if (!hasPredicatePattern(content, 'narrative_description')) {
+    warnings.push('Missing recommended predicate: narrative_description/2 — short summary of the arc');
+  }
+  if (!hasPredicatePattern(content, 'narrative_category')) {
+    warnings.push('Missing recommended predicate: narrative_category/2 — e.g., heist, mystery, drama');
+  }
+  if (!hasPredicatePattern(content, 'narrative_role')) {
+    warnings.push('Missing recommended predicate: narrative_role/2 — main_candidate | secondary | ambient');
+  }
+  if (!hasPredicatePattern(content, 'narrative_participants')) {
+    warnings.push('Missing recommended predicate: narrative_participants/2 — list of role atoms');
+  }
+  if (!hasPredicateWithArity(detectedPredicates, 'narrative_stage', [4])) {
+    warnings.push('Missing recommended predicate: narrative_stage/4 — narrative_stage(Atom, Num, Title, Desc)');
+  }
+  if (!hasPredicateWithArity(detectedPredicates, 'narrative_outcome', [3])) {
+    warnings.push('Missing recommended predicate: narrative_outcome/3 — narrative_outcome(Atom, OutcomeId, Desc)');
+  }
+  if (!hasPredicatePattern(content, 'narrative_trigger')) {
+    warnings.push('Missing recommended predicate: narrative_trigger/2 — Prolog goal that gates eligibility');
+  }
+
+  // Syntax checks
+  const syntaxErrors = checkSyntax(content);
+  errors.push(...syntaxErrors);
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    detectedPredicates,
+  };
+}
+
 // ── Quest Validator ─────────────────────────────────────────────────────────
 
 /**

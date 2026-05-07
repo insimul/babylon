@@ -65,6 +65,11 @@ export interface IDataSource {
   loadAssets(worldId: string): Promise<any[]>;
   loadConfig3D(worldId: string): Promise<any>;
   loadTruths(worldId: string, playthroughId?: string): Promise<any[]>;
+  /** Returns the NarrativeIR for a world (or null if none is available).
+   *  Single source for narrative data at runtime — replaces the prior
+   *  pattern of `loadTruths().find(entryType=world_narrative)` and JSON-
+   *  parsing the content blob. */
+  loadNarrative(worldId: string): Promise<any | null>;
   loadCharacter(characterId: string): Promise<any>;
   loadGeography(worldId: string): Promise<{ heightmap?: number[][]; terrainSize?: number } | null>;
   loadAIConfig(worldId: string): Promise<any | null>;

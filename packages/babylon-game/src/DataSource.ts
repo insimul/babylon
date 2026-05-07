@@ -309,6 +309,14 @@ export class ApiDataSource implements DataSource {
     return res.ok ? await res.json() : [];
   }
 
+  async loadNarrative(worldId: string): Promise<any | null> {
+    const res = await fetch(`${this.baseUrl}/api/worlds/${worldId}/narrative`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  }
+
   async loadCharacter(characterId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/api/characters/${characterId}`, { headers: this.getHeaders() });
     return res.ok ? await res.json() : null;
@@ -1957,6 +1965,11 @@ export class FileDataSource implements DataSource {
     await this.waitForData();
     // Base truths from the exported JSON; gameplay truths are merged via the overlay layer
     return this.worldIR?.truths || [];
+  }
+
+  async loadNarrative(_worldId: string): Promise<any | null> {
+    await this.waitForData();
+    return this.worldIR?.narrative ?? null;
   }
 
   async loadCharacter(characterId: string): Promise<any> {

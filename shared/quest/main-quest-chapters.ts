@@ -10,6 +10,7 @@
  */
 
 import type { CEFRLevel } from '@shared/language/cefr';
+import { simpleHash } from '../narrative/seeded-utils';
 
 export interface MainQuestObjective {
   id: string;
@@ -174,20 +175,6 @@ const FALLBACK_WRITER_NAMES: WriterNameEntry[] = [
   { firstName: 'Sage', lastName: 'Inkwell', fullName: 'Sage Inkwell' },
   { firstName: 'Robin', lastName: 'Paige', fullName: 'Robin Paige' },
 ];
-
-/**
- * Simple hash of a string to a positive integer.
- * Used for deterministic writer name selection per world.
- */
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const ch = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + ch;
-    hash |= 0; // Convert to 32-bit integer
-  }
-  return Math.abs(hash);
-}
 
 /**
  * Get the writer's name for a given world, deterministically derived from

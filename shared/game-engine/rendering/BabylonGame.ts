@@ -2341,7 +2341,9 @@ export class BabylonGame {
     this.narrativeBeatDispatcher = new NarrativeBeatDispatcher(this.cutscenePanel);
   }
 
-  /** Show game intro cutscene on first playthrough — pulls content from the Narrative truth */
+  /** Show game intro cutscene on first playthrough — pulls the NarrativeIR
+   *  from `dataSource.loadNarrative` (materialised live from the narratives
+   *  collection, or read straight from the WorldIR for offline games). */
   private async tryShowGameIntro(): Promise<void> {
     if (!this.cutscenePanel || !this.dataSource) return;
 
@@ -2353,13 +2355,9 @@ export class BabylonGame {
     if (saveData?.introShown) return;
 
     try {
-      // Load narrative truth for intro content
-      const truths = await this.dataSource.loadTruths(this.config.worldId);
-      const narrativeTruth = truths.find((t: any) => t.entryType === 'world_narrative');
-      let narrative: any = null;
-      if (narrativeTruth?.content) {
-        try { narrative = JSON.parse(narrativeTruth.content); } catch {}
-      }
+      // Single source: the dataSource materialises the NarrativeIR (server
+      // path or baked WorldIR). No more JSON-parsing a `truth` row.
+      const narrative: any = await this.dataSource.loadNarrative(this.config.worldId);
 
       // Build context from world data
       const settlements = this.worldData?.settlements || [];
@@ -2370,7 +2368,11 @@ export class BabylonGame {
 
       const { buildIntroPages } = await import('./GameIntroSequence');
       const { resolveNarrativeVariables } = await import('../../narrative/narrative-generator');
-      const writerName = narrative?.writerName || 'a local writer';
+      // Prefer the generic protagonist fields; fall back to the legacy
+      // writerName for narratives that pre-date the protagonist generalisation.
+      const protagonistName = narrative?.protagonistName || narrative?.writerName || 'a local writer';
+      const writerName = protagonistName;
+      const protagonistRole = narrative?.protagonistRole;
       const settlementName = settlement?.name || 'the settlement';
 
       const pages = buildIntroPages({
@@ -2378,6 +2380,8 @@ export class BabylonGame {
         countryName: country?.name || 'the region',
         targetLanguage,
         writerName,
+        protagonistName,
+        protagonistRole,
         playerName: (playthrough as any)?.name || undefined,
         narrative: narrative || undefined,
       });

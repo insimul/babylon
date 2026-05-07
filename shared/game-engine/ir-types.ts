@@ -790,6 +790,41 @@ export interface MainQuestLocationIR {
 }
 
 export interface NarrativeIR {
+  // ── Source metadata (set by the materialiser; absent on legacy fallback) ──
+  /** Prolog atom of the underlying `narratives` record this IR was
+   *  materialised from. The editor uses this to resolve the world-scoped
+   *  record for delete / clone actions. Absent when the legacy template
+   *  generator produced the IR (no record exists). */
+  _sourceName?: string;
+  /** Human-readable title of the underlying record (mirrors `narrative/2`'s
+   *  second arg). Same caveats as `_sourceName`. */
+  _sourceTitle?: string;
+  /** True when the source record is world-scoped (an editor clone or LLM
+   *  authoring); false for unmodified base seed records. The editor only
+   *  exposes "Delete" for world-scoped IRs. */
+  _sourceIsWorldScoped?: boolean;
+
+  // ── Generic protagonist fields (preferred — work for any narrative shape) ──
+  /** Atom describing the protagonist's role in their world: `writer`,
+   *  `fixer`, `survivor`, `chronicler`, etc. Drives genre-aware
+   *  presentation in the intro and other UI surfaces. Empty string when
+   *  the legacy generator runs without seed metadata. */
+  protagonistRole?: string;
+  /** Mirror of `writerName` — populated alongside the legacy field by
+   *  every generator. New consumers should prefer this. */
+  protagonistName?: string;
+  /** Mirror of `writerBackstory`. */
+  protagonistBackstory?: string;
+  /** Mirror of `disappearanceReason`. */
+  incidentReason?: string;
+  /** Mirror of `finalRevelation`. */
+  resolution?: string;
+
+  // ── Legacy MW-flavoured fields (kept populated for backwards compat) ──
+  // Consumers should migrate to the protagonist* aliases above. These
+  // names made sense when the engine only supported the Missing Writer
+  // narrative; non-MW worlds populate them with the protagonist's data
+  // anyway so existing call sites continue to work.
   writerName: string;
   writerFirstName: string;
   writerLastName: string;

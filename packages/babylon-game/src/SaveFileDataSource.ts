@@ -260,6 +260,12 @@ export class SaveFileDataSource implements DataSource {
     } catch { return null; }
   }
   async loadTruths(_worldId: string, _playthroughId?: string) { return []; }
+  async loadNarrative(_worldId: string): Promise<any | null> {
+    // Save-file snapshots don't carry the world's NarrativeIR — the intro
+    // sequence relies on the runtime's loaded snapshot instead. Return null
+    // so callers fall through to whatever default they have.
+    return null;
+  }
   async loadGeography(_worldId: string) { return null; }
   async loadAIConfig(_worldId: string) { return null; }
   async loadDialogueContexts(_worldId: string) { return []; }
