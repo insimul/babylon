@@ -1,6 +1,6 @@
 {
   "name": "@insimul/babylon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Babylon.js export templates for Insimul. These files are bundled into game projects exported by the Insimul platform.",
   "license": "Apache-2.0",
   "type": "module",
