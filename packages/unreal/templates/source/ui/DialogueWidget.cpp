@@ -46,8 +46,28 @@ void UDialogueWidget::InitDialogueWidget()
         }
     }
 
+    // Capture the font the Widget Blueprint applied to a bound label, so the chat
+    // lines we build at runtime reuse it (renders non-Latin target-language glyphs).
+    if (GreetingText)
+    {
+        UIFont = GreetingText->GetFont();
+    }
+    else if (NPCNameText)
+    {
+        UIFont = NPCNameText->GetFont();
+    }
+
     // Start hidden
     SetVisibility(ESlateVisibility::Collapsed);
+}
+
+FSlateFontInfo UDialogueWidget::ResolveUIFont(UTextBlock* TemplateWidget, int32 Size) const
+{
+    FSlateFontInfo Info = (UIFont.FontObject != nullptr || UIFont.HasValidFont())
+        ? UIFont
+        : (TemplateWidget ? TemplateWidget->GetFont() : FSlateFontInfo());
+    Info.Size = Size;
+    return Info;
 }
 
 void UDialogueWidget::OpenDialogue(const FString& NPCId)
@@ -164,9 +184,7 @@ void UDialogueWidget::AddChatMessage(const FString& Speaker, const FString& Mess
     MsgText->SetText(FText::FromString(FormattedMsg));
 
     // Style based on speaker
-    FSlateFontInfo FontInfo = MsgText->GetFont();
-    FontInfo.Size = 14;
-    MsgText->SetFont(FontInfo);
+    MsgText->SetFont(ResolveUIFont(MsgText, 14));
     MsgText->SetAutoWrapText(true);
 
     if (bIsPlayer)
@@ -207,9 +225,7 @@ void UDialogueWidget::RefreshActions(float PlayerEnergy)
     // Add header
     UTextBlock* Header = NewObject<UTextBlock>(ActionsContainer);
     Header->SetText(FText::FromString(TEXT("What do you want to do?")));
-    FSlateFontInfo HeaderFont = Header->GetFont();
-    HeaderFont.Size = 11;
-    Header->SetFont(HeaderFont);
+    Header->SetFont(ResolveUIFont(Header, 11));
     Header->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)));
     ActionsContainer->AddChild(Header);
 
@@ -278,9 +294,7 @@ void UDialogueWidget::SendPlayerMessage(const FString& Message)
     {
         StreamingMessageBlock = NewObject<UTextBlock>(ChatScrollBox);
         StreamingMessageBlock->SetText(FText::FromString(FString::Printf(TEXT("%s: ..."), *CurrentNPCName)));
-        FSlateFontInfo FontInfo = StreamingMessageBlock->GetFont();
-        FontInfo.Size = 14;
-        StreamingMessageBlock->SetFont(FontInfo);
+        StreamingMessageBlock->SetFont(ResolveUIFont(StreamingMessageBlock, 14));
         StreamingMessageBlock->SetAutoWrapText(true);
         StreamingMessageBlock->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f)));
         ChatScrollBox->AddChild(StreamingMessageBlock);
@@ -409,9 +423,7 @@ void UDialogueWidget::CreateActionButton(const FString& ActionId, const FString&
     // Action name
     UTextBlock* NameText = NewObject<UTextBlock>(ButtonContent);
     NameText->SetText(FText::FromString(ActionName));
-    FSlateFontInfo NameFont = NameText->GetFont();
-    NameFont.Size = 12;
-    NameText->SetFont(NameFont);
+    NameText->SetFont(ResolveUIFont(NameText, 12));
     NameText->SetColorAndOpacity(FSlateColor(bCanAfford ? FLinearColor::White : FLinearColor(0.5f, 0.5f, 0.5f)));
 
     UHorizontalBoxSlot* NameSlot = ButtonContent->AddChildToHorizontalBox(NameText);
@@ -425,9 +437,7 @@ void UDialogueWidget::CreateActionButton(const FString& ActionId, const FString&
         UTextBlock* CostText = NewObject<UTextBlock>(ButtonContent);
         FString CostStr = FString::Printf(TEXT("Energy: %.0f"), EnergyCost);
         CostText->SetText(FText::FromString(CostStr));
-        FSlateFontInfo CostFont = CostText->GetFont();
-        CostFont.Size = 10;
-        CostText->SetFont(CostFont);
+        CostText->SetFont(ResolveUIFont(CostText, 10));
         CostText->SetColorAndOpacity(FSlateColor(
             bCanAfford ? FLinearColor(0.8f, 0.8f, 0.8f) : FLinearColor(0.9f, 0.3f, 0.3f)));
 

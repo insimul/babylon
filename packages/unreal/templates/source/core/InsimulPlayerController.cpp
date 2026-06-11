@@ -75,7 +75,16 @@ void AInsimulPlayerController::CreatePauseMenu()
 void AInsimulPlayerController::CreateDialogueWidget()
 {
     if (DialogueWidgetInstance) return;
-    DialogueWidgetInstance = CreateWidget<UDialogueWidget>(this, UDialogueWidget::StaticClass());
+    // Prefer the generated Widget Blueprint (WBP_Dialogue) — it carries the named
+    // bound widgets (ChatScrollBox, PlayerInputBox, SendButton, ...) the C++ binds
+    // to. Without it the dialogue UI renders an empty root. Falls back to the bare
+    // C++ class if Scripts/GenerateInsimulContent.py hasn't been run.
+    UClass* DialogueClass = UDialogueWidget::StaticClass();
+    if (UClass* GeneratedBP = LoadClass<UDialogueWidget>(nullptr, TEXT("/Game/UI/WBP_Dialogue.WBP_Dialogue_C")))
+    {
+        DialogueClass = GeneratedBP;
+    }
+    DialogueWidgetInstance = CreateWidget<UDialogueWidget>(this, DialogueClass);
     if (DialogueWidgetInstance)
     {
         DialogueWidgetInstance->AddToViewport(50);

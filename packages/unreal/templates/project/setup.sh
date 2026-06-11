@@ -38,6 +38,7 @@ echo "Using UE5: $UE_ENGINE_DIR"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_PATH="$SCRIPT_DIR/InsimulExport.uproject"
 IMPORT_SCRIPT="$SCRIPT_DIR/Scripts/ImportInsimulAssets.py"
+CONTENT_SCRIPT="$SCRIPT_DIR/Scripts/GenerateInsimulContent.py"
 
 # Detect platform
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -53,17 +54,17 @@ fi
 
 # Step 1: Build C++ modules
 echo ""
-echo "Step 1/3: Building C++ modules..."
+echo "Step 1/4: Building C++ modules..."
 "$UE_ENGINE_DIR/Engine/Build/BatchFiles/RunUBT.sh" InsimulExportEditor "$PLATFORM" Development "-project=$PROJECT_PATH"
 
 # Step 2: Run CreateLevel commandlet to generate MainWorld.umap
 echo ""
-echo "Step 2/3: Generating MainWorld.umap..."
+echo "Step 2/4: Generating MainWorld.umap..."
 "$EDITOR_CMD" "$PROJECT_PATH" -run=CreateLevel -unattended -nosplash -nopause || true
 
 # Step 3: Import bundled assets (characters, audio, textures, models) into UE5
 echo ""
-echo "Step 3/3: Importing bundled assets (characters, audio, textures, models)..."
+echo "Step 3/4: Importing bundled assets (characters, audio, textures, models)..."
 if [ -f "$IMPORT_SCRIPT" ]; then
     "$EDITOR_CMD" "$PROJECT_PATH" -ExecutePythonScript="$IMPORT_SCRIPT" -unattended -nosplash -nopause || {
         echo ""
@@ -74,6 +75,22 @@ if [ -f "$IMPORT_SCRIPT" ]; then
 else
     echo "WARNING: ImportInsimulAssets.py not found at $IMPORT_SCRIPT"
     echo "Skipping asset import. You can import assets manually from the Unreal Editor."
+fi
+
+# Step 4: Generate editor content — UI Widget Blueprints + import fonts.
+# The generated C++ UMG widgets bind their sub-widgets by name; this builds the
+# Widget Blueprints that carry those named widgets so the UI actually renders.
+echo ""
+echo "Step 4/4: Generating UI Widget Blueprints and importing fonts..."
+if [ -f "$CONTENT_SCRIPT" ]; then
+    "$EDITOR_CMD" "$PROJECT_PATH" -ExecutePythonScript="$CONTENT_SCRIPT" -unattended -nosplash -nopause || {
+        echo ""
+        echo "NOTE: Content generation finished (some warnings are normal)."
+        echo "You can re-run it from the Unreal Editor: File > Execute Python Script > Scripts/GenerateInsimulContent.py"
+    }
+else
+    echo "WARNING: GenerateInsimulContent.py not found at $CONTENT_SCRIPT"
+    echo "Skipping UI Blueprint generation. The C++ UI may render empty without it."
 fi
 
 echo ""

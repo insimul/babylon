@@ -1,0 +1,17 @@
+Noto fonts bundled with Insimul exports
+=======================================
+
+The Noto Sans font files in this directory (and any Noto CJK face staged at
+export time) are licensed under the SIL Open Font License, Version 1.1.
+
+  Copyright The Noto Project Authors (https://github.com/notofonts/noto-fonts)
+
+You may use, study, copy, merge, embed, modify, and redistribute these fonts
+under the terms of the SIL OFL 1.1. The full license text is available at:
+
+  https://openfontlicense.org
+  https://github.com/notofonts/noto-fonts/blob/main/LICENSE
+
+The fonts are provided so that non-Latin target-language text (e.g. CJK,
+Arabic, Devanagari, Hebrew, Thai) renders correctly in the exported game's UI.
+They are bundled and imported as UFont assets by Scripts/GenerateInsimulContent.py.

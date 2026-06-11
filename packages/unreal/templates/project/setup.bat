@@ -20,18 +20,39 @@ if not defined UE_ENGINE_DIR (
 
 echo Using UE5: %UE_ENGINE_DIR%
 set "PROJECT_PATH=%CD%\InsimulExport.uproject"
+set "EDITOR_CMD=%UE_ENGINE_DIR%\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+set "IMPORT_SCRIPT=%CD%\Scripts\ImportInsimulAssets.py"
+set "CONTENT_SCRIPT=%CD%\Scripts\GenerateInsimulContent.py"
 
 :: Step 1: Build C++ modules
 echo.
-echo Step 1/2: Building C++ modules...
+echo Step 1/4: Building C++ modules...
 "%UE_ENGINE_DIR%\Engine\Build\BatchFiles\RunUBT.bat" InsimulExportEditor Win64 Development "-project=%PROJECT_PATH%"
 if errorlevel 1 exit /b 1
 
 :: Step 2: Run CreateLevel commandlet
 echo.
-echo Step 2/2: Generating MainWorld.umap...
-"%UE_ENGINE_DIR%\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "%PROJECT_PATH%" -run=CreateLevel -unattended -nosplash -nopause
+echo Step 2/4: Generating MainWorld.umap...
+"%EDITOR_CMD%" "%PROJECT_PATH%" -run=CreateLevel -unattended -nosplash -nopause
 if errorlevel 1 exit /b 1
+
+:: Step 3: Import bundled assets (characters, audio, textures, models)
+echo.
+echo Step 3/4: Importing bundled assets...
+if exist "%IMPORT_SCRIPT%" (
+    "%EDITOR_CMD%" "%PROJECT_PATH%" -ExecutePythonScript="%IMPORT_SCRIPT%" -unattended -nosplash -nopause
+) else (
+    echo WARNING: ImportInsimulAssets.py not found - skipping asset import.
+)
+
+:: Step 4: Generate UI Widget Blueprints + import fonts
+echo.
+echo Step 4/4: Generating UI Widget Blueprints and importing fonts...
+if exist "%CONTENT_SCRIPT%" (
+    "%EDITOR_CMD%" "%PROJECT_PATH%" -ExecutePythonScript="%CONTENT_SCRIPT%" -unattended -nosplash -nopause
+) else (
+    echo WARNING: GenerateInsimulContent.py not found - the C++ UI may render empty without it.
+)
 
 echo.
 echo ========================================

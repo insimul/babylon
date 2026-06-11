@@ -112,6 +112,19 @@ protected:
     TObjectPtr<UTextBlock> HintText;
 
 private:
+    /**
+     * UI font captured from a bound, designer/Script-styled text widget in
+     * NativeConstruct. Reused for the chat lines this widget creates at runtime so
+     * non-Latin target-language dialogue renders glyphs instead of tofu boxes.
+     * Empty (FontObject null) when no Widget Blueprint / bundled font is present —
+     * callers then fall back to the engine default.
+     */
+    UPROPERTY()
+    FSlateFontInfo UIFont;
+
+    /** Bundled UI font at the given size, or the template widget's default font if none. */
+    FSlateFontInfo ResolveUIFont(UTextBlock* TemplateWidget, int32 Size) const;
+
     UPROPERTY()
     bool bIsOpen = false;
 
