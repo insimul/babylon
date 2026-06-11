@@ -102,6 +102,72 @@ export interface DialectVariation {
   };
 }
 
+/**
+ * Systematic sound alternation that occurs when morphemes combine
+ * (vowel harmony, consonant gradation, ablaut, sandhi, mutation, umlaut).
+ */
+export interface MorphophonologicalRule {
+  name: string;
+  type: 'vowel-harmony' | 'consonant-gradation' | 'ablaut' | 'umlaut' | 'sandhi' | 'mutation';
+  description: string;
+  environment: string;
+  examples: Array<{
+    base: string;
+    modified: string;
+    context: string;
+    meaning: string;
+  }>;
+  frequency: 'systematic' | 'common' | 'lexicalized';
+}
+
+/**
+ * Synchronic phonological process applying within the language
+ * (assimilation, lenition, deletion, etc.).
+ */
+export interface PhonologicalProcess {
+  name: string;
+  type: 'assimilation' | 'dissimilation' | 'deletion' | 'insertion' | 'metathesis' | 'lenition' | 'fortition';
+  description: string;
+  examples: Array<{ input: string; output: string; context: string }>;
+  frequency: 'common' | 'occasional' | 'rare';
+}
+
+/** A sociolinguistic variety of the language (register, age-group, profession, etc.). */
+export interface SociolinguisticVariation {
+  dimension: 'register' | 'age' | 'gender' | 'class' | 'profession' | 'region';
+  name: string;
+  description: string;
+  features: {
+    phonological?: string[];
+    lexical?: { [standard: string]: string };
+    grammatical?: string[];
+    pragmatic?: string[];
+  };
+  examples: Array<{
+    context: string;
+    standard: string;
+    variant: string;
+    explanation: string;
+  }>;
+}
+
+/** A single inflected form within a paradigm, tagged by its morphosyntactic features. */
+export interface InflectedForm {
+  /** e.g. { tense: 'past', person: '1', number: 'singular' } or { case: 'genitive', number: 'plural' } */
+  features: { [feature: string]: string };
+  form: string;
+}
+
+/** A complete inflectional paradigm for a representative verb or noun. */
+export interface InflectionalParadigm {
+  kind: 'verb' | 'noun';
+  /** Base/citation form in the constructed language. */
+  lemma: string;
+  /** English gloss of the lemma. */
+  gloss: string;
+  forms: InflectedForm[];
+}
+
 export interface LanguageStatistics {
   totalLanguages: number;
   familyDistribution: { [key: string]: number };
@@ -182,6 +248,10 @@ export interface WorldLanguage {
   etymology?: Etymology[] | null;
   dialectVariations?: DialectVariation[] | null;
   learningModules?: LearningModule[] | null;
+  morphophonology?: MorphophonologicalRule[] | null;
+  phonologicalProcesses?: PhonologicalProcess[] | null;
+  sociolinguisticVariations?: SociolinguisticVariation[] | null;
+  inflectionalParadigms?: InflectionalParadigm[] | null;
 
   relatedTruthIds?: string[];
   culturalTruthIds?: string[];
