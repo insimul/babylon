@@ -1,7 +1,7 @@
 {
   "name": "@insimul/typescript",
-  "version": "0.1.0",
-  "description": "JavaScript/TypeScript SDK for the Insimul conversation service — connect any web game to AI-powered NPC conversations with streaming text, audio, and lip sync.",
+  "version": "0.1.1",
+  "description": "DEPRECATED passthrough — the conversation SDK moved to @insimul/babylon/conversation. This package re-exports it unchanged so existing installs keep working. New code should import from @insimul/babylon.",
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",

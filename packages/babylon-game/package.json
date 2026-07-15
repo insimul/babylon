@@ -1,7 +1,7 @@
 {
   "name": "@insimul/babylon-game",
   "version": "0.1.1",
-  "description": "Insimul Babylon.js game runtime — DataSource, save-file persistence, optimization (StartupOrchestrator/Profiler, GameDataCache, etc.), and the in-game LoadingScreen. Mounts BabylonGame in standalone exports and the editor's Play view.",
+  "description": "DEPRECATED passthrough — the save/data/loading layer moved to @insimul/babylon (subpath ./data) in US-BC2. This package now contains only one-line re-export shims (packages/babylon-game/src/* -> @insimul/babylon/data/*) so existing consumers keep resolving. Install @insimul/babylon instead.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -21,5 +21,8 @@
   ],
   "peerDependencies": {
     "react": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true }
   }
 }

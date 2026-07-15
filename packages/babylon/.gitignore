@@ -1,0 +1,4 @@
+# export-shell smoke-build fixture (scripts/export-shell-smoke.mjs)
+.export-shell/
+dist/
+node_modules/

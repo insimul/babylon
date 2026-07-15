@@ -1,9 +1,41 @@
 {
   "name": "@insimul/babylon",
-  "version": "0.1.1",
-  "description": "Babylon.js export templates for Insimul. These files are bundled into game projects exported by the Insimul platform.",
-  "license": "Apache-2.0",
+  "version": "0.2.0",
+  "description": "The consolidated Babylon.js runtime for Insimul — one package per web engine. Conversation SDK, save/data/loading layer, the Babylon engine, and game-export templates. Install this one package to plug Insimul into a web game.",
   "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./conversation": {
+      "import": "./src/conversation/index.ts",
+      "types": "./src/conversation/index.ts"
+    },
+    "./conversation/*": {
+      "import": "./src/conversation/*",
+      "types": "./src/conversation/*"
+    },
+    "./data": {
+      "import": "./src/data/index.ts",
+      "types": "./src/data/index.ts"
+    },
+    "./data/*": {
+      "import": "./src/data/*",
+      "types": "./src/data/*"
+    },
+    "./engine": {
+      "import": "./src/engine/index.ts",
+      "types": "./src/engine/index.ts"
+    },
+    "./engine/*": {
+      "import": "./src/engine/*",
+      "types": "./src/engine/*"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/insimul/runtime.git",
@@ -14,6 +46,46 @@
     "registry": "https://npm.pkg.github.com"
   },
   "files": [
-    "templates"
-  ]
+    "src",
+    "templates",
+    "tsconfig.json",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:export-shell": "node scripts/export-shell-smoke.mjs"
+  },
+  "keywords": [
+    "insimul",
+    "babylon",
+    "npc",
+    "conversation",
+    "ai",
+    "game",
+    "save-file",
+    "web"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@babylonjs/core": "^8.54.1",
+    "@babylonjs/gui": "^8.54.1",
+    "@babylonjs/inspector": "^8.56.1",
+    "@babylonjs/loaders": "^8.54.1"
+  },
+  "peerDependencies": {
+    "@mlc-ai/web-llm": "^0.2.82",
+    "react": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@mlc-ai/web-llm": { "optional": true },
+    "react": { "optional": true }
+  },
+  "devDependencies": {
+    "@mlc-ai/web-llm": "^0.2.82",
+    "@types/react": "^18.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
 }

@@ -200,6 +200,104 @@ To keep core `@shared`-free, US-CE6 removed the last pure-type edges two ways:
   the editor-layer `assessment/` module into core. Keep stand-ins in sync if the
   Babylon-side shape changes.
 
+## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
+
+The web/Babylon side is collapsing into ONE package, `packages/babylon`
+(`@insimul/babylon`), organized as `src/{conversation,data,engine,templates}`. Each old
+package/dir moves in and leaves **cross-package one-line re-export shims** at its old path
+so every existing consumer (the platform's npm deps + tsconfig/vite aliases, the export
+pipeline's vendored source paths) keeps resolving unchanged:
+
+- **US-BC1** — `packages/typescript/src` → `src/conversation`; typescript files are shims.
+- **US-BC2** — `packages/babylon-game/src` → `src/data`; babylon-game files are shims.
+  `packages/babylon-game/OLD_EXPORT_SURFACE.json` snapshots the shimmed surface and the
+  import-hygiene guard fails if a shim goes missing / stops being a thin re-export.
+- **US-BC3 (done)** — `shared/game-engine` + `shared/voice` → `src/engine/{game-engine,voice}`;
+  254+4 one-line shims at the old `@shared/...` paths. `packages/babylon/OLD_ENGINE_EXPORT_SURFACE.json`
+  snapshots both roots (`surfaces: [{root, movedTo, paths}]`). The `@babylonjs/*` deps moved
+  from the root `package.json` into `packages/babylon`'s. Exports map gained `./engine` +
+  `./engine/*` (barrel re-exports `./game-engine`'s curated index; rendering/logic/systems and
+  voice are deep-import only).
+- **US-BC4 (done)** — export pipeline survives. The shims re-export ACROSS the vendored
+  boundary (`../../../packages/babylon/src/...`), so a game that vendors only the old dirs
+  (`shared/`, `packages/{typescript,babylon-game}/src`) can no longer resolve them — the
+  relative target escapes the vendored tree. Fix (option b): the export's Vite aliases point
+  the moved roots DIRECTLY at the consolidated package, vendored at `src/insimul-babylon`
+  (see `packages/babylon/templates/vite.config.ts` array-form aliases, moved roots first).
+  `test:export-shell` (`scripts/export-shell-smoke.mjs`) proves it: a real `vite build` of a
+  fixture mirroring an exported game bundles the WHOLE first-party consolidated graph
+  (BabylonGame + engine + data + conversation + core + straggler `shared/`) into a runnable
+  bundle, externalizing only third-party leaves (`@babylonjs/*`, react, mlc, sentry) and the
+  platform-injected type-only surfaces (`GameQuestManager.d.ts` — impl injected at export).
+  **A full standalone `BabylonGame` bundle is NOT achievable in this repo by design** (the
+  `.d.ts`-only surfaces + the whole export env are platform-assembled; that's why the golden
+  export gate lives platform-side). `SMOKE_BREAK=1` disables the fix to demonstrate the gate
+  fails. **A platform follow-up IS required** (the copy step must additionally vendor
+  `packages/babylon/src -> src/insimul-babylon`) — recorded verbatim in progress.txt (US-BC4).
+- **US-BC5 (done)** — the two-package endgame is guarded + documented. Two new
+  `shared/__tests__/import-hygiene.test.ts` describe blocks: (1) **source-location** —
+  non-shim source may live only under `packages/{core,babylon}`; a file is a "shim" when
+  its stripped body re-exports into `babylon/src/` or `packages/core/src`. Pre-existing
+  stragglers are grandfathered in `shared/GRANDFATHERED_SOURCE.json` (79 files); the guard
+  fails on a NEW non-shim file under `shared/`/deprecated dirs AND on a stale snapshot
+  entry (so the list only shrinks). (2) **import direction** — `@insimul/babylon` may
+  import `@insimul/core` + itself among first-party packages, never a deprecated
+  passthrough (`@insimul/typescript`, `@insimul/babylon-game`) or a native-engine sibling.
+  Both direction/source guards scan SHIPPED source only (exclude `*.test.*`/`__tests__/`) —
+  `exports-map.test.ts` deliberately imports the deprecated aliases to prove the shims
+  resolve, which is correct and must not trip the direction guard. To keep babylon off its
+  own deprecated aliases, US-BC5 rewrote the 3 moved-in files that still imported them
+  (`InsimulClientRegistry`, `BabylonGame`, `BabylonChatPanel`) to `@insimul/babylon/{conversation,data}`
+  subpaths — pure specifier swap (same physical target via the shim), verified by check+tests.
+  README rewritten around the two-package model + quickstart; `CHANGELOG.md` seeded.
+  (`@shared/*` self-references inside babylon are fine — `@shared` is the shared tree, not
+  a separate npm package; only cross-PACKAGE `@insimul/*` deps are constrained.)
+
+Conventions when moving a tree in:
+
+- **`git mv` the whole subtree** preserving internal structure so intra-tree relative
+  imports stay valid and `@shared/*` imports resolve unchanged through the root alias
+  (they don't care where the file physically lives). Then write a shim at each OLD
+  importable (non-test) path: `export * from '<relative path into
+  ../../babylon/src/<area>/...>'` (no default exports exist, so `export *` is complete).
+  Tests move WITH the code (no shim); they're not an importable surface.
+- **Extend the exports map** in `packages/babylon/package.json` (`./<area>` barrel +
+  `./<area>/*` glob), and mirror it in **both** vitest configs' `@insimul/babylon` alias
+  (already points at the `src` directory) — the root `tsconfig.check.json`
+  `@insimul/babylon/*` path already covers deep subpaths.
+- **A barrel `index.ts` per area** is React-free: re-export collision-free runtime
+  modules flat, but **namespace** (`export * as foo from './foo'`) modules that share
+  symbol names (the optimization/diagnostics toolkits collide on `QualityPreset`,
+  `QUALITY_PRESETS`, `estimateMeshBytes`, …), and DON'T re-export React entry points
+  (`BabylonWorld`, `LoadingScreen`, the migration modal) — they stay deep-import-only so
+  importing the barrel never needs the optional `react` peer. `DataSource` is a type-only
+  `interface`; the runtime values are `ApiDataSource`/`FileDataSource`/`createDataSource`.
+- **React is an optional peer of `@insimul/babylon`** (`peerDependenciesMeta.react.optional`).
+  The scoped `packages/babylon/vitest.config.ts` needs `@shared`, `@insimul/core`, and
+  `@insimul/babylon-game` aliases (mirroring the root config) once the moved suites pull them.
+- **Guard the surface**: add subpath assertions to
+  `packages/babylon/src/__tests__/exports-map.test.ts` and shim-completeness to
+  `import-hygiene.test.ts`. Verify a guard actually FAILS on a violation (delete a shim,
+  run, restore) — a vacuous guard is worse than none.
+
+Two gotchas learned moving `shared/game-engine` (a subtree with relative escapes, US-BC3):
+
+- **`git mv` preserves INTRA-tree relatives but breaks relatives that ESCAPE the tree.**
+  `@shared/*` imports survive (alias, location-independent), but a relative path that
+  pointed OUT of the old subtree (`../../narrative/...`, `../../packages/core/src/...`)
+  silently resolves to a now-nonexistent path at the new depth. tsc reports these as
+  `TS2307 Cannot find module` PLUS a cascade of `TS2305 has no exported member` / implicit-any
+  in files that imported the broken types — on a repo that was green on main, **treat every
+  new error as a symptom of the move**, not pre-existing debt. Fix by rewriting the escaping
+  relatives to aliases: `@shared/<sibling>` for shared/ siblings, `@insimul/core/<path>` for
+  the core shims (`babylon → core` is an allowed direction). Detect them with a resolve-check
+  script (relative specifier whose target file doesn't exist post-move), not by eyeballing.
+- **Moved `*.test.ts` land under a new `include` glob.** The 3 legacy tsx harnesses in
+  `game-engine/logic/*.test.ts` (broken `/game-engine/...` absolute imports, no describe/it)
+  were excluded by name at their old `shared/` path; after moving under
+  `packages/babylon/src/engine/` they matched BOTH the root and the scoped vitest `src/**`
+  include globs — re-add the exclude at the NEW path in **both** `vitest.config.ts` files.
+
 ### Install gotcha in this workspace
 
 The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists

@@ -1,13 +1,11 @@
 {
+  "//": "DEPRECATED passthrough — src/ is now one-line re-export shims into @insimul/babylon/conversation (packages/babylon/src/conversation). `npm run typecheck` here type-checks the shims and the moved SDK they forward to. No `rootDir`/emit options: a passthrough emits nothing, and the shims deliberately import a sibling package outside src/, which `rootDir` would reject (TS6059). `allowImportingTsExtensions` mirrors the root check config so the moved SDK's `.js`->`.ts` and any explicit-extension imports resolve identically.",
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

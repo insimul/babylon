@@ -1,5 +1,19 @@
 # @insimul/babylon-game — agent notes
 
+## DEPRECATED passthrough (US-BC2)
+
+The save/data/loading layer that used to live here **moved to `@insimul/babylon`**
+(subpath `./data`, physically `packages/babylon/src/data/`). `packages/babylon-game/src/`
+now contains **only one-line re-export shims** into `@insimul/babylon/data/*` so existing
+consumers (the platform's npm dep + tsconfig/vite aliases, and
+`shared/game-engine/rendering/BabylonGame.ts`, which imports
+`@insimul/babylon-game/{WorldStateManager,DataSource,diagnostics/ResourceProfiler}`) keep
+resolving. Do NOT add real source here — put it in `packages/babylon/src/data/` and shim it.
+`OLD_EXPORT_SURFACE.json` snapshots the shimmed surface; the import-hygiene guard
+(`shared/__tests__/import-hygiene.test.ts`) fails if any snapshotted shim goes missing or
+stops being a thin re-export. The notes below are retained as history (the quest-storage
+vendoring still lives in `shared/quests/`, unchanged).
+
 ## Quest storage: runtime-owned interface + save-file implementation
 
 `SaveFileDataSource` needs a `QuestStorageProvider` so shared quest services can

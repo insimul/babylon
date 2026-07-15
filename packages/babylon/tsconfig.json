@@ -1,0 +1,24 @@
+{
+  "//": "Standalone typecheck for @insimul/babylon (npm run typecheck). Mirrors the root tsconfig.check.json compiler options so the package type-checks identically in isolation and as part of the whole-repo check. Unlike @insimul/core, this package OWNS the web/Babylon layer, so `lib` includes 'dom' (the conversation SDK touches MediaStream/WebGPU/window). Data/engine layers arrive in US-BC2/US-BC3.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../../shared/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "templates", "**/*.test.ts", "**/*.test.tsx"]
+}

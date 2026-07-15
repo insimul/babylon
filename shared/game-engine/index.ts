@@ -1,14 +1,4 @@
-/**
- * Insimul Game Engine — Shared Module
- *
- * Barrel export for all engine-agnostic types and interfaces.
- * Import from '@shared/game-engine' to access these definitions.
- */
-
-export * from './types';
-export * from './interfaces';
-export * from './ir-types';
-export * from './asset-pipeline';
-export * from './vegetation-zones';
-export * from './building-style-presets';
-export * from './animation-registry';
+// Re-export shim — moved to @insimul/babylon/engine (packages/babylon/src/engine/game-engine/index).
+// Kept so `@shared/game-engine/index` imports (platform @shared aliases + the
+// export-pipeline shared/ vendoring) keep resolving. See US-BC3.
+export * from "../../packages/babylon/src/engine/game-engine/index";
