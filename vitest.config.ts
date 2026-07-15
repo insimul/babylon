@@ -13,6 +13,11 @@ export default defineConfig({
       '@shared': r('shared'),
       '@insimul/core': r('packages/core/src'),
       '@insimul/typescript': r('packages/typescript/src/index.ts'),
+      // Maps to the src DIRECTORY so both `@insimul/babylon` and every subpath
+      // (@insimul/babylon/conversation, …) resolve to their index.ts, mirroring the
+      // package's exports map. `@insimul/babylon-game` stays a distinct alias — the
+      // matcher only rewrites on an exact hit or a following `/`, so it is unaffected.
+      '@insimul/babylon': r('packages/babylon/src'),
       '@insimul/babylon-game': r('packages/babylon-game/src'),
     },
   },
@@ -20,7 +25,8 @@ export default defineConfig({
     include: [
       // The import-hygiene guard.
       'shared/__tests__/import-hygiene.test.ts',
-      // Per-package vitest suites (currently only babylon-game ships runnable specs).
+      // Per-package vitest suites.
+      'packages/babylon/src/**/*.test.{ts,tsx}',
       'packages/babylon-game/src/**/*.test.{ts,tsx}',
       // @insimul/core vitest suites (US-CE4 schema/drift tests, etc.). The legacy
       // tau-engine.test.ts harness under packages/core/src/prolog is excluded below.

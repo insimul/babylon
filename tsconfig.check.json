@@ -22,6 +22,8 @@
       "@insimul/core/*": ["./packages/core/src/*"],
       "@insimul/typescript": ["./packages/typescript/src/index.ts"],
       "@insimul/typescript/*": ["./packages/typescript/src/*"],
+      "@insimul/babylon": ["./packages/babylon/src/index.ts"],
+      "@insimul/babylon/*": ["./packages/babylon/src/*"],
       "@insimul/babylon-game/*": ["./packages/babylon-game/src/*"]
     }
   },
@@ -30,6 +32,8 @@
     "shared/**/*.tsx",
     "packages/core/src/**/*.ts",
     "packages/typescript/src/**/*.ts",
+    "packages/babylon/src/**/*.ts",
+    "packages/babylon/src/**/*.tsx",
     "packages/babylon-game/src/**/*.ts",
     "packages/babylon-game/src/**/*.tsx"
   ],

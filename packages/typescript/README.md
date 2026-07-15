@@ -1,10 +1,25 @@
 # @insimul/typescript
 
+> **⚠️ Deprecated — passthrough only.** The conversation SDK now lives in the
+> consolidated `@insimul/babylon` package (one runtime package per web engine). This
+> package re-exports it unchanged so existing installs keep working, but new code
+> should import from `@insimul/babylon/conversation`:
+>
+> ```typescript
+> import { InsimulClient } from '@insimul/babylon/conversation';
+> ```
+>
+> Everything below still works verbatim via re-export shims (`packages/typescript/src`
+> now forwards to `packages/babylon/src/conversation`). See the runtime repo README
+> for the shim/deprecation timeline.
+
 JavaScript/TypeScript SDK for the Insimul conversation service. Connect any web game to AI-powered NPC conversations with streaming text, audio, and lip sync.
 
 ## Installation
 
 ```bash
+npm install @insimul/babylon   # preferred — the conversation SDK ships here now
+# or, still supported as a passthrough:
 npm install @insimul/typescript
 ```
 
