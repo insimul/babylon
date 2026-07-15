@@ -1,0 +1,42 @@
+{
+  "fileName": "friendship.json",
+  "category": "friendship",
+  "_note": "VESPACE-style Ensemble volition-rule corpus fixture for the US-PC2 mass-conversion test. Platform data/ensemble/VESPACE/*.json is unavailable in this worktree, so this hand-authored corpus exercises every condition/effect category, likelihood present/absent, explicit rule_type, and mixed category spellings (case + separator variants). Kept here (test fixtures) per the PRD acceptance: 'copy the needed fixtures into this repo's test fixtures'.",
+  "rules": [
+    {
+      "name": "Comfort Sad Friend",
+      "title": "Comfort a sad friend",
+      "likelihood": 0.8,
+      "conditions": [
+        { "category": "relationship", "type": "friends", "first": "initiator", "second": "responder" },
+        { "category": "status", "type": "sad", "first": "responder" }
+      ],
+      "effects": [
+        { "category": "network", "type": "affinity", "first": "initiator", "second": "responder", "operator": "+", "value": 5, "weight": 6 },
+        { "category": "status", "type": "comforted", "first": "responder" }
+      ]
+    },
+    {
+      "name": "Resent Cold Ally",
+      "title": "Grow cold toward an ally who ignores you",
+      "conditions": [
+        { "category": "Relationship", "type": "allies", "first": "initiator", "second": "responder" },
+        { "category": "Network", "type": "closeness", "first": "initiator", "second": "responder", "operator": "<", "value": 20 }
+      ],
+      "effects": [
+        { "category": "network", "type": "affinity", "first": "initiator", "second": "responder", "operator": "-", "value": 3, "weight": 4 }
+      ]
+    },
+    {
+      "name": "Admire The Clever",
+      "title": "Admire a clever, non-shy person",
+      "conditions": [
+        { "category": "attribute", "type": "intelligence", "first": "responder", "operator": ">=", "value": 7 },
+        { "category": "trait", "type": "shy", "first": "responder", "value": false }
+      ],
+      "effects": [
+        { "category": "directedStatus", "type": "admires", "first": "initiator", "second": "responder" }
+      ]
+    }
+  ]
+}

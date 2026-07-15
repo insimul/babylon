@@ -329,9 +329,37 @@ research/LLM-baseline harness** with an incompatible output vocabulary (decompos
 `female(X)`/`affinity/3`, compact multi-head rules, a 3-tier action tree) and
 platform-only deps — do **not** promote it into core. New source-format converters
 (Kismet US-PC3, ToTT US-PC4) follow the legacy converter's preamble + `ConversionResult`
-contract, not the e2e vocabulary. Known gaps hardened in US-PC2: `ensemble-converter.ts`
-does not yet emit `rule_type/2` (which `content-validators.validateRuleContent`
-**requires**) or `rule_likelihood/2`.
+contract, not the e2e vocabulary.
+
+### Ensemble converter completeness contract (US-PC2)
+
+`ensemble-converter.ts` now emits the full rule preamble. Two hard-won details the
+Kismet/ToTT converters MUST replicate:
+
+- **`rule_type/2` is a hard requirement** — `content-validators.validateRuleContent`
+  rejects any rule prologContent lacking it (a 422 at the save path). The ensemble
+  converter emits `rule_type(Name, volition)` by default (these are volition-rule
+  files), overridable to `trigger` via the source rule's `type` field. Every source
+  converter must emit a `rule_type/2`.
+- **`rule_likelihood/2`** is emitted only when the source carries a likelihood, clamped
+  to `[0.0, 1.0]` (`normalizeLikelihood`); non-finite values are dropped, not emitted.
+- **Category matching is case- AND separator-insensitive** via `normalizeCategory`
+  (splits camelCase, folds `_`/`-`/whitespace to a single space, lowercases). Source
+  corpora spell multi-word VESPACE categories as `"directed status"` / `"DirectedStatus"`
+  / `"directed_status"` interchangeably — normalize before the category `switch`, don't
+  compare raw strings.
+- **The 1:1 registry rule**: predicates the converter emits must be in
+  `predicate-schema.ts`. US-PC2 added `rule_type/2`, `rule_category/2`, `rule_source/2`,
+  `rule_effect/2` (the source-format arity; editor `rule-converter.ts` still emits
+  `rule_effect/4`) to the `rule` block, and the action-preamble predicates
+  (`action_source/2`, `action_difficulty/2`, `action_duration/2`, `action_leads_to/2`,
+  `action_accept/1`, `action_reject/1`) to the `action` block. The mass-conversion test
+  (`__tests__/ensemble-mass-conversion.test.ts`) validates every emitted ground fact
+  against `getCurrentPredicateSchema()`, so an unregistered predicate fails CI.
+- **Fixture corpus**: platform `data/ensemble/VESPACE/*.json` is NOT checked out in this
+  worktree (the `insimul-platform` submodule dir is empty here), so the VESPACE-style
+  seed corpus is hand-authored under `__tests__/fixtures/ensemble/`. When the platform
+  submodule IS available, copy real seeds into that dir to widen coverage.
 
 ### Install gotcha in this workspace
 

@@ -50,6 +50,15 @@ interface EnsembleEffect {
 interface EnsembleVolitionRule {
   name: string;
   title?: string;
+  /**
+   * Rule type emitted as `rule_type/2` (a HARD requirement — `validateRuleContent`
+   * rejects rules without it). Ensemble volition-rule files are `volition` by
+   * construction, so this defaults to `'volition'`; a source rule tagged as a
+   * state-changing trigger passes `'trigger'` explicitly.
+   */
+  type?: 'volition' | 'trigger';
+  /** Firing probability 0.0–1.0, emitted as `rule_likelihood/2` when present. */
+  likelihood?: number;
   conditions: EnsembleCondition[];
   effects: EnsembleEffect[];
 }
@@ -118,10 +127,31 @@ function sanitizeRuleName(name: string): string {
   return sanitizeAtom(name.replace(/\s+/g, '_').substring(0, 80));
 }
 
+/**
+ * Normalize a source category label to the canonical spaced-lowercase key the
+ * condition/effect switches match on.
+ *
+ * Category audit (US-PC2 / old US-004): source corpora spell the multi-word
+ * VESPACE categories inconsistently — `"directed status"`, `"DirectedStatus"`,
+ * `"directed_status"`, `"Directed Status"` all denote the same category. This
+ * splits camelCase, folds separators (`_`/`-`/whitespace) to a single space, and
+ * lowercases, so category matching is both case-insensitive AND separator-
+ * insensitive. Every `switch (normalizeCategory(...))` case below uses the
+ * canonical spaced form.
+ */
+function normalizeCategory(cat: string | undefined): string {
+  if (!cat) return '';
+  return cat
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // camelCase → spaced words
+    .toLowerCase()
+    .replace(/[_\-\s]+/g, ' ') // underscores / dashes / runs of space → one space
+    .trim();
+}
+
 // ── Condition → Prolog clause ───────────────────────────────────────────
 
 function conditionToProlog(cond: EnsembleCondition): string | null {
-  const cat = cond.category?.toLowerCase();
+  const cat = normalizeCategory(cond.category);
   const type = sanitizeAtom(cond.type || 'unknown');
   const first = actorToVar(cond.first || 'x');
   const second = cond.second ? actorToVar(cond.second) : null;
@@ -226,7 +256,7 @@ function operatorToProlog(op: string | undefined, varName: string, value: any): 
 // ── Effect → Prolog fact ────────────────────────────────────────────────
 
 function effectToProlog(effect: EnsembleEffect, ruleName: string): string | null {
-  const cat = effect.category?.toLowerCase();
+  const cat = normalizeCategory(effect.category);
   const type = sanitizeAtom(effect.type || 'unknown');
   const first = actorToVar(effect.first || 'x');
   const second = effect.second ? actorToVar(effect.second) : null;
@@ -301,6 +331,26 @@ function effectToProlog(effect: EnsembleEffect, ruleName: string): string | null
 
 // ── Volition Rule Converter ─────────────────────────────────────────────
 
+/**
+ * Resolve the `rule_type/2` value. Ensemble volition-rule files are `volition`
+ * by construction, so that is the default; a source rule explicitly tagged
+ * `'trigger'` (a state-changing rule that happened to land in this converter)
+ * overrides it. Any other/absent value falls back to `'volition'`.
+ */
+function resolveRuleType(rule: EnsembleVolitionRule): 'volition' | 'trigger' {
+  return rule.type === 'trigger' ? 'trigger' : 'volition';
+}
+
+/**
+ * Coerce a source likelihood into a Prolog-safe number in [0.0, 1.0], or null
+ * when the source carries none. Non-finite / non-numeric inputs are dropped
+ * (no `rule_likelihood/2` is emitted) rather than producing a malformed fact.
+ */
+function normalizeLikelihood(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.min(1, Math.max(0, value));
+}
+
 export function convertVolitionRule(
   rule: EnsembleVolitionRule,
   category: string,
@@ -345,6 +395,9 @@ export function convertVolitionRule(
   lines.push(`% ${rule.title || rule.name}`);
   lines.push(`rule_active(${name}).`);
 
+  // rule_type/2 — HARD requirement (validateRuleContent rejects rules without it).
+  lines.push(`rule_type(${name}, ${resolveRuleType(rule)}).`);
+
   // Category
   const catAtom = sanitizeAtom(category);
   lines.push(`rule_category(${name}, ${catAtom}).`);
@@ -355,6 +408,12 @@ export function convertVolitionRule(
   const maxWeight = weights.length > 0 ? Math.max(...weights) : 5;
   const priority = Math.min(10, Math.max(1, Math.round(Math.abs(maxWeight))));
   lines.push(`rule_priority(${name}, ${priority}).`);
+
+  // rule_likelihood/2 — emitted only when the source carries a likelihood.
+  const likelihood = normalizeLikelihood(rule.likelihood);
+  if (likelihood != null) {
+    lines.push(`rule_likelihood(${name}, ${likelihood}).`);
+  }
 
   // Build rule_applies
   const head = headActors.length >= 2
@@ -468,7 +527,7 @@ export function convertEnsembleAction(action: EnsembleAction, category: string):
  * action effects from volition rule effects.
  */
 function effectToActionProlog(effect: EnsembleEffect, actionName: string): string | null {
-  const cat = effect.category?.toLowerCase();
+  const cat = normalizeCategory(effect.category);
   const type = sanitizeAtom(effect.type || 'unknown');
   const first = actorToVar(effect.first || 'x');
   const second = effect.second ? actorToVar(effect.second) : null;
