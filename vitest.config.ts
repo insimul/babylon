@@ -22,6 +22,9 @@ export default defineConfig({
       'shared/__tests__/import-hygiene.test.ts',
       // Per-package vitest suites (currently only babylon-game ships runnable specs).
       'packages/babylon-game/src/**/*.test.{ts,tsx}',
+      // @insimul/core vitest suites (US-CE4 schema/drift tests, etc.). The legacy
+      // tau-engine.test.ts harness under packages/core/src/prolog is excluded below.
+      'packages/core/src/**/*.test.ts',
     ],
     // These *.test.ts files are legacy tsx harnesses (run via `npx tsx <file>`, no
     // describe/it), NOT vitest suites — excluding them keeps `vitest run` green.

@@ -73,3 +73,8 @@ export * from './language/types';
 //  - `World`: quest-types/types (quest-type-registry world) vs quests/types.
 export type { CEFRLevel } from './language/cefr';
 export type { World } from './quest-types';
+
+// ── Zod schemas + JSON Schema contract (US-CE4) ────────────────────────────
+// Runtime validators for the SaveFile, its export Envelope, and the World IR.
+// Emitted JSON Schemas live in packages/core/schemas/ (npm run schemas).
+export * from './schemas';

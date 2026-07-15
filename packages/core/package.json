@@ -29,7 +29,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "schemas": "vite-node scripts/emit-schemas.ts"
   },
   "keywords": [
     "insimul",
@@ -38,8 +39,12 @@
     "engine-agnostic"
   ],
   "license": "Apache-2.0",
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "zod-to-json-schema": "^3.25.2"
   }
 }

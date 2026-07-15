@@ -29,7 +29,34 @@ This package must never depend on `@babylonjs/*`, `react`, or DOM libs. The
 dependency-direction guard (`shared/__tests__/import-hygiene.test.ts`) enforces
 it. `tsconfig.json` deliberately omits the `dom` lib for the same reason.
 
+## Transport schemas (`src/schemas/`)
+
+Zod schemas validate the three transport shapes at trust boundaries
+(import/upload/export):
+
+- `saveFileSchema` — the v2 `SaveFile` (validates the whole migratable range,
+  including v1/v2 golden fixtures)
+- `saveEnvelopeSchema` — the `insimul-save-v2` export envelope (strict `format`
+  literal + integrity digest; cryptographic verification stays in
+  `validateSaveFileEnvelope`)
+- `worldIrSchema` — the World IR
+
+They are **exact on the envelope/top-level `SaveFile` keys and the IR section
+headers**, and permissive (`z.unknown()` / passthrough) on deep sub-objects,
+tightened incrementally.
+
+`npm run schemas` regenerates the JSON Schema counterparts in
+`schemas/*.schema.json` from these zod definitions (via `zod-to-json-schema`).
+The committed JSON is drift-guarded — a test in
+`src/schemas/__tests__/schemas.test.ts` fails if regeneration would produce a
+diff, so **run `npm run schemas` and commit the result** after changing any
+schema. The emission logic is shared between the CLI and the guard in
+`scripts/schema-manifest.ts`.
+
+Golden save fixtures for the schema tests live in `conformance/saves/`.
+
 ## Scripts
 
 - `npm run typecheck` — standalone `tsc --noEmit`
 - `npm test` — `vitest run`
+- `npm run schemas` — regenerate `schemas/*.schema.json` from the zod schemas

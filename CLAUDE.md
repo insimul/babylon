@@ -96,3 +96,39 @@ Two more rules learned moving the quest/IR/language contract (US-CE3):
 Before committing a core-extraction story run, in order: `packages/core`
 `npm run typecheck`, root `npm run check`, root `npm test` (the import-hygiene
 guard already scans `packages/core/src`).
+
+### Zod schemas + JSON Schema emission (US-CE4)
+
+`packages/core/src/schemas/` holds zod validators for the SaveFile, its export
+Envelope, and the World IR; `packages/core/schemas/*.schema.json` are their
+emitted JSON Schema counterparts. Conventions:
+
+- **Discipline**: exact on envelope keys / top-level `SaveFile` keys / IR section
+  headers; permissive (`z.unknown()` / `z.object({}).passthrough()`) on deep
+  sub-objects. `SaveFile.version` is a positive int (not a literal) so the schema
+  validates the whole migratable fixture range (v1 + v2).
+- **Emission runs under `vite-node`**, not `tsx` (tsx isn't a dep; `vite-node`
+  ships with vitest). Script: `"schemas": "vite-node scripts/emit-schemas.ts"`.
+- **`zod-to-json-schema` is a dev-only dep and must stay out of `src/`** — else the
+  root `npm run check` compiles it into core's public surface. Keep the emission
+  logic in `scripts/` (`scripts/schema-manifest.ts`), imported by both the CLI
+  emitter and the drift-guard test so they can never disagree on options.
+- **Drift guard**: a vitest test compares each committed `*.schema.json` against a
+  fresh `zodToJsonSchema(...)`. After changing any schema, run `npm run schemas`
+  and commit the regenerated JSON, or the guard fails.
+- Core vitest suites now run via the root `npm test` (root `vitest.config.ts`
+  `include` gained `packages/core/src/**/*.test.ts`; the legacy
+  `prolog/tau-engine.test.ts` harness stays excluded by name).
+- Golden save fixtures live in `packages/core/conformance/saves/` (copied
+  read-only from `insimul-platform/shared/__tests__/fixtures/saves/`).
+
+### Install gotcha in this workspace
+
+The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists
+`insimul-runtime` and `insimul-runtime/packages/*` as npm workspaces, so `npm
+install` run from anywhere hoists deps into the **parent** `node_modules`, and
+gates resolve up into it — `insimul-runtime/` has no `node_modules` or lockfile
+of its own. When you add a dependency to a `packages/*/package.json`, run `npm
+install` at the parent worktree root to pick it up. Declare the dep in the
+package's `package.json` (committed to insimul-runtime); do NOT commit the
+parent's regenerated `package-lock.json` (workspace-parent, runner-owned).
