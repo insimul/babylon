@@ -18,6 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["./shared/*"],
+      "@insimul/core": ["./packages/core/src/index.ts"],
+      "@insimul/core/*": ["./packages/core/src/*"],
       "@insimul/typescript": ["./packages/typescript/src/index.ts"],
       "@insimul/typescript/*": ["./packages/typescript/src/*"],
       "@insimul/babylon-game/*": ["./packages/babylon-game/src/*"]
@@ -26,6 +28,7 @@
   "include": [
     "shared/**/*.ts",
     "shared/**/*.tsx",
+    "packages/core/src/**/*.ts",
     "packages/typescript/src/**/*.ts",
     "packages/babylon-game/src/**/*.ts",
     "packages/babylon-game/src/**/*.tsx"
