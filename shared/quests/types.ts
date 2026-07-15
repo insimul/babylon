@@ -51,3 +51,42 @@ export interface Quest {
 
 /** Shape used for inserting a new quest. Same loose structure as Quest. */
 export type InsertQuest = Quest;
+
+/**
+ * Minimal structural world-context entities used by the save-file-backed
+ * quest storage provider (see quest-storage-provider.ts / save-game-quest-storage.ts).
+ *
+ * The platform's `shared/schema.ts` defines the canonical, fully-typed
+ * versions via Drizzle. The runtime treats these as opaque content it reads
+ * from the world snapshot and writes through the overlay, so a loose `id` +
+ * index signature is all that's needed — the platform's richer types remain
+ * assignable to these.
+ */
+export interface World {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface Character {
+  id: string;
+  [key: string]: unknown;
+}
+
+export type InsertCharacter = Character;
+
+export interface Business {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface Settlement {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface Truth {
+  id: string;
+  [key: string]: unknown;
+}
+
+export type InsertTruth = Truth;

@@ -17,7 +17,7 @@ import {
   type SaveConflict,
 } from '@shared/game-engine/logic/SaveConflictResolver';
 import type { GameSaveState } from '@shared/game-engine/types';
-import type { VisualAsset } from '@shared/schema';
+import type { VisualAsset } from '@shared/asset-types';
 
 // Re-export the canonical interface and supporting types from shared
 export type { IDataSource, GenerationJobSummary, NpcConversationResult, IQuestOverlay } from '@shared/game-engine/data-source';
