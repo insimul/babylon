@@ -17,6 +17,10 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { saveFileSchema } from '../src/schemas/save-file.schema';
 import { saveEnvelopeSchema } from '../src/schemas/save-envelope.schema';
 import { worldIrSchema } from '../src/schemas/world-ir.schema';
+import {
+  groundingPackSchema,
+  canonicalWorldExportSchema,
+} from '../src/schemas/grounding.schema';
 
 export interface SchemaEntry {
   /** Output filename under packages/core/schemas/. */
@@ -31,6 +35,12 @@ export const SCHEMA_ENTRIES: SchemaEntry[] = [
   { file: 'save-file.schema.json', name: 'SaveFile', schema: saveFileSchema },
   { file: 'save-envelope.schema.json', name: 'SaveFileEnvelope', schema: saveEnvelopeSchema },
   { file: 'world-ir.schema.json', name: 'WorldIR', schema: worldIrSchema },
+  { file: 'grounding-pack.schema.json', name: 'GroundingPack', schema: groundingPackSchema },
+  {
+    file: 'canonical-world-export.schema.json',
+    name: 'CanonicalWorldExport',
+    schema: canonicalWorldExportSchema,
+  },
 ];
 
 /** Convert one entry to a JSON Schema object using the canonical options. */

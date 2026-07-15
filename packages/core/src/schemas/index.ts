@@ -16,3 +16,14 @@ export {
 } from './save-file.schema';
 export { saveEnvelopeSchema, type SaveEnvelopeSchema } from './save-envelope.schema';
 export { worldIrSchema, metaIrSchema, type WorldIrSchema } from './world-ir.schema';
+export {
+  GROUNDING_CONTRACT_VERSION,
+  groundingProvenanceSchema,
+  groundingEntitySchema,
+  groundingPackSchema,
+  canonicalWorldExportSchema,
+  type GroundingProvenanceSchema,
+  type GroundingEntitySchema,
+  type GroundingPackSchema,
+  type CanonicalWorldExportSchema,
+} from './grounding.schema';

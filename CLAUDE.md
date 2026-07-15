@@ -121,6 +121,14 @@ emitted JSON Schema counterparts. Conventions:
   `prolog/tau-engine.test.ts` harness stays excluded by name).
 - Golden save fixtures live in `packages/core/conformance/saves/` (copied
   read-only from `insimul-platform/shared/__tests__/fixtures/saves/`).
+- **Bridge schema stubs (US-CE7)**: `schemas/grounding.schema.ts` reserves the
+  LinguaScrape interchange seam (`groundingPackSchema`,
+  `canonicalWorldExportSchema`) — schema-only, no import/export logic. Both are
+  registered in `SCHEMA_ENTRIES` so `npm run schemas` emits
+  `grounding-pack.schema.json` + `canonical-world-export.schema.json` and the same
+  drift guard covers them. `contractVersion` is a `z.literal` of
+  `GROUNDING_CONTRACT_VERSION`, so any new bridge shape added here MUST reuse that
+  constant (or a stale-version fixture would be silently accepted).
 
 ### Conformance corpus (US-CE5)
 
