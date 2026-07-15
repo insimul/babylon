@@ -361,6 +361,38 @@ Kismet/ToTT converters MUST replicate:
   seed corpus is hand-authored under `__tests__/fixtures/ensemble/`. When the platform
   submodule IS available, copy real seeds into that dir to widen coverage.
 
+### Kismet direct converter + shared converter-types (US-PC3)
+
+`packages/core/src/prolog/kismet-converter.ts` converts the Kismet social-sim DSL
+(a text format, not JSON) to Prolog. Key facts for the ToTT converter (US-PC4) and
+anyone touching the three source-format converters:
+
+- **`ConversionResult` now lives in `converter-types.ts`** (shim at
+  `shared/prolog/converter-types.ts`). `ensemble-converter.ts` re-exports it
+  (`export type { ConversionResult } from './converter-types'`) so the stable
+  `@shared/prolog/ensemble-converter` import path (migration-012) is unchanged.
+  ToTT should `import type { ConversionResult } from './converter-types'` too.
+- **Three dialects, three parse paths**: `trait` / `volition` share
+  `parseKismetCondition` + `parseKismetEffect` (explicit-keyword grammar:
+  `?A trait X`, `?A net type op n ?B`, `?A wants intent ?B weight n`, …);
+  `pattern` uses `parseKismetPatternCondition` + `parseKismetPatternEffect`
+  (infix verbs mapped by `KISMET_PATTERN_VERBS` to `relationship`/`directed_status`).
+  `rule_type/2` is dialect-driven: `volition` → `volition`, `trait`/`pattern` →
+  `trigger`.
+- **`?Var → PascalCase`** via `kismetVarToProlog` (`?x → X`, `?best_friend →
+  BestFriend`); a leading digit/lowercase result is prefixed `V_`. Negation is
+  accepted both leading (`not ?A trait X`) and infix (`?A not trait X`).
+- **No new predicates needed** — Kismet emits the same preamble the `rule` block
+  already registers (`rule_active/1`, `rule_type/2`, `rule_category/2`,
+  `rule_source/2` with value `kismet`, `rule_priority/2`, `rule_likelihood/2`,
+  `rule_applies/3`, `rule_effect/2`). `rule_source` VALUES (`ensemble|kismet|tott`)
+  are atom args, not separate predicates, so no schema change for a new source.
+- **Fixture corpus** is hand-authored under `__tests__/fixtures/kismet/*.kismet`
+  (one file per dialect) — the platform client's unified-syntax Kismet test data
+  isn't checked out here. Same two gates as ensemble: `kismet-converter.test.ts`
+  (per-dialect ?Var + preamble) and `kismet-mass-conversion.test.ts` (zero
+  skipped + `validateRuleContent` + `validatePrologFact` vs the registry).
+
 ### Install gotcha in this workspace
 
 The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists

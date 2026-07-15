@@ -74,14 +74,11 @@ interface EnsembleAction {
   intent?: any;
 }
 
-export interface ConversionResult {
-  name: string;
-  prologContent: string | null;
-  skipped: boolean;
-  skipReason?: string;
-  /** Citations from source material (e.g., VESPACE literary references). */
-  citations?: Array<{ title: string; content?: string; url?: string }>;
-}
+// `ConversionResult` is the shared converter contract (US-PC3). It is defined in
+// `converter-types.ts` and re-exported here so the stable
+// `@shared/prolog/ensemble-converter` import path (migration-012) is unchanged.
+export type { ConversionResult } from './converter-types';
+import type { ConversionResult } from './converter-types';
 
 // ── Variable mapping ────────────────────────────────────────────────────
 
