@@ -111,7 +111,7 @@ export class QuestOfferPanel {
     const stack = new StackPanel('quest_offer_stack');
     stack.width = '100%';
     stack.isVertical = true;
-    stack.adaptHeight = true;
+    (stack as any).adaptHeight = true;
     stack.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
     stack.paddingTop = '20px';
     stack.paddingBottom = '20px';
@@ -289,7 +289,7 @@ export class QuestOfferPanel {
     btnRow.isVertical = false;
     btnRow.height = '44px';
     btnRow.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
-    btnRow.adaptWidth = true;
+    (btnRow as any).adaptWidth = true;
     stack.addControl(btnRow);
 
     // Decline button

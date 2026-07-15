@@ -132,7 +132,7 @@ const ROLE_TINTS: Record<NPCRole, Color3> = {
   merchant: new Color3(0.85, 0.75, 0.45),
   questgiver: new Color3(0.5, 0.65, 0.9),
   civilian: new Color3(0.7, 0.7, 0.7),
-};
+} as unknown as Record<NPCRole, Color3>;
 
 /**
  * Simple deterministic hash from a string.

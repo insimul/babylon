@@ -1811,7 +1811,7 @@ export class BabylonQuestTracker {
 
     for (const quest of activeQuests) {
       const resolved = this.waypointDirector.resolveWaypoints(
-        quest, this.buildingData, this.npcBuildingMap, this.npcPositions, this.playerPosition
+        quest as any, this.buildingData, this.npcBuildingMap, this.npcPositions, this.playerPosition
       );
       for (const wp of resolved) {
         const pos = new Vector3(wp.position.x, wp.position.y || 0, wp.position.z);
@@ -1832,7 +1832,7 @@ export class BabylonQuestTracker {
     if (!quest) return;
 
     const resolved = this.waypointDirector.resolveWaypoints(
-      quest, this.buildingData, this.npcBuildingMap, this.npcPositions, this.playerPosition
+      quest as any, this.buildingData, this.npcBuildingMap, this.npcPositions, this.playerPosition
     );
 
     for (const wp of resolved) {

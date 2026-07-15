@@ -531,6 +531,7 @@ export class VRChatPanel {
 
     try {
       let npcResponse = '';
+      let result: any = null;
 
       if (this._sendTextFn) {
         // Route through SDK
@@ -552,7 +553,7 @@ export class VRChatPanel {
         });
 
         if (!response.ok) throw new Error('Chat API failed');
-        const result = await response.json();
+        result = await response.json();
         npcResponse = result.message || result.response || '';
       }
 
@@ -564,7 +565,7 @@ export class VRChatPanel {
         this.onConversationTurn?.(keywords);
 
         // Check for quest data
-        if (result.quest) {
+        if (result?.quest) {
           this.onQuestAssigned?.(result.quest);
         }
 

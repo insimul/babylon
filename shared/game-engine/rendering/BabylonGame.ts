@@ -1638,8 +1638,8 @@ export class BabylonGame {
         return {
           vocabulary: prog.vocabulary,
           grammarPatterns: prog.grammarPatterns,
-          totalXP: prog.totalXP ?? 0,
-          level: prog.level ?? 1,
+          totalXP: (prog as any).totalXP ?? 0,
+          level: (prog as any).level ?? 1,
         };
       },
 
@@ -1657,14 +1657,14 @@ export class BabylonGame {
         }
         const grammarAccuracy: Record<string, any> = {};
         for (const g of (prog.grammarPatterns || [])) {
-          grammarAccuracy[g.pattern || g.id] = { patternId: g.pattern || g.id, accuracy: g.accuracy ?? 0, attempts: g.practiceCount ?? 0 };
+          grammarAccuracy[g.pattern || g.id] = { patternId: g.pattern || g.id, accuracy: (g as any).accuracy ?? 0, attempts: (g as any).practiceCount ?? 0 };
         }
         return {
           targetLanguage: prog.language || (prog as any).targetLanguage || 'French',
           overallFluency: prog.overallFluency ?? 0, vocabularyMastery, grammarAccuracy,
-          conversationCount: prog.conversationRecords?.length ?? 0,
+          conversationCount: (prog as any).conversationRecords?.length ?? 0,
           cefrLevel: this.playerCefrLevel || 'A1',
-          xp: prog.totalXP ?? 0, level: prog.level ?? 1, streakDays: 0,
+          xp: (prog as any).totalXP ?? 0, level: (prog as any).level ?? 1, streakDays: 0,
           totalWordsLearned: prog.totalWordsLearned ?? Object.keys(vocabularyMastery).length,
         };
       },
@@ -1892,15 +1892,15 @@ export class BabylonGame {
       restoreLanguageProgress: (data: any) => {
         const tracker = this.chatPanel?.getLanguageTracker();
         if (tracker && data) {
-          if (data.vocabulary) tracker.restoreVocabulary?.(data.vocabulary);
-          if (data.grammarPatterns) tracker.restoreGrammarPatterns?.(data.grammarPatterns);
+          if (data.vocabulary) (tracker as any).restoreVocabulary?.(data.vocabulary);
+          if (data.grammarPatterns) (tracker as any).restoreGrammarPatterns?.(data.grammarPatterns);
         }
       },
       restoreLanguageProgressDetailed: (data: any) => {
         const tracker = this.chatPanel?.getLanguageTracker();
         if (tracker && data) {
-          if (data.vocabulary) tracker.restoreVocabulary?.(data.vocabulary);
-          if (data.grammarPatterns) tracker.restoreGrammarPatterns?.(data.grammarPatterns);
+          if (data.vocabulary) (tracker as any).restoreVocabulary?.(data.vocabulary);
+          if (data.grammarPatterns) (tracker as any).restoreGrammarPatterns?.(data.grammarPatterns);
           if (data.cefrLevel) this.playerCefrLevel = data.cefrLevel;
         }
       },
@@ -2220,8 +2220,8 @@ export class BabylonGame {
       const prog = tracker.getProgress();
       state.languageProgress.vocabulary = prog.vocabulary || [];
       state.languageProgress.grammarPatterns = prog.grammarPatterns || [];
-      state.languageProgress.totalXP = prog.totalXP ?? state.languageProgress.totalXP ?? 0;
-      state.languageProgress.level = prog.level ?? state.languageProgress.level ?? 1;
+      state.languageProgress.totalXP = (prog as any).totalXP ?? state.languageProgress.totalXP ?? 0;
+      state.languageProgress.level = (prog as any).level ?? state.languageProgress.level ?? 1;
       if (this.playerCefrLevel) state.languageProgress.cefrLevel = this.playerCefrLevel;
     }
 
@@ -2350,7 +2350,7 @@ export class BabylonGame {
     // Check if intro was already shown (stored in save file state or legacy playthrough)
     const gameState = await this.dataSource.loadGameState(this.config.worldId, this.config.playthroughId || '', 0);
     if (gameState?.introShown || gameState?.extensions?.introShown) return;
-    const playthrough = this.worldData?.playthrough || (this.worldData as any)?.activePlaythrough;
+    const playthrough = (this.worldData as any)?.playthrough || (this.worldData as any)?.activePlaythrough;
     const saveData = playthrough?.saveData as Record<string, any> | undefined;
     if (saveData?.introShown) return;
 
@@ -2462,7 +2462,7 @@ export class BabylonGame {
 
   private getPlaythroughInfo(): PlaythroughInfo | null {
     if (!this.playthroughId) return null;
-    if (this.playthroughMeta) return this.playthroughMeta;
+    if ((this as any).playthroughMeta) return (this as any).playthroughMeta;
     return {
       id: this.playthroughId,
       name: this.config.worldName + ' Playthrough',
@@ -2478,7 +2478,7 @@ export class BabylonGame {
     try {
       const data = await this.dataSource.getPlaythrough(this.playthroughId);
       if (data) {
-        this.playthroughMeta = {
+        (this as any).playthroughMeta = {
           id: data.id,
           name: data.name || this.config.worldName + ' Playthrough',
           status: data.status || 'active',
@@ -2505,8 +2505,8 @@ export class BabylonGame {
 
   private async handleRenamePlaythrough(newName: string): Promise<boolean> {
     const ok = await this.patchPlaythrough({ name: newName });
-    if (ok && this.playthroughMeta) {
-      this.playthroughMeta.name = newName;
+    if (ok && (this as any).playthroughMeta) {
+      (this as any).playthroughMeta.name = newName;
     }
     return ok;
   }
@@ -3267,7 +3267,7 @@ export class BabylonGame {
             return val; // Range roughly -1.175 to 1.175
           };
 
-          const imgData = ctx.createImageData(noiseRes, noiseRes);
+          const imgData = (ctx as any).createImageData(noiseRes, noiseRes);
           for (let py = 0; py < noiseRes; py++) {
             for (let px = 0; px < noiseRes; px++) {
               // Map pixel to world-space position relative to terrain center
@@ -3606,7 +3606,7 @@ export class BabylonGame {
         inst.rotation.y = rng() * Math.PI * 2;
         inst.scaling = new Vector3(scale, scale, scale);
         inst.isPickable = false;
-        this.worldPropMeshes.push(inst);
+        this.worldPropMeshes.push(inst as unknown as Mesh);
       }
     } else if (chosen.getTotalVertices() > 0) {
       // Single-mesh — use instancing
@@ -3615,7 +3615,7 @@ export class BabylonGame {
       inst.rotation.y = rng() * Math.PI * 2;
       inst.scaling = new Vector3(scale, scale, scale);
       inst.isPickable = false;
-      this.worldPropMeshes.push(inst);
+      this.worldPropMeshes.push(inst as unknown as Mesh);
     }
 
     // Invisible collision cylinder at trunk position (instances don't support checkCollisions)
@@ -3846,7 +3846,7 @@ export class BabylonGame {
         engine?.trackEvent({ type: 'activity_observed', npcId, npcName, activity, durationSeconds: duration });
         this.updateQuestIndicators();
         // Clear progress indicator
-        this.guiManager?.hideProgressBar?.();
+        (this.guiManager as any)?.hideProgressBar?.();
       },
       onObservationProgress: (_npcId, npcName, activity, progress) => {
         if (progress > 0.1 && progress < 1) {
@@ -3863,7 +3863,7 @@ export class BabylonGame {
 
     // Initialize texture manager with DataSource for API-free asset resolution
     this.textureManager = new TextureManager(scene);
-    this.textureManager.setDataSource(this.dataSource);
+    this.textureManager.setDataSource(this.dataSource as any);
 
     // In exported games, provide the asset ID → file path map so TextureManager
     // can resolve MongoDB asset IDs to local files without an API server
@@ -4400,7 +4400,7 @@ export class BabylonGame {
           })) ?? [],
           npcPositions,
           noticeBoards,
-          highlightedNpcId: this.guiManager?.getHighlightedNpcId?.() ?? undefined,
+          highlightedNpcId: (this.guiManager as any)?.getHighlightedNpcId?.() ?? undefined,
           playerPosition: { x: this.playerMesh.position.x, z: this.playerMesh.position.z },
           playerRotationY: this.playerMesh.rotation.y,
           worldSize: this.terrainSize || 512,
@@ -4452,7 +4452,7 @@ export class BabylonGame {
 
     // Initialize chat panel
     this.chatPanel = new BabylonChatPanel(this.guiManager.advancedTexture, scene);
-    this.chatPanel.setDataSource(this.dataSource);
+    this.chatPanel.setDataSource(this.dataSource as any);
     // Provide Prolog facts to send with each conversation turn
     this.chatPanel.setPrologFactsProvider(() => {
       if (!this.prologEngine) return [];
@@ -4673,7 +4673,7 @@ export class BabylonGame {
         type: 'listen_and_repeat_passed',
         passed: result.passed || false,
         phrase: result.phrase?.targetPhrase || '',
-      });
+      } as any);
     });
     this.chatPanel.setOnNPCSpeechUpdate((text: string) => {
       // Update the speech bubble above the NPC with the latest response text
@@ -4806,7 +4806,7 @@ export class BabylonGame {
 
     // Initialize quest tracker
     this.questTracker = new BabylonQuestTracker(this.guiManager.advancedTexture, scene);
-    this.questTracker.setDataSource(this.dataSource);
+    this.questTracker.setDataSource(this.dataSource as any);
     if (this.prologEngine) {
       this.questTracker.setPrologEngine(this.prologEngine);
     }
@@ -4870,7 +4870,7 @@ export class BabylonGame {
         itemName,
         itemType: 'quest',
         quantity: 1,
-        transactionType: 'collect',
+        transactionType: 'collect' as any,
       }).catch(() => {});
     });
     this.questObjectManager.setOnObjectCollected((questId, objectiveId) => {
@@ -5273,14 +5273,14 @@ export class BabylonGame {
       if (correct) {
         this.gamificationTracker?.onQuestCompleted('cultural');
         this.guiManager?.showToast({ title: 'Correct!', description: `+${xp} XP`, duration: 3000 });
-        this.eventBus.emit('questions_answered', { correct: true, textId: docId, xp });
+        (this.eventBus.emit as any)('questions_answered', { correct: true, textId: docId, xp });
       } else {
         this.guiManager?.showToast({ title: 'Not quite...', description: 'Try again next time!', duration: 3000 });
       }
     });
     this.documentReadingPanel.setOnDocumentRead((docId) => {
       const textData = this.fullTextCache.find(t => t.id === docId) as any;
-      this.eventBus.emit('text_collected', {
+      (this.eventBus.emit as any)('text_collected', {
         textId: docId,
         title: textData?.title || '',
         authorName: textData?.authorName || undefined,
@@ -5320,7 +5320,7 @@ export class BabylonGame {
     });
 
     // Initialize text spawner for outdoor document placement
-    this.textSpawner = new TextSpawner(scene);
+    this.textSpawner = new (TextSpawner as any)(scene) as TextSpawner;
     this.textSpawner.setOnTextCollected((data) => {
       this.openDocumentReader(data.id);
     });
@@ -5437,7 +5437,7 @@ export class BabylonGame {
     this.questCompletionManager = new QuestCompletionManager(scene, this.guiManager.advancedTexture);
     this.questCompletionManager.setEventBus(this.eventBus);
     this.questCompletionManager.setGamificationTracker(this.gamificationTracker);
-    this.questCompletionManager.setDataSource(this.dataSource);
+    this.questCompletionManager.setDataSource(this.dataSource as any);
     this.questCompletionManager.setOnGoldAwarded((amount) => {
       this.playerGold += amount;
       this.inventory?.setGold(this.playerGold);
@@ -5462,8 +5462,8 @@ export class BabylonGame {
         eventBus: this.eventBus,
         prologEngine: this.prologEngine,
         worldId: this.config.worldId,
-        playerName: this.config.playerName || 'Player',
-        playerCharacterId: this.config.playerCharacterId,
+        playerName: (this.config as any).playerName || 'Player',
+        playerCharacterId: (this.config as any).playerCharacterId,
         targetLanguage: (this.worldData as any)?.targetLanguage || 'French',
       });
       // Wire into QuestCompletionManager for local completion flow
@@ -5669,7 +5669,7 @@ export class BabylonGame {
 
       // Track in quest completion engine
       const engine = this.questObjectManager?.getCompletionEngine();
-      engine?.trackEvent({ type: 'action_executed' as any, actionName: event.actionName });
+      engine?.trackEvent({ type: 'action_executed', actionName: event.actionName } as any);
       this.updateQuestIndicators();
     });
 
@@ -5730,7 +5730,7 @@ export class BabylonGame {
     });
     this.eventBus.on('reading_completed', (event) => {
       const engine = this.questObjectManager?.getCompletionEngine();
-      engine?.trackEvent({ type: 'text_read', textId: event.textId });
+      engine?.trackEvent({ type: 'text_read', textId: event.textId as string });
       this.updateQuestIndicators();
 
       // Increment textsRead counter for CEFR advancement tracking
@@ -5984,7 +5984,7 @@ export class BabylonGame {
 
     this.eventBus.on('assessment_completed', (event) => {
       this.gamificationTracker?.onAssessmentCompleted();
-      this.guiManager.clearHighlightedNpc();
+      this.guiManager!.clearHighlightedNpc();
 
       // Mark the assessment quest objective as complete
       const engine = this.questObjectManager?.getCompletionEngine();
@@ -6716,7 +6716,7 @@ Requirements:
           targetLangName,
           this.config.playthroughId || undefined
         );
-        this.languageProgressTracker.setDataSource(this.dataSource);
+        this.languageProgressTracker.setDataSource(this.dataSource as any);
 
         // Wire CEFR level-up celebration and Prolog assertion
         this.languageProgressTracker.setOnCEFRAdvancement((oldLevel: CEFRLevel, newLevel: CEFRLevel) => {
@@ -6924,21 +6924,21 @@ Requirements:
     if (!this.scene) return;
     try {
       const geo = await this.dataSource.loadGeography(this.config.worldId);
-      if (!geo?.heightmap || geo.heightmap.length < 2) return;
+      if (!geo?.heightmap || geo!.heightmap!.length < 2) return;
 
-      const size = geo.terrainSize || this.terrainSize;
+      const size = geo!.terrainSize || this.terrainSize;
 
       // Remove existing flat ground
-      const oldGround = this.scene.getMeshByName("ground");
+      const oldGround = this.scene!.getMeshByName("ground");
       if (oldGround) {
-        oldGround.dispose();
+        oldGround!.dispose();
       }
 
       // Create terrain mesh from heightmap data
       const terrain = this.terrainRenderer.createTerrainMesh(
-        geo.heightmap,
+        geo!.heightmap!,
         size,
-        this.scene,
+        this.scene!,
       );
 
       // Rename to "ground" so existing systems (projectToGround, etc.) find it
@@ -7163,32 +7163,32 @@ Requirements:
 
     // Nature models: DISABLED — nature generation is disabled (see generateProceduralWorld),
     // so skip downloading/parsing these models to save bandwidth and load time.
-    if (false && this.natureGenerator && config3D.natureModels) {
+    if (false && this.natureGenerator && config3D!.natureModels) {
       const treeVariantKeys = new Set(['tree_deciduous', 'tree_dead', 'tree_small', 'evergreen', 'sacred', 'stump']);
       const rockVariantKeys = new Set(['rock_large', 'boulder', 'rock_alt']);
 
-      for (const [key, assetId] of Object.entries(config3D.natureModels)) {
+      for (const [key, assetId] of Object.entries(config3D!.natureModels!)) {
         if (!assetId) continue;
         const asset = findAssetById(assetId);
         const mesh = await loadModelTemplate(asset);
         if (!mesh) continue;
-        applyModelScaling(mesh, 'natureModels', key);
+        applyModelScaling(mesh!, 'natureModels', key);
 
         if (key === 'defaultTree') {
-          this.natureGenerator.registerTreeOverride(mesh);
+          this.natureGenerator!.registerTreeOverride(mesh!);
         } else if (key === 'rock') {
-          this.natureGenerator.registerRockOverride(mesh);
+          this.natureGenerator!.registerRockOverride(mesh!);
         } else if (key === 'shrub') {
-          this.natureGenerator.registerShrubOverride(mesh);
+          this.natureGenerator!.registerShrubOverride(mesh!);
         } else if (key === 'bush') {
-          this.natureGenerator.registerBushOverride(mesh);
+          this.natureGenerator!.registerBushOverride(mesh!);
         } else if (treeVariantKeys.has(key) || key.startsWith('tree')) {
-          this.natureGenerator.registerAdditionalTreeVariant(mesh);
+          this.natureGenerator!.registerAdditionalTreeVariant(mesh!);
         } else if (rockVariantKeys.has(key) || key.startsWith('rock')) {
-          this.natureGenerator.registerAdditionalRockVariant(mesh);
+          this.natureGenerator!.registerAdditionalRockVariant(mesh!);
         } else {
           // Unknown nature key — register as tree variant as a reasonable default
-          this.natureGenerator.registerAdditionalTreeVariant(mesh);
+          this.natureGenerator!.registerAdditionalTreeVariant(mesh!);
         }
       }
     }
@@ -8522,7 +8522,7 @@ Requirements:
                 settlementType: settlement.settlementType || scaledSettlement.settlementType || 'town',
                 streetNames: storedStreets2.map((s: any) => s.name).filter(Boolean),
               },
-              serverNetwork
+              serverNetwork as any
             );
             this.roadGenerator.generateSettlementStreets(
               settlement.id,
@@ -10149,9 +10149,9 @@ Requirements:
         playthroughId: this.playthroughId,
         playerCharacterId: DEFAULT_PLAYER_ID,
         eventBus: this.eventBus,
-        dataSource: this.dataSource,
+        dataSource: this.dataSource as any,
         onNotification: (message, variant) => {
-          this.guiManager?.showToast({ title: 'Relationship', description: message, variant: variant || 'default' });
+          this.guiManager?.showToast({ title: 'Relationship', description: message, variant: (variant || 'default') as any });
         },
       });
       await this.relationshipManager.initialize(this.characters);
@@ -10772,7 +10772,7 @@ Requirements:
           // Apply world creator's camera perspective if specified
           const wd = this.worldData as any;
           const perspective = wd?.cameraPerspective || wd?.camera_perspective
-            || this.world3DConfig?.cameraPerspective || (this.world3DConfig as any)?.camera_perspective;
+            || (this.world3DConfig as any)?.cameraPerspective || (this.world3DConfig as any)?.camera_perspective;
           if (perspective && ['first_person', 'third_person', 'isometric', 'side_scroll', 'top_down', 'fighting'].includes(perspective)) {
             this.cameraManager.setMode(perspective as CameraMode, false);
           }
@@ -10896,7 +10896,7 @@ Requirements:
           role
         };
       });
-      this.guiManager.updateNPCList(npcList);
+      this.guiManager.updateNPCList(npcList as any);
     }
 
     // Log NPC itineraries for debugging
@@ -11359,8 +11359,8 @@ Requirements:
               || undefined;
           }
           // Final fallback: nearest settlement by NPC spawn position
-          if (!npcSettlementId && instance.mesh) {
-            npcSettlementId = this.findSettlementForMesh(instance.mesh) ?? undefined;
+          if (!npcSettlementId && npcInstance.mesh) {
+            npcSettlementId = this.findSettlementForMesh(npcInstance.mesh) ?? undefined;
           }
           // If still nothing and we have any settlements, use the first one
           if (!npcSettlementId && this.settlementMeshes.size > 0) {
@@ -11470,7 +11470,7 @@ Requirements:
 
       // Register NPC for proximity-based TTS greetings
       if (this.npcProximitySpeechSystem) {
-        const personality = character.personality || {
+        const personality = (character as any).personality || {
           openness: 0.5, conscientiousness: 0.5, extroversion: 0.5,
           agreeableness: 0.5, neuroticism: 0.5,
         };
@@ -13152,7 +13152,7 @@ Requirements:
       itemDescription: item.description,
       itemType: item.type,
       quantity: 1,
-      transactionType: 'collect',
+      transactionType: 'collect' as any,
     }).catch(() => {});
   }
 
@@ -13388,7 +13388,7 @@ Requirements:
       itemDescription: item.description,
       itemType: item.type,
       quantity: 1,
-      transactionType: 'collect',
+      transactionType: 'collect' as any,
     }).catch(() => {});
 
     // Open the document reading panel
@@ -13839,7 +13839,7 @@ Requirements:
         // Update quest waypoint fading and compass
         if (this.questTracker && this.playerMesh) {
           // Pass player forward angle from camera
-          const cam = this.scene.activeCamera;
+          const cam = this.scene!.activeCamera;
           if (cam) {
             if ('alpha' in cam) {
               // ArcRotateCamera: alpha is horizontal angle around Y axis.
@@ -13881,9 +13881,9 @@ Requirements:
       this.npcProximitySpeechSystem?.update(dt);
 
       // Update minimap markers at most every 250ms
-      this._minimapUpdateTimer += dt;
-      if (this._minimapUpdateTimer >= 250) {
-        this._minimapUpdateTimer = 0;
+      (this as any)._minimapUpdateTimer += dt;
+      if ((this as any)._minimapUpdateTimer >= 250) {
+        (this as any)._minimapUpdateTimer = 0;
         this.npcMeshes.forEach((instance, npcId) => {
           if (!instance?.mesh) return;
           const npcInfo = this.npcInfos.find((n) => n.id === npcId);
@@ -14190,8 +14190,8 @@ Requirements:
     this.residenceActivitySystem = new ResidenceActivitySystem({
       onAnimationChange: (npcId, state) => {
         const instance = this.npcMeshes.get(npcId);
-        if (instance?.animController) {
-          instance.animController.setState(state as any);
+        if ((instance as any)?.animController) {
+          (instance as any).animController.setState(state as any);
         }
       },
       onSleepOnBed: (npcId, bedData) => {
@@ -14211,8 +14211,8 @@ Requirements:
         if (instance.billboardLOD) instance.billboardLOD.setEnabled(false);
 
         // Play sleep animation
-        if (instance.animController) {
-          instance.animController.setState('sleep' as any);
+        if ((instance as any).animController) {
+          (instance as any).animController.setState('sleep' as any);
         }
       },
       onWakeFromBed: (npcId) => {
@@ -14220,8 +14220,8 @@ Requirements:
         if (!instance?.mesh) return;
 
         // Switch to idle animation (brief pause before they walk to door)
-        if (instance.animController) {
-          instance.animController.setState('idle' as any);
+        if ((instance as any).animController) {
+          (instance as any).animController.setState('idle' as any);
         }
       },
     });
@@ -14520,7 +14520,7 @@ Requirements:
 
     // Update building-exit fade-in (runs even during conversation)
     if (instance.fadeInProgress !== undefined && instance.fadeInProgress < 1) {
-      const dt = Math.min(this.scene.getEngine().getDeltaTime() / 1000, 0.1);
+      const dt = Math.min(this.scene!.getEngine().getDeltaTime() / 1000, 0.1);
       const fadeSpeed = 2.0; // fully visible in 0.5 seconds
       instance.fadeInProgress = Math.min(1, instance.fadeInProgress + fadeSpeed * dt);
       const v = instance.fadeInProgress;
@@ -14545,7 +14545,7 @@ Requirements:
       this.playNPCAnimation(instance, isNpcTalking ? 'talk' : 'idle');
 
       // Smoothly face conversation partner
-      const dt = Math.min(this.scene.getEngine().getDeltaTime() / 1000, 0.1);
+      const dt = Math.min(this.scene!.getEngine().getDeltaTime() / 1000, 0.1);
       let faceTarget: Vector3 | null = null;
 
       if (instance.isInConversation && this.conversationNPCId === characterId && this.playerMesh) {
@@ -15058,7 +15058,7 @@ Requirements:
     while (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
     while (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
 
-    const dt = Math.min(this.scene.getEngine().getDeltaTime() / 1000, 0.1);
+    const dt = Math.min(this.scene!.getEngine().getDeltaTime() / 1000, 0.1);
     const turnSpeed = 5.0;
     const turnThreshold = 0.15;
     if (Math.abs(rotationDiff) > turnThreshold) {
@@ -15155,7 +15155,7 @@ Requirements:
    */
   private raycastForBuilding(origin: Vector3, direction: Vector3, distance: number, excludeMesh: Mesh): { hit: boolean; distance: number } | null {
     const ray = new Ray(origin, direction, distance);
-    const hit = this.scene.pickWithRay(ray, (mesh) => {
+    const hit = this.scene!.pickWithRay(ray, (mesh) => {
       if (mesh === excludeMesh) return false;
       if (!mesh.checkCollisions) return false;
       const name = mesh.name.toLowerCase();
@@ -15999,7 +15999,7 @@ Requirements:
       playerActionSystem: this.playerActionSystem,
       nearbyActionHotspotTypes: nearbyTypes,
       isInsideBuilding: this.isInsideBuilding,
-      currentBusinessType: this.currentBuildingBusinessType,
+      currentBusinessType: this.currentBuildingBusinessType as any,
       hasBusinessInteractions,
       hasInventoryItems: (this.inventory?.getAllItems()?.length ?? 0) > 0,
     };
@@ -16047,7 +16047,7 @@ Requirements:
       playerActionSystem: this.playerActionSystem,
       nearbyActionHotspotTypes: nearbyTypes,
       isInsideBuilding: this.isInsideBuilding,
-      currentBusinessType: this.currentBuildingBusinessType,
+      currentBusinessType: this.currentBuildingBusinessType as any,
       hasBusinessInteractions,
       hasInventoryItems: (this.inventory?.getAllItems()?.length ?? 0) > 0,
     };
@@ -16179,7 +16179,7 @@ Requirements:
     if (!gesture) return;
 
     // Play the player animation
-    this.playActionAnimation?.('player', gesture.animationClip);
+    this.playActionAnimation?.('player', gesture.animationClip as any);
 
     // Emit as conversational action for quest tracking
     const npcId = this.selectedNPCId || '';
@@ -17015,7 +17015,7 @@ Requirements:
 
   private handleContainerExamine(transaction: ContainerTransaction): void {
     const item = transaction.item;
-    this.eventBus.emit({ type: 'object_examined', itemId: item.id, itemName: item.name });
+    this.eventBus.emit({ type: 'object_examined', itemId: item.id, itemName: item.name } as any);
 
     const lang = getTargetLanguage(this.worldData);
     const translation = getItemTranslation(item, lang);
@@ -17098,7 +17098,7 @@ Requirements:
     }));
 
     this.radialMenu.show(
-      actions,
+      actions as any,
       this.playerEnergy,
       async (actionId: string) => {
         if (actionId === '__chat__') {
@@ -17714,7 +17714,7 @@ Requirements:
           id: q.id, title: q.title, description: q.description,
           order: q.questChainOrder ?? i, status: i === 0 ? 'active' : 'locked',
           objectives: q.objectives || [],
-        })),
+        })) as any,
         playerCefrLevel: this.playerCefrLevel,
         investigationBoard: null, caseNotes: [],
         nextPeriodicAssessmentLevel: this.getNextPeriodicAssessmentLevel(),
@@ -17726,7 +17726,7 @@ Requirements:
     try {
       const worldId = this.config.worldId;
       const playerId = this.config.userId || 'player';
-      const data = await this.dataSource.getMainQuestJournal(worldId, playerId, this.playerCefrLevel);
+      const data = await this.dataSource.getMainQuestJournal(worldId, playerId, this.playerCefrLevel as any);
       if (!data) return;
       this.mainQuestJournalData = {
         currentChapterId: data.state?.currentChapterId ?? null,
@@ -17769,7 +17769,7 @@ Requirements:
     try {
       const worldId = this.config.worldId;
       const playerId = this.config.userId || 'player';
-      const response = await this.dataSource.recordMainQuestCompletion(worldId, playerId, questType, this.playerCefrLevel);
+      const response = await this.dataSource.recordMainQuestCompletion(worldId, playerId, questType, this.playerCefrLevel as any);
       if (!response) return;
       const { result } = response;
       if (result?.chapterAdvance?.advanced && this.narrativeBeatDispatcher) {
@@ -18585,7 +18585,7 @@ Requirements:
       // Emit action-specific events for quest tracking
       // The action's emitsEvent field (from activity-types.ts) tells us what event to fire
       if (result.success) {
-        const emitsEvent = actionDefinition?.emitsEvent || actionDefinition?.emits;
+        const emitsEvent = actionDefinition?.emitsEvent || (actionDefinition as any)?.emits;
         if (emitsEvent) {
           this.eventBus.emit({
             type: emitsEvent,
@@ -19955,7 +19955,7 @@ Requirements:
         const npcPositions: Array<{ id: string; position: { x: number; y: number; z: number }; role?: string; name?: string }> = [];
         this.npcMeshes.forEach((instance) => {
           if (!instance?.mesh) return;
-          const charId = instance.characterId || instance.mesh.metadata?.characterId;
+          const charId = (instance as any).characterId || instance.mesh.metadata?.characterId;
           if (charId) {
             npcPositions.push({
               id: charId,
@@ -20079,7 +20079,7 @@ Requirements:
     // Use world creator's explicit perspective if set, otherwise fall back to game-type default
     const worldPerspective = (this.worldData as any)?.cameraPerspective
       || (this.worldData as any)?.camera_perspective
-      || this.world3DConfig?.cameraPerspective
+      || (this.world3DConfig as any)?.cameraPerspective
       || (this.world3DConfig as any)?.camera_perspective;
     const cameraMode = worldPerspective || gameTypeToCameraMode[gameType] || 'third_person';
     this.cameraManager.setMode(cameraMode, false);

@@ -263,7 +263,7 @@ export class ReputationManager {
     // NPC talked → small positive reputation
     this.unsubscribers.push(
       this.eventBus.on('npc_talked', (e) => {
-        this.handleNPCTalked(e.npcId, e.npcName, e.turnCount);
+        this.handleNPCTalked(e.npcId, e.npcName as string, e.turnCount as number);
       }),
     );
 

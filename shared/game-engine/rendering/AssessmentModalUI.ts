@@ -70,7 +70,7 @@ export class AssessmentModalUI {
     const modal = new GUI.Rectangle('assessmentModal');
     modal.width = '380px';
     modal.height = '85%';
-    modal.maxHeight = 800;
+    (modal as any).maxHeight = 800;
     modal.paddingBottom = '12px';
     modal.background = 'rgba(15, 15, 25, 0.95)';
     modal.color = '#FFD700';

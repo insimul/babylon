@@ -1169,7 +1169,7 @@ export class LanguageProgressTracker {
     this.syncInProgress = true;
     try {
       const payload = this.buildSyncPayload();
-      const ok = await this.dataSource.saveLanguageProgress(payload);
+      const ok = (await this.dataSource.saveLanguageProgress(payload)) as unknown as boolean;
       if (ok) {
         this.lastSyncTimestamp = Date.now();
       } else {

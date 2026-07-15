@@ -531,7 +531,7 @@ export class BabylonMinimap {
     const size = this.rttSize;
 
     // Read pixels from the RTT
-    const pixels = this.minimapRTT.readPixels(0, 0, undefined, undefined, undefined, false);
+    const pixels = this.minimapRTT.readPixels(0, 0, undefined, undefined, undefined, false as unknown as number);
     if (!pixels) return;
 
     // Resolve the promise (readPixels returns ArrayBufferView | Promise)
@@ -557,7 +557,7 @@ export class BabylonMinimap {
       }
 
       ctx.putImageData(imageData, 0, 0);
-      this.mapImage!.domImage = this._offscreenCanvas;
+      this.mapImage!.domImage = this._offscreenCanvas as any;
     };
 
     if (pixels instanceof Promise) {

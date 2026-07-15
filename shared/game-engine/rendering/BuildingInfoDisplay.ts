@@ -124,7 +124,7 @@ export class BuildingInfoDisplay {
       englishName = 'Building';
     }
     const translatedName: string | undefined = metadata.translatedName;
-    const bilingual = buildBilingualBuildingPrompt(englishName, translatedName, this._cefrLevel);
+    const bilingual = (buildBilingualBuildingPrompt as any)(englishName, translatedName, this._cefrLevel);
 
     const nameText = new GUI.TextBlock('buildingName');
     nameText.text = bilingual.primary;

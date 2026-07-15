@@ -143,7 +143,7 @@ export class NarrativeCutscenePanel {
     const stack = new GUI.StackPanel('cutsceneStack');
     stack.isVertical = true;
     stack.width = '600px';
-    stack.maxWidth = '80%';
+    (stack as any).maxWidth = '80%';
     (stack as any).adaptHeight = true;
     stack.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
     stack.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER;

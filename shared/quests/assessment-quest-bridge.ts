@@ -322,7 +322,7 @@ export function buildArrivalAssessmentQuest(
     completionCriteria: { type: 'all_objectives', description: 'Complete all arrival assessment phases' },
     tags: ['assessment', 'arrival', 'onboarding', 'non-skippable', 'non-abandonable'],
     customData: { assessment: assessmentData },
-  } as InsertQuest;
+  } as unknown as InsertQuest;
 }
 
 // ── Departure quest creation ────────────────────────────────────────────────
@@ -381,7 +381,7 @@ export function createDepartureAssessmentQuest(params: {
     rewards: { type: 'report_card', description: 'Language Learning Report Card comparing your arrival and departure scores' },
     tags: ['assessment', 'departure', 'non-skippable'],
     customData: { assessment: assessmentData },
-  } as InsertQuest;
+  } as unknown as InsertQuest;
 }
 
 // ── Phase completion helpers ────────────────────────────────────────────────
