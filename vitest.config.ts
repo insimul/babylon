@@ -11,6 +11,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@shared': r('shared'),
+      '@insimul/core': r('packages/core/src'),
       '@insimul/typescript': r('packages/typescript/src/index.ts'),
       '@insimul/babylon-game': r('packages/babylon-game/src'),
     },

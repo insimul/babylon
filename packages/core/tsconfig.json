@@ -1,0 +1,23 @@
+{
+  "//": "Standalone typecheck for @insimul/core (npm run typecheck). Mirrors the root tsconfig.check.json compiler options so core type-checks identically in isolation and as part of the whole-repo check. The `@shared/*` path resolves the few contract modules that still live in shared/ (e.g. language/proficiency-model, language/spaced-repetition) until later core-extraction stories move them in. Core owns NO Babylon/React/DOM code, so `lib` deliberately excludes 'dom'.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "lib": ["esnext"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../../shared/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}

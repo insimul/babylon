@@ -9,6 +9,9 @@
     "url": "git+https://github.com/insimul/runtime.git"
   },
   "homepage": "https://github.com/insimul/runtime",
+  "workspaces": [
+    "packages/*"
+  ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },

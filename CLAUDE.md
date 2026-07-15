@@ -35,3 +35,29 @@ asserts every `@shared/...` import resolves in-repo and nothing imports `@shared
   vitest suites — `vitest.config.ts` excludes them by name so `vitest run` stays green.
   Migrate one to vitest (import `describe`/`it`/`expect` from `vitest`) to opt it in.
 - `vitest` is a dev-only dep; it resolves from the workspace-hoisted `node_modules`.
+
+## `@insimul/core` and the re-export-shim pattern (core-extraction)
+
+The engine-agnostic contract is being carved out of `shared/` into
+`packages/core` (`@insimul/core`) so native engine plugins can consume it without
+Babylon.js. **`packages/core/src` must never import `@babylonjs/*`, `react`, or DOM
+libs** — its `tsconfig.json` omits the `dom` lib on purpose.
+
+When you move a module `shared/foo.ts` into `packages/core/src/foo.ts`:
+
+1. `git mv` the file so history follows it.
+2. Fix its imports: sibling modules that also moved stay relative (`./bar`);
+   modules still in `shared/` become `@shared/bar` (core's `tsconfig.json` maps
+   `@shared/*` to `../../shared/*`).
+3. Leave a **one-line re-export shim** at the old path so `@shared/foo` and the
+   Babylon export pipeline keep resolving unchanged:
+   `export * from '../packages/core/src/foo';`
+   (`export *` covers types + values; none of the moved files use `export default`.)
+4. Add the new file to `packages/core/src/index.ts`.
+5. `packages/core` is registered via the root `workspaces: ["packages/*"]` glob,
+   the `@insimul/core` path aliases in `tsconfig.check.json`, and the `@insimul/core`
+   alias in `vitest.config.ts` — no per-file wiring needed after that.
+
+Before committing a core-extraction story run, in order: `packages/core`
+`npm run typecheck`, root `npm run check`, root `npm test` (the import-hygiene
+guard already scans `packages/core/src`).
