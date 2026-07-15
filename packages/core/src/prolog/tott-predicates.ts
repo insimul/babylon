@@ -1,6 +1,14 @@
 /**
  * Talk of the Town (TotT) Prolog Predicates
  *
+ * ⚠️ DISTINCT from the direct source converter. THIS is a *helper predicate
+ * library* — it emits the standing ToTT rule set (hiring / social-dynamics /
+ * economics / lifecycle). It does NOT convert ToTT source material. Two separate
+ * artifacts share the `tott-` prefix (US-PC4):
+ *   - `tott-converter.ts`      — lowers ToTT source rules → Prolog.
+ *   - `tott-predicate-map.ts`  — the source-attribute → predicate mapping table.
+ *   - `tott-predicates.ts`     — THIS file, the standing helper rule library.
+ *
  * Generates Prolog rules that mirror the TotT social simulation modules.
  * These allow the Prolog engine to evaluate the same decisions that the
  * TypeScript systems make, enabling a gradual migration path:

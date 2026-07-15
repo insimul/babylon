@@ -393,6 +393,46 @@ anyone touching the three source-format converters:
   (per-dialect ?Var + preamble) and `kismet-mass-conversion.test.ts` (zero
   skipped + `validateRuleContent` + `validatePrologFact` vs the registry).
 
+### Talk-of-the-Town direct converter + predicate map (US-PC4)
+
+`packages/core/src/prolog/tott-converter.ts` converts Talk-of-the-Town source
+rules to Prolog. Three files share the `tott-` prefix — keep them straight (each
+one's header cross-references the other two):
+
+- **`tott-converter.ts`** — the direct source converter (US-PC4).
+- **`tott-predicate-map.ts`** — the source-attribute → predicate-kind table
+  (`TOTT_PREDICATE_MAP`, `resolveTottKind`) the converter consults. Big-Five
+  features → `attribute/3`; `charge`/`spark`/`salience` → `network/4`; social ties
+  → `relationship/3`; directed feelings → `directed_status/3`; plus status / mood /
+  event / intent. An unmapped attribute is resolved **structurally** by
+  `resolveTottKind` (second-actor + numeric ⇒ network; +boolean ⇒ directed_status;
+  one-actor numeric ⇒ attribute; boolean ⇒ trait) so no corpus clause is dropped.
+- **`tott-predicates.ts`** — the pre-existing *helper predicate library*
+  (`getTotTPredicates()`, standing hiring/social/economics/lifecycle rules). NOT a
+  converter. Do not confuse it with the two above.
+
+Key facts:
+
+- **Three source shapes, one internal model.** `parseTottFlat` (array of rule
+  objects), `parseTottCategorized` (`{category: rule[]}`, rules inherit the key),
+  and `parseTottPython` (the `class Name(VolitionRule):` DSL with `def when/then`
+  bodies) all normalize to `TottRule`/`TottClause`, then flow through one
+  condition/effect emitter. `convertTottSource` auto-detects: a string starting
+  with `[`/`{` is JSON, otherwise Python; a non-string array/object routes to
+  flat/categorized.
+- **`mapTottRuleType`** folds `volition|desire|want|intent` → `volition`, else
+  `trigger` (always emits *some* `rule_type/2` — the hard gate). **`mapTottCategory`**
+  canonicalizes synonyms (`social`→`socializing`, `romantic`→`romance`,
+  `work`→`employment`) then sanitizes to an atom (`general` when absent).
+- **Boolean negation is dual-encoded**: a condition negates via an explicit
+  `negate` flag (Python `not x.trait(...)`) OR `value: false` (the JSON
+  "attribute is absent" form) — `conditionToGoal` treats both as `\+`. On effects,
+  `value: false` emits the `remove_`/`remove_directed_status` variant.
+- **No new predicates** — same preamble the `rule` block registers; `tott` is a
+  `rule_source` atom value. Fixtures hand-authored under `__tests__/fixtures/tott/`
+  (`flat.json`, `categorized.json`, `python.tott`, one per shape). Same two gates
+  as ensemble/kismet: `tott-converter.test.ts` + `tott-mass-conversion.test.ts`.
+
 ### Install gotcha in this workspace
 
 The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists
