@@ -15,12 +15,12 @@
  * (playthrough overlay). It is NEVER written back to the base world data.
  */
 
-import type { ProficiencySnapshot, WeakAreaRecord } from '@shared/language/proficiency-model';
+import type { ProficiencySnapshot, WeakAreaRecord } from './language/proficiency-model';
 import {
   type SRSState,
   compactSrsState,
   createEmptySrsState,
-} from '@shared/language/spaced-repetition';
+} from './language/spaced-repetition';
 import { PRE_VERSIONING_SENTINEL } from './insimul-version';
 import { applyMigrations } from './save-file-migrations';
 import { migrateExtensions } from './save-extensions';

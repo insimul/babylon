@@ -74,6 +74,25 @@ Two gotchas when the moved set is large (e.g. the `shared/prolog/` toolchain, US
   for dupes up front: `grep -hoE "^export (const|function|class|type|interface|enum)
   [A-Za-z0-9_]+" src/**/*.ts | sed ... | sort | uniq -d`.)
 
+Two more rules learned moving the quest/IR/language contract (US-CE3):
+
+- **Don't drag a file into core just because the PRD lists it — audit its transitive
+  reach first.** A file whose only blocker is a couple of `@babylonjs/*` *type*
+  imports (e.g. `quest-types/types.ts` used `Scene`/`Vector3`) can be decoupled in
+  place: replace them with engine-agnostic stand-ins (`type Vector3 = {x,y,z}` — the
+  Babylon class is structurally assignable so existing Babylon-layer callers still
+  type-check; `type Scene = unknown`). But a file that transitively reaches
+  `shared/game-engine/*` must stay in `shared/` even if it type-checks in core — e.g.
+  `quest-difficulty.ts` imports `language/cefr-adaptation`, which imports
+  `@shared/game-engine/logic/ConversationDifficultyMonitor`. Core edging into the
+  engine layer violates the US-CE2 invariant, so it stays with a barrel comment.
+- **Core→shared *type* edges are OK to leave for now, engine edges are not.** Moved
+  files may keep `@shared/<pure-type-module>` imports (e.g. `game-engine/ir-types`
+  → `@shared/game-engine/types`, `language/progress` → `@shared/assessment/*` and
+  `@shared/feature-modules/*/types`) — those resolve through the shims and US-CE6
+  cleans them up. The hard line is `@shared/game-engine/logic` / `rendering` and any
+  `@babylonjs/*`.
+
 Before committing a core-extraction story run, in order: `packages/core`
 `npm run typecheck`, root `npm run check`, root `npm test` (the import-hygiene
 guard already scans `packages/core/src`).

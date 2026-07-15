@@ -13,7 +13,7 @@
  *   quest_complete(Player, QuestId) :- <completion criteria check>.
  */
 
-import { getDefaultRequiredCount, OBJECTIVE_TYPE_DEFAULTS } from '@shared/quest-objective-types.js';
+import { getDefaultRequiredCount, OBJECTIVE_TYPE_DEFAULTS } from '../quest-objective-types.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
