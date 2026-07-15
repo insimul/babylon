@@ -164,6 +164,15 @@ gotchas:
 - Migration conformance: `migrateSaveFile` (in `save-file.ts`) walks the
   `save-file-migrations.ts` registry to `SAVE_FILE_VERSION`; the v1 fixture
   exercises both steps (language-progress backfill, snapshot version stamping).
+- **Radiant conformance (US-RQ4)**: `conformance/radiant/*.json` pins
+  `generateRadiantQuests` — each case is `{ kb, templates, seed, now, maxQuests?,
+  expected: { quests } }` and the runner (`src/conformance/__tests__/radiant-corpus.test.ts`)
+  feeds `kb ⧺ templates` to the engine. Unlike the Prolog corpus (unordered
+  solution *set*), radiant output is a single deterministic pick, so a case pins
+  the EXACT quest; `content` / `factsToAssert` / `factsToRetract` are compared as
+  sorted sets but the specific giver/item/target IS the contract (seed-driven).
+  Regenerate expected values with a `vite-node` dump of the engine, never by hand.
+  Format documented in `conformance/README.md` (§ "Radiant case format").
 
 ### Dependency-direction guard (US-CE6)
 
