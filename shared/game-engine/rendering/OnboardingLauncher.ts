@@ -279,7 +279,7 @@ export async function launchOnboarding(
       if (isPCM) {
         // Convert PCM to WAV so the Audio element can play it
         const wav = pcmToWav(new Uint8Array(arrayBuffer), 24000);
-        return new Blob([wav], { type: 'audio/wav' });
+        return new Blob([wav as unknown as BlobPart], { type: 'audio/wav' });
       }
       return new Blob([arrayBuffer], { type: 'audio/mpeg' });
     } catch {

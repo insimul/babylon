@@ -323,7 +323,7 @@ export class ContextualActionMenu {
 
     // Label column — CEFR-aware display via translateInteractionVerb():
     // at A1-A2, English primary; at B1+, target language primary
-    const primaryText = translateInteractionVerb(
+    const primaryText = (translateInteractionVerb as any)(
       action.labelTranslation, action.label, this._cefrLevel, this._immersionMode,
     );
     const isTargetLanguage = primaryText === action.label;

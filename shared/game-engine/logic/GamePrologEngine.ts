@@ -58,6 +58,7 @@ export class GamePrologEngine {
   private initialized = false;
   private eventBusUnsubscribe: (() => void) | null = null;
   private eventBusRef: GameEventBus | null = null;
+  private eventBus?: GameEventBus;
   private activeQuestIds: string[] = [];
   private onQuestCompleted?: (questId: string) => void;
   private onObjectiveCompleted?: (questId: string, objectiveIndex: number) => void;
@@ -378,7 +379,7 @@ export class GamePrologEngine {
       // Volition events → assert volition action facts
       case 'npc_volition_action': {
         const npc = this.sanitize(event.npcId);
-        const target = this.sanitize(event.targetId);
+        const target = this.sanitize(event.targetId as string);
         const action = this.sanitize(event.actionId);
         await this.assertPlayerFact(
           `volition_acted(${npc}, ${action}, ${target})`
@@ -767,10 +768,10 @@ export class GamePrologEngine {
     const sanitizedAction = this.sanitize(actionId);
     let effects: any[];
     try {
-      effects = await this.engine.query(
+      effects = (await this.engine.query(
         `action_effect(${sanitizedAction}, Effect)`,
         20, // max 20 effects per action
-      );
+      )).bindings;
     } catch {
       return; // No effects defined or query failed
     }
@@ -883,10 +884,10 @@ export class GamePrologEngine {
     if (xpMatch) {
       if (this.eventBus) {
         this.eventBus.emit({
-          type: 'xp_gained' as any,
+          type: 'xp_gained',
           skill: xpMatch[1],
           amount: parseInt(xpMatch[2], 10),
-        });
+        } as any);
       }
       return;
     }
@@ -939,8 +940,8 @@ export class GamePrologEngine {
       50,
     );
 
-    for (const result of objectives) {
-      const idx = parseInt(result.Idx, 10);
+    for (const result of objectives.bindings) {
+      const idx = parseInt(result.Idx as string, 10);
       if (isNaN(idx)) continue;
 
       const key = `${questId}:${idx}`;
@@ -1301,8 +1302,8 @@ export class GamePrologEngine {
         const objectives = await this.engine.query(
           `quest_objective(${sanitizedId}, Idx, _)`, 50,
         );
-        for (const result of objectives) {
-          const idx = parseInt(result.Idx, 10);
+        for (const result of objectives.bindings) {
+          const idx = parseInt(result.Idx as string, 10);
           if (isNaN(idx)) continue;
           const complete = await this.engine.queryOnce(
             `objective_complete(player, ${sanitizedId}, ${idx})`,
@@ -1334,7 +1335,7 @@ export class GamePrologEngine {
       const results = await this.engine.query(
         `quest_bonus_reward(player, ${this.sanitize(questId)}, Type, Value)`, 10,
       );
-      return results.map(r => ({
+      return results.bindings.map(r => ({
         type: String(r.Type),
         value: parseInt(String(r.Value), 10) || 0,
       }));
@@ -1384,7 +1385,7 @@ export class GamePrologEngine {
       const results = await this.engine.query(
         `rule_applies(RuleName, ${this.sanitize(actorId)}, _)`
       );
-      return results.map(r => String(r.RuleName || ''));
+      return results.bindings.map(r => String(r.RuleName || ''));
     } catch {
       return [];
     }
@@ -1439,9 +1440,9 @@ export class GamePrologEngine {
     const results = await this.engine.query(goal);
     if (isDebugLabelsEnabled()) {
       const elapsed = (performance.now() - startTime).toFixed(1);
-      const success = results && results.length > 0;
+      const success = results.bindings && results.bindings.length > 0;
       const bindingSummary = success
-        ? results.map(r => Object.entries(r).map(([k, v]) => `${k}=${v}`).join(', ')).join('; ')
+        ? results.bindings.map(r => Object.entries(r).map(([k, v]) => `${k}=${v}`).join(', ')).join('; ')
         : 'false';
       console.debug('[PrologDebug] query:', goal, '->', bindingSummary, `(${elapsed}ms)`);
       getDebugEventBus().emit({
@@ -1454,7 +1455,7 @@ export class GamePrologEngine {
         source: 'client',
       });
     }
-    return results;
+    return results.bindings;
   }
 
   /**
@@ -1478,7 +1479,7 @@ export class GamePrologEngine {
     if (!this.initialized) return [];
     try {
       const results = await this.engine.query(`should_talk_to(${this.sanitize(npcId)}, Y)`);
-      return results.map(r => String(r.Y || '')).filter(Boolean);
+      return results.bindings.map(r => String(r.Y || '')).filter(Boolean);
     } catch { return []; }
   }
 
@@ -1489,7 +1490,7 @@ export class GamePrologEngine {
     if (!this.initialized) return [];
     try {
       const results = await this.engine.query(`prefers_topic(${this.sanitize(npcId)}, Topic)`);
-      return results.map(r => String(r.Topic || '')).filter(Boolean);
+      return results.bindings.map(r => String(r.Topic || '')).filter(Boolean);
     } catch { return []; }
   }
 
@@ -1500,7 +1501,7 @@ export class GamePrologEngine {
     if (!this.initialized) return null;
     try {
       const result = await this.engine.queryOnce(`conflict_style(${this.sanitize(npcId)}, Style)`);
-      return result ? String(result.Style || '') : null;
+      return result ? String((result as any).Style || '') : null;
     } catch { return null; }
   }
 
@@ -1546,7 +1547,7 @@ export class GamePrologEngine {
     if (!this.initialized) return [];
     try {
       const results = await this.engine.query(`should_avoid(${this.sanitize(npcId)}, Y)`);
-      return results.map(r => String(r.Y || '')).filter(Boolean);
+      return results.bindings.map(r => String(r.Y || '')).filter(Boolean);
     } catch { return []; }
   }
 

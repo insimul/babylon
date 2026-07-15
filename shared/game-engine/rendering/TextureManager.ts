@@ -1,5 +1,5 @@
 import { Scene, StandardMaterial, Texture } from "@babylonjs/core";
-import type { VisualAsset } from "@shared/schema";
+import type { VisualAsset } from "@shared/asset-types";
 import type { IDataSource as DataSource } from '@shared/game-engine/data-source';
 
 /**

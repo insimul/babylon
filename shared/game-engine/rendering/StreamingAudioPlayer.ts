@@ -218,7 +218,7 @@ export class StreamingAudioPlayer {
       chunk.data.byteOffset,
       chunk.data.byteOffset + chunk.data.byteLength
     );
-    return ctx.decodeAudioData(arrayBuffer);
+    return ctx.decodeAudioData(arrayBuffer as ArrayBuffer);
   }
 
   /** Convert raw PCM 16-bit LE mono into an AudioBuffer */

@@ -10,7 +10,7 @@
  */
 
 import type { IDataSource, IQuestOverlay, GenerationJobSummary, NpcConversationResult } from '@shared/game-engine/data-source';
-import type { VisualAsset } from '@shared/schema';
+import type { VisualAsset } from '@shared/asset-types';
 import {
   migrateSaveFile,
   type SaveFile,

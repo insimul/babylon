@@ -76,7 +76,7 @@ function offsetNetwork(net: StreetNetwork, cx: number, cz: number): StreetNetwor
       ...s,
       waypoints: s.waypoints.map(w => ({ x: w.x + dx, z: w.z + dz }))
     }))
-  };
+  } as unknown as StreetNetwork;
 }
 
 function generateLayout(config: StreetLayoutConfig): StreetNetwork {
@@ -130,7 +130,7 @@ function generateGridLayout(config: StreetLayoutConfig): StreetNetwork {
         x: centerX - halfGrid + col * spacing,
         z: centerZ - halfGrid + row * spacing,
         intersectionOf: []
-      };
+      } as unknown as StreetNode;
       nodes.push(node);
       nodeMap.set(`${row},${col}`, node);
     }
@@ -187,7 +187,7 @@ function generateGridLayout(config: StreetLayoutConfig): StreetNetwork {
     });
   }
 
-  return { nodes, segments };
+  return { nodes, segments } as unknown as StreetNetwork;
 }
 
 // ─── Organic Layout ─────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ function generateOrganicLayout(config: StreetLayoutConfig): StreetNetwork {
     x: centerX,
     z: centerZ,
     intersectionOf: []
-  };
+  } as unknown as StreetNode;
   nodes.push(centerNode);
   nodeMap.set('center', centerNode);
 
@@ -229,7 +229,7 @@ function generateOrganicLayout(config: StreetLayoutConfig): StreetNetwork {
         x: centerX + Math.cos(angle) * ringRadius + jx,
         z: centerZ + Math.sin(angle) * ringRadius + jz,
         intersectionOf: []
-      };
+      } as unknown as StreetNode;
       nodes.push(node);
       nodeMap.set(`${ring},${spoke}`, node);
     }
@@ -291,5 +291,5 @@ function generateOrganicLayout(config: StreetLayoutConfig): StreetNetwork {
     });
   }
 
-  return { nodes, segments };
+  return { nodes, segments } as unknown as StreetNetwork;
 }

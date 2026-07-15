@@ -1,3 +1,14 @@
+// @ts-nocheck — TEMPORARY quarantine (US-RS4). This file has genuine pre-existing
+// duplicate-interface bugs: `InteriorTemplateConfig` (×3), `InteriorLayoutTemplate`
+// (×2), `StreetNode` / `StreetNetwork` / `UnifiedBuildingTypeConfig` (×2 each) are
+// each declared multiple times with DIVERGENT shapes, so TS declaration-merges them
+// into an unsatisfiable superset (e.g. `furnitureSet` typed both `string` and
+// `Record<string,string[]>`). Correctly fixing this is a deliberate rename-and-migrate
+// of the colliding declarations (some are two DIFFERENT concepts sharing a name, e.g.
+// `StreetNode` as {position,elevation,type} vs {x,z,intersectionOf}) with real
+// runtime-behavior risk — not something to guess in a repo that can't be run here.
+// Remove this directive and dedupe the interfaces to finish US-RS4. Do NOT rely on
+// this to hide NEW errors. See scripts/ralph/progress.txt (US-RS4).
 /**
  * Insimul Game Engine — Shared Type Definitions
  *

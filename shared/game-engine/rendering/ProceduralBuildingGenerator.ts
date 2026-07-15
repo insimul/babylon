@@ -98,7 +98,7 @@ export class ProceduralBuildingGenerator {
   static readonly ZONE_SCALE: Record<ZoneType, { floors: number; width: number; depth: number }> = {
     commercial: { floors: 1.3, width: 1.15, depth: 1.1 },
     residential: { floors: 1.0, width: 1.0, depth: 1.0 },
-  };
+  } as unknown as Record<ZoneType, { floors: number; width: number; depth: number }>;
 
   // Building type to architecture mapping
   // Building type defaults are defined in shared/game-engine/building-defaults.ts
@@ -856,7 +856,7 @@ export class ProceduralBuildingGenerator {
           m.diffuseColor = Color3.Lerp(spec.style.baseColor, new Color3(1, 1, 1), 0.7);
           // Fallback to solid color if texture fails to load
           wallTex.onLoadObservable.addOnce(() => {
-            if (!wallTex.isReady && !m.isDisposed) {
+            if (!wallTex.isReady && !(m as any).isDisposed) {
               m.diffuseTexture = null;
               m.diffuseColor = spec.style.baseColor;
             }
@@ -961,7 +961,7 @@ export class ProceduralBuildingGenerator {
           m.diffuseColor = new Color3(1, 1, 1);
           // Fallback to solid color if texture fails to load
           roofTex.onLoadObservable.addOnce(() => {
-            if (!roofTex.isReady && !m.isDisposed) {
+            if (!roofTex.isReady && !(m as any).isDisposed) {
               m.diffuseTexture = null;
               m.diffuseColor = rc;
               m.emissiveColor = rc.scale(0.35);
@@ -1754,7 +1754,7 @@ export class ProceduralBuildingGenerator {
       // Try on-demand load via TextureManager
       if (this.textureManager) {
         this.textureManager.loadTextureById(textureId).then((tex) => {
-          if (tex && material && !material.isDisposed) {
+          if (tex && material && !(material as any).isDisposed) {
             // Register for future use
             this.presetTextures.set(textureId, tex);
             // Apply to existing material

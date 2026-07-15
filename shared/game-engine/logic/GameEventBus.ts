@@ -25,7 +25,9 @@ export type GameEvent =
   | { type: 'item_collected'; itemId: string; itemName: string; quantity: number; source?: ItemAcquisitionSource; taxonomy?: ItemTaxonomy }
   | { type: 'enemy_defeated'; entityId: string; enemyType: string }
   | { type: 'location_visited'; locationId: string; locationName: string }
-  | { type: 'npc_talked'; npcId: string; npcName: string; turnCount: number }
+  // Merged: two `npc_talked` variants previously collided on the discriminant, so
+  // `npcName`/`turnCount`/`questId` were unnarrowable. Unified with optional fields.
+  | { type: 'npc_talked'; npcId: string; npcName?: string; turnCount?: number; questId?: string }
   | { type: 'item_delivered'; npcId: string; itemId: string; itemName: string }
   | { type: 'vocabulary_used'; word: string; correct: boolean; category?: string }
   | { type: 'object_examined'; objectId: string; objectName: string; targetWord: string; targetLanguage: string; pronunciation?: string; category?: string }
@@ -105,7 +107,6 @@ export type GameEvent =
   | { type: 'reading_completed'; textId?: string; questId?: string }
   | { type: 'writing_submitted'; text: string; wordCount: number; questId?: string }
   | { type: 'listening_completed'; questId?: string }
-  | { type: 'npc_talked'; npcId: string; questId?: string }
   | { type: 'conversation_assessment_completed'; npcId: string; turnCount: number; questId?: string }
   // Visual vocabulary events
   | { type: 'visual_vocab_prompted'; targetId: string; questId: string; objectiveId: string; isActivity: boolean }

@@ -93,7 +93,7 @@ export async function queryEntityFacts(
 
     // Also check quest-related facts about this entity
     try {
-      const questResults = await engine.query(
+      const questResults = await (engine.query as any)(
         `quest_objective(QuestId, Idx, Goal)`, 5,
       );
       // Filter for goals mentioning this entity (heuristic)

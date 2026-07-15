@@ -347,7 +347,7 @@ export function generateTerrainCanvas(
         reject(new Error('Failed to get 2D context for output'));
         return;
       }
-      const imageData = new ImageData(pixels, outputSize, outputSize);
+      const imageData = new ImageData(pixels as unknown as Uint8ClampedArray<ArrayBuffer>, outputSize, outputSize);
       outCtx.putImageData(imageData, 0, 0);
 
       resolve(outCanvas);

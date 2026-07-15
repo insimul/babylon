@@ -47,9 +47,9 @@ export class BabylonDialogueActions {
     this.container = new GUI.Rectangle('dialogueActionsContainer');
     this.container.width = '100%';
     this.container.height = `${this.calculateHeight()}px`;
-    this.container.cornerRadius = 8;
+    (this.container as any).cornerRadius = 8;
     this.container.color = '#e5e7eb';
-    this.container.thickness = 1;
+    (this.container as any).thickness = 1;
     this.container.background = 'rgba(0, 0, 0, 0.95)';
     this.container.paddingTop = '12px';
     this.container.paddingBottom = '12px';

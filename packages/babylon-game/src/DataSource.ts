@@ -17,11 +17,11 @@ import {
   type SaveConflict,
 } from '@shared/game-engine/logic/SaveConflictResolver';
 import type { GameSaveState } from '@shared/game-engine/types';
-import type { VisualAsset } from '@shared/schema';
+import type { VisualAsset } from '@shared/asset-types';
 
 // Re-export the canonical interface and supporting types from shared
 export type { IDataSource, GenerationJobSummary, NpcConversationResult, IQuestOverlay } from '@shared/game-engine/data-source';
-import type { IDataSource } from '@shared/game-engine/data-source';
+import type { IDataSource, GenerationJobSummary, NpcConversationResult } from '@shared/game-engine/data-source';
 
 /**
  * DataSource — backward-compatible alias for IDataSource.
@@ -30,7 +30,7 @@ import type { IDataSource } from '@shared/game-engine/data-source';
  * This alias narrows questOverlay to the concrete PlaythroughQuestOverlay
  * used by the in-app game.
  */
-export interface DataSource extends IDataSource {
+export interface DataSource extends Omit<IDataSource, 'questOverlay'> {
   questOverlay: PlaythroughQuestOverlay | null;
 }
 

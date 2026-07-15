@@ -2,7 +2,7 @@
  * Building generation rules — controls which building types are eligible
  * for a settlement based on its size, era, and geography.
  */
-import type { BusinessType } from '../schema';
+import type { BusinessType } from '@shared/world-types';
 
 export type SettlementTier = 'dwelling' | 'roadhouse' | 'homestead' | 'village' | 'town' | 'city';
 

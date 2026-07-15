@@ -102,7 +102,7 @@ export class VoiceActivityDetector {
   /** Calculate RMS energy from the current analyser data. Exposed for testing. */
   computeRMS(): number {
     if (!this.analyser || !this.dataArray) return 0;
-    this.analyser.getFloatTimeDomainData(this.dataArray);
+    this.analyser.getFloatTimeDomainData(this.dataArray as Float32Array<ArrayBuffer>);
     let sumSquares = 0;
     for (let i = 0; i < this.dataArray.length; i++) {
       sumSquares += this.dataArray[i] * this.dataArray[i];
