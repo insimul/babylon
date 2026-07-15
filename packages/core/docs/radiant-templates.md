@@ -197,6 +197,34 @@ radiant_cooldown(rt_bounty, 7200).
 radiant_exclusion(rt_bounty, radiant_generated(_, rt_bounty, _)).
 ```
 
+## The base template pack & loader path (US-RQ5)
+
+A starter pack of six genre-neutral templates ships with `@insimul/core`:
+
+- **Canonical data**: `packages/core/data/radiant/base-templates.pl` — the portable
+  `.pl` a native engine reads directly. It uses **only** predicates
+  `predicate-schema.ts` guarantees for any world (`person/1`, `occupation/2`,
+  `settlement/1`, `settlement_mayor/2`, `item_category/2`, `business_owner/2`), so it
+  drops into any base world without authoring. Templates: `rt_fetch`, `rt_delivery`,
+  `rt_bounty`, `rt_escort` (escort-lite), `rt_gather`, `rt_visit`.
+- **Runtime mirror**: `packages/core/src/radiant/base-templates.ts` exports the same
+  pack as the string constant `BASE_RADIANT_TEMPLATES` (browser/Babylon can't read the
+  filesystem — same convention as `HELPER_PREDICATES_PROLOG`). A drift-guard test
+  (`base-templates.test.ts`) asserts the two copies stay byte-identical.
+
+**Loader path** (`worldSnapshot → GamePrologEngine consult`): `GamePrologEngine.initialize`
+takes an optional `radiantTemplates?: string`. When a world export carries a radiant
+template pack, it is **consulted** into the live KB at game start — exactly like the
+authored `narrative_*` story templates and the base rule packs. Because it is consulted
+(stored world-layer data), not asserted as a player fact, it never leaks into a save
+file; it re-loads from the world export every session. A world without its own authored
+pack passes `BASE_RADIANT_TEMPLATES`. The `RadiantQuestDirector` (US-RQ3) then generates
+quests against the consulted templates on each `tick()`.
+
+Per the plan (§3.3): a **closed platform generator may later EMIT richer,
+world-specific template packs** in this same format — this base pack proves the runtime
+path, and every native engine inherits authored packs for free.
+
 ## Determinism & portability contract
 
 The engine (US-RQ2) is a pure function of `(KB, seed, now)`: candidate bindings are

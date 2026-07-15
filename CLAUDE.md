@@ -173,6 +173,17 @@ gotchas:
   sorted sets but the specific giver/item/target IS the contract (seed-driven).
   Regenerate expected values with a `vite-node` dump of the engine, never by hand.
   Format documented in `conformance/README.md` (§ "Radiant case format").
+- **Base template pack + loader (US-RQ5)**: a portable `.pl` data file
+  (`packages/core/data/radiant/base-templates.pl`) is the canonical, native-readable
+  source; because core is browser-safe (no fs), it is mirrored as the string constant
+  `BASE_RADIANT_TEMPLATES` in `src/radiant/base-templates.ts` (the
+  `HELPER_PREDICATES_PROLOG` convention) with a drift-guard test keeping the two
+  byte-identical. The loader seam is `GamePrologEngine.initialize({ radiantTemplates })`:
+  a world-layer template pack is **consulted** (like the base rule packs / `narrative_*`
+  templates), NOT asserted as a player fact, so it re-loads from the world export every
+  session and never lands in a save. Base packs must use only predicate-schema-guaranteed
+  predicates (`person`/`occupation`/`settlement`/`settlement_mayor`/`item_category`/
+  `business_owner`) so they are world-portable.
 
 ### Dependency-direction guard (US-CE6)
 

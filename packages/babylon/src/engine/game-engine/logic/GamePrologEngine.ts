@@ -1012,6 +1012,7 @@ export class GamePrologEngine {
     quests: any[];
     truths: any[];
     content?: string; // Pre-generated .pl content from server
+    radiantTemplates?: string; // Radiant template pack (US-RQ5) — stored world-layer template data, consulted at game start like base rules
   }): Promise<void> {
     this.engine.clear();
     this.itemQuantities.clear();
@@ -1022,6 +1023,19 @@ export class GamePrologEngine {
     // If server provided pre-generated Prolog content, load it
     if (data.content) {
       await this.engine.consult(data.content);
+    }
+
+    // Radiant template pack (US-RQ5). Stored world-layer template data (like the
+    // narrative_* story templates): a world export carrying radiant templates
+    // gets them consulted into the KB at game start so the RadiantQuestDirector
+    // (US-RQ3) can generate against them. Consulted, NOT asserted as player
+    // facts, so it never leaks into a save file (it re-loads from the world
+    // export every session). Pass @insimul/core's BASE_RADIANT_TEMPLATES for a
+    // world without its own authored pack.
+    if (data.radiantTemplates) {
+      try { await this.engine.consult(data.radiantTemplates); } catch (e) {
+        console.warn('[GamePrologEngine] Failed to load radiant template pack:', e);
+      }
     }
 
     // Assert character facts
