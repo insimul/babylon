@@ -514,6 +514,44 @@ export const PREDICATE_SCHEMA = {
     ],
     note: 'Runtime facts emitted from the playthrough overlay on assessment quest completion. Level atoms: a1, a2, b1, b2, c1, c2. Dimension atoms: comprehension, fluency, vocabulary, grammar, pronunciation.',
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RADIANT QUEST TEMPLATES (see packages/core/docs/radiant-templates.md)
+  //
+  // Two-mode vocabulary for data-driven procedural ("radiant") quest generation:
+  //
+  //   • radiant_template/2 … radiant_exclusion/2 are STORED template data —
+  //     authored in a world's template pack (packages/core/data/radiant/*.pl,
+  //     US-RQ5) and consulted into GamePrologEngine at game start, exactly like
+  //     the narrative/* story templates. They are world/editor-layer content,
+  //     NOT per-playthrough state, so they never appear in a save file.
+  //
+  //   • radiant_generated/3 and radiant_cooldown_until/2 are RUNTIME facts the
+  //     slot-filling engine (US-RQ2) asserts when it emits a quest. They ARE
+  //     per-playthrough state, so they live in save.currentState.prologFacts and
+  //     must pass the save-restore validator — they are declared `:- dynamic`
+  //     in helper-predicates.ts (which prolog-fact-validator scans) as well as
+  //     catalogued here.
+  //
+  // Slot convention: a radiant_precondition Goal binds its slot by the variable
+  // whose name is the SlotName capitalised (slot `giver` → variable `Giver`).
+  // Preconditions are solved in declaration order and earlier slot variables are
+  // in scope for later goals (multi-slot join). Objective/reward/title templates
+  // reference the same slot variables; the engine substitutes bound atoms.
+  // ═══════════════════════════════════════════════════════════════════════════
+  radiant: {
+    predicates: [
+      'radiant_template/2',       // radiant_template(TplId, [category(C), title(T), quest_type(Q), difficulty(D)]). [stored]
+      'radiant_precondition/3',   // radiant_precondition(TplId, SlotName, Goal). [stored] — Goal solutions bind slot var
+      'radiant_objective/2',      // radiant_objective(TplId, ObjTemplate). [stored] — quest_objective goal w/ slot vars
+      'radiant_reward/3',         // radiant_reward(TplId, Kind, AmountExpr). [stored] — AmountExpr: Int | times(Base,Factor) | per(Slot,Unit)
+      'radiant_cooldown/2',       // radiant_cooldown(TplId, Seconds). [stored] — regeneration cooldown
+      'radiant_exclusion/2',      // radiant_exclusion(TplId, Goal). [stored] — suppress generation when Goal holds
+      'radiant_generated/3',      // radiant_generated(QuestId, TplId, Timestamp). [runtime] — provenance, persisted in save
+      'radiant_cooldown_until/2', // radiant_cooldown_until(TplId, Timestamp). [runtime] — earliest next-gen time, persisted in save
+    ],
+    note: 'Radiant (procedural) quest generation. radiant_template/2 … radiant_exclusion/2 are STORED template data consulted from a world template pack at game start (like narratives). radiant_generated/3 and radiant_cooldown_until/2 are RUNTIME facts asserted by the slot-filling engine and persisted in save.currentState.prologFacts (declared :- dynamic in helper-predicates.ts). Slot binding is by capitalised-SlotName variable; preconditions solve in order with earlier slots in scope. Worked examples: packages/core/docs/radiant-templates.md.',
+  },
 } as const;
 
 // ─── Predicate Signature Snapshot (US-002) ──────────────────────────────────
