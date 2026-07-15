@@ -1432,6 +1432,62 @@ export class GamePrologEngine {
   }
 
   /**
+   * Assert a runtime gameplay fact AND track it for persistence.
+   *
+   * Unlike {@link assertFact}, the fact is added to the player-fact set, so it
+   * survives save/load through {@link getPlayerFacts}/{@link restoreFromSaveState}.
+   * Use for facts generated during play that must persist — e.g. the radiant
+   * quest director's `radiant_generated/3` provenance and `radiant_cooldown_until/2`
+   * bookkeeping. A trailing `.` is tolerated (facts from the radiant engine carry
+   * one). The predicate must be a known persisted signature, or the fact is
+   * dropped on reload by the save-restore validator (see helper-predicates.ts).
+   */
+  async assertRuntimeFact(fact: string, source?: string): Promise<void> {
+    if (!this.initialized) return;
+    const bare = fact.trim().endsWith('.') ? fact.trim().slice(0, -1) : fact.trim();
+    if (!bare) return;
+    await this.assertPlayerFact(bare);
+    if (source && isDebugLabelsEnabled()) {
+      console.debug('[PrologDebug] assert(runtime):', bare, `(source: ${source})`);
+    }
+  }
+
+  /**
+   * Retract a runtime gameplay fact and stop persisting it.
+   * Companion to {@link assertRuntimeFact}; a trailing `.` is tolerated.
+   */
+  async retractRuntimeFact(fact: string): Promise<void> {
+    if (!this.initialized) return;
+    const bare = fact.trim().endsWith('.') ? fact.trim().slice(0, -1) : fact.trim();
+    if (!bare) return;
+    await this.retractPlayerFact(bare);
+  }
+
+  /**
+   * Consult arbitrary Prolog content (facts + rules) into the live KB.
+   *
+   * NOT tracked in the player-fact set — use for regenerable content such as a
+   * dynamic quest's hydratable Prolog (which persists via the quest overlay and
+   * is re-consulted on load), not for durable runtime state (use
+   * {@link assertRuntimeFact} for that).
+   */
+  async consultContent(content: string): Promise<void> {
+    if (!this.initialized) return;
+    await this.engine.consult(content);
+  }
+
+  /**
+   * Register a single quest id for objective/quest re-evaluation (idempotent).
+   * Complements {@link setActiveQuests} when a quest is added at play time
+   * (e.g. a radiant quest generated this tick) without replacing the whole set.
+   */
+  addActiveQuest(questId: string): void {
+    if (!this.activeQuestIds.includes(questId)) {
+      this.activeQuestIds.push(questId);
+    }
+  }
+
+  /**
    * Run an arbitrary Prolog query and return results.
    */
   async query(goal: string): Promise<Record<string, any>[]> {
