@@ -23,7 +23,8 @@
   ],
   "scripts": {
     "check": "tsc -p tsconfig.check.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

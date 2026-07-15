@@ -54,7 +54,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:export-shell": "node scripts/export-shell-smoke.mjs"
   },
   "keywords": [
     "insimul",

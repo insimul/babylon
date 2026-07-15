@@ -218,6 +218,22 @@ pipeline's vendored source paths) keeps resolving unchanged:
   from the root `package.json` into `packages/babylon`'s. Exports map gained `./engine` +
   `./engine/*` (barrel re-exports `./game-engine`'s curated index; rendering/logic/systems and
   voice are deep-import only).
+- **US-BC4 (done)** — export pipeline survives. The shims re-export ACROSS the vendored
+  boundary (`../../../packages/babylon/src/...`), so a game that vendors only the old dirs
+  (`shared/`, `packages/{typescript,babylon-game}/src`) can no longer resolve them — the
+  relative target escapes the vendored tree. Fix (option b): the export's Vite aliases point
+  the moved roots DIRECTLY at the consolidated package, vendored at `src/insimul-babylon`
+  (see `packages/babylon/templates/vite.config.ts` array-form aliases, moved roots first).
+  `test:export-shell` (`scripts/export-shell-smoke.mjs`) proves it: a real `vite build` of a
+  fixture mirroring an exported game bundles the WHOLE first-party consolidated graph
+  (BabylonGame + engine + data + conversation + core + straggler `shared/`) into a runnable
+  bundle, externalizing only third-party leaves (`@babylonjs/*`, react, mlc, sentry) and the
+  platform-injected type-only surfaces (`GameQuestManager.d.ts` — impl injected at export).
+  **A full standalone `BabylonGame` bundle is NOT achievable in this repo by design** (the
+  `.d.ts`-only surfaces + the whole export env are platform-assembled; that's why the golden
+  export gate lives platform-side). `SMOKE_BREAK=1` disables the fix to demonstrate the gate
+  fails. **A platform follow-up IS required** (the copy step must additionally vendor
+  `packages/babylon/src -> src/insimul-babylon`) — recorded verbatim in progress.txt (US-BC4).
 
 Conventions when moving a tree in:
 

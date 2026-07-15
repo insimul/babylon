@@ -4,5 +4,5 @@
  */
 
 export { BabylonGame } from '@shared/game-engine/rendering/BabylonGame';
-export { createDataSource } from './insimul-babylon-game/DataSource';
-export type { DataSource } from './insimul-babylon-game/DataSource';
+export { createDataSource } from '@insimul/babylon-game/DataSource';
+export type { DataSource } from '@insimul/babylon-game/DataSource';

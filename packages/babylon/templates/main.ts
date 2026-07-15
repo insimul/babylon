@@ -8,7 +8,7 @@ import '@babylonjs/core/Helpers/sceneHelpers';
 
 // Import the actual BabylonGame class
 import { BabylonGame } from './index';
-import { createDataSource } from './insimul-babylon-game/DataSource';
+import { createDataSource } from '@insimul/babylon-game/DataSource';
 
 // ── Loading screen helpers ───────────────────────────────────────────────────
 
