@@ -160,6 +160,41 @@ gotchas:
   `save-file-migrations.ts` registry to `SAVE_FILE_VERSION`; the v1 fixture
   exercises both steps (language-progress backfill, snapshot version stamping).
 
+### Dependency-direction guard (US-CE6)
+
+`shared/__tests__/import-hygiene.test.ts` now also locks in the core-extraction
+invariant with two describe blocks:
+
+- **dependency direction** — scans every `packages/core/src` import specifier
+  (comment/string-stripped) and fails if any is `@babylonjs/*`, `react[-dom]`,
+  `@shared/*`, a sibling package (`@insimul/babylon*`, `@insimul/typescript`), or
+  a relative path that **escapes the `packages/core` package** (into `shared/` or
+  another package). Intra-package relatives are fine — a test reaching the
+  package's own `scripts/` does not escape.
+- **shim hygiene** — every `shared/` file that re-exports from `packages/core/src`
+  must stay a thin re-export: each non-blank stripped line either references
+  `packages/core/src` or is a bare member-list continuation. A `function`/`const`/
+  `class`/`interface`/`=`/`(` in a shim = a re-implemented-in-shared regression.
+
+To keep core `@shared`-free, US-CE6 removed the last pure-type edges two ways:
+
+- **Move the clean module in** (with a shim at the old path) when it is Babylon-free
+  and its transitive deps already live in core: `game-genres/types.ts` (→
+  `game-engine/ir-types` `GenreConfig`) and the three feature-module type modules
+  `feature-modules/{knowledge-acquisition,pattern-recognition,conversation-analytics}/types.ts`
+  (→ `language/progress` bridges). These are NOT added to the flat `index.ts`
+  barrel — they collide (`CameraMode`/`CombatStyle`/`MasteryLevel`) with modules
+  already barrelled — but stay reachable via the shims and deep
+  `@insimul/core/<subpath>` imports.
+- **Structural stand-in** when the source can't move: `game-engine/types.ts` is a
+  ~1.7k-line `@ts-nocheck` Babylon module, so its pure-data subset the IR needs is
+  mirrored in `packages/core/src/game-engine/visual-types.ts` (Vec3/Color3/dungeon/
+  spawn/need shapes — structurally identical, so Babylon-side values stay assignable
+  to the IR). Likewise `AssessmentDimensionScores` (a 5-number interface used only as
+  a shallow field) is a local stand-in in `language/progress.ts` rather than dragging
+  the editor-layer `assessment/` module into core. Keep stand-ins in sync if the
+  Babylon-side shape changes.
+
 ### Install gotcha in this workspace
 
 The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists

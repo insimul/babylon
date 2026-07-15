@@ -15,7 +15,7 @@
  * No engine-specific imports allowed — this is purely data.
  */
 
-import type { GenreConfig } from '@shared/game-genres/types';
+import type { GenreConfig } from '../game-genres/types';
 import type {
   Vec3,
   Color3,
@@ -35,7 +35,7 @@ import type {
   NeedConfig,
   ResourceType,
   WaterFeatureType,
-} from '@shared/game-engine/types';
+} from './visual-types';
 
 // ─────────────────────────────────────────────
 // Top-level IR

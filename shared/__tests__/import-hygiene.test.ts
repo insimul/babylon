@@ -17,7 +17,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, resolve, relative } from 'node:path';
+import { join, resolve, relative, dirname } from 'node:path';
 
 // Repo root is two levels up from shared/__tests__.
 const ROOT = resolve(__dirname, '..', '..');
@@ -166,6 +166,155 @@ describe('import hygiene: runtime is self-contained', () => {
     expect(
       unique,
       `'${FORBIDDEN_SPECIFIER}' is a platform-only module. Runtime-owned types live in shared/asset-types.ts / shared/world-types.ts — import those instead. Offenders:\n${unique.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-CE6 — Dependency-direction guard for @insimul/core.
+//
+// The whole core-extraction PRD exists to make `packages/core` (@insimul/core)
+// the ENGINE-AGNOSTIC contract that native plugins (Unreal/Unity/Godot) consume
+// without dragging Babylon.js along. That only holds if the dependency arrows all
+// point INTO core: `packages/core/src` must import nothing from `shared/`, the
+// sibling engine/impl packages (`@insimul/babylon`, `@insimul/babylon-game`,
+// `@insimul/typescript`), or any `@babylonjs/*` / `react` module — whether via a
+// bare specifier or a relative path that escapes `packages/core/`.
+//
+// It also checks the other direction stays clean: every `shared/` re-export shim
+// into core must remain a thin re-export (a moved module must live in ONE place —
+// core — not be re-implemented back in shared/). Per the PRD, a "shim files are
+// one-liners" style check is acceptable, so we assert each shim file contains only
+// re-export/import lines pointing at packages/core/src, never a local definition.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CORE_PKG = join(PACKAGES, 'core');
+const CORE_SRC = join(CORE_PKG, 'src');
+
+// Matches the specifier in `from 'x'`, `import 'x'`, `import('x')`, `require('x')`,
+// and `export ... from 'x'` — for ANY module, not just @shared.
+const ANY_IMPORT = /(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g;
+
+interface CoreImport {
+  spec: string;
+  file: string;
+}
+
+function collectCoreImports(): CoreImport[] {
+  const imports: CoreImport[] = [];
+  const files: string[] = [];
+  if (existsSync(CORE_SRC)) walk(CORE_SRC, files);
+  for (const file of files) {
+    const text = stripCommentsAndStrings(readFileSync(file, 'utf8'));
+    let m: RegExpExecArray | null;
+    ANY_IMPORT.lastIndex = 0;
+    while ((m = ANY_IMPORT.exec(text)) !== null) {
+      imports.push({ spec: m[1], file: relative(ROOT, file) });
+    }
+  }
+  return imports;
+}
+
+/** Returns a reason string if a bare (non-relative) specifier is forbidden in core. */
+function forbiddenBareSpecifier(spec: string): string | null {
+  if (spec === '@babylonjs' || spec.startsWith('@babylonjs/')) return '@babylonjs (engine impl)';
+  if (spec === 'react' || spec.startsWith('react/') || spec === 'react-dom' || spec.startsWith('react-dom/'))
+    return 'react (UI layer)';
+  if (spec === '@shared' || spec.startsWith('@shared/')) return '@shared (runtime shared/ — core must be self-contained)';
+  // Sibling packages that depend ON core, never the reverse. `@insimul/babylon`
+  // also covers `@insimul/babylon-game`; `@insimul/core` (self) is allowed.
+  if (spec.startsWith('@insimul/babylon') || spec.startsWith('@insimul/typescript'))
+    return 'sibling engine/impl package (must not be a core dependency)';
+  return null;
+}
+
+/**
+ * True if a relative specifier escapes the packages/core PACKAGE (into shared/ or a
+ * sibling package). Intra-package relatives — including a test reaching the package's
+ * own scripts/ tooling — are allowed; only leaving @insimul/core is a direction break.
+ */
+function relativeEscapesCore(spec: string, file: string): boolean {
+  if (!spec.startsWith('.')) return false;
+  const resolved = resolve(dirname(join(ROOT, file)), spec);
+  const rel = relative(CORE_PKG, resolved);
+  return rel === '..' || rel.startsWith(`..${'/'}`) || rel.startsWith('..\\');
+}
+
+describe('dependency direction: @insimul/core is engine-agnostic and self-contained (US-CE6)', () => {
+  const coreImports = collectCoreImports();
+
+  it('scans a non-trivial number of packages/core/src sources (guard is wired up)', () => {
+    // Sanity check — if collection silently found nothing the assertion below would
+    // vacuously pass. Core holds the save-file/prolog/quest/IR contract: many imports.
+    expect(coreImports.length).toBeGreaterThan(50);
+  });
+
+  it('imports nothing from @babylonjs/*, react, @shared/*, a sibling engine package, or outside packages/core/', () => {
+    const offenders = coreImports
+      .map(({ spec, file }) => {
+        const reason = forbiddenBareSpecifier(spec) ?? (relativeEscapesCore(spec, file) ? 'relative path escapes packages/core/' : null);
+        return reason ? `${spec}  [${reason}]  (in ${file})` : null;
+      })
+      .filter((x): x is string => x !== null);
+    const unique = [...new Set(offenders)].sort();
+    expect(
+      unique,
+      `@insimul/core must stay engine-agnostic and self-contained. Forbidden imports in packages/core/src — move the module INTO core (with a shim at its old shared/ path), replace a Babylon type with a structural stand-in, or drop the dependency:\n${unique.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// A `shared/` file is a "shim" once its module was moved into core: it should
+// contain only re-export/import lines pointing at packages/core/src. If a moved
+// module gets re-implemented back in shared/, the shim grows a real declaration —
+// which is exactly what this guard forbids.
+function collectSharedShimFiles(): string[] {
+  const files: string[] = [];
+  walk(SHARED, files);
+  return files.filter(
+    (f) =>
+      !f.includes(`${'/'}__tests__${'/'}`) &&
+      !/\.test\.tsx?$/.test(f) &&
+      stripCommentsAndStrings(readFileSync(f, 'utf8')).includes('packages/core/src'),
+  );
+}
+
+// A non-blank stripped line inside a shim must be either (a) a line that references
+// packages/core/src (the `from '.../packages/core/src/...'` / bare `import` target),
+// or (b) a pure member-list continuation of a multi-line re-export (identifiers,
+// commas, braces, `as`, `type`, `*` only — no code). Anything else (a `function`,
+// `const`, `class`, `interface`, `=`, `(`…) is a re-implementation.
+function isShimShapedLine(line: string): boolean {
+  const t = line.trim();
+  if (t === '') return true;
+  if (t.includes('packages/core/src')) return true;
+  return /^[\w$,{}*\s]+$/.test(t.replace(/\bas\b/g, ' '));
+}
+
+describe('shim hygiene: moved modules are not re-implemented in shared/ (US-CE6)', () => {
+  const shimFiles = collectSharedShimFiles();
+
+  it('finds the re-export shims (guard is wired up)', () => {
+    // The core-extraction stories left dozens of shims at old shared/ paths.
+    expect(shimFiles.length).toBeGreaterThan(20);
+  });
+
+  it('every shared/ shim into @insimul/core is a thin re-export (no local declarations)', () => {
+    const fat: string[] = [];
+    for (const file of shimFiles) {
+      const stripped = stripCommentsAndStrings(readFileSync(file, 'utf8'));
+      const badLines = stripped
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l !== '' && !isShimShapedLine(l));
+      if (badLines.length > 0) {
+        fat.push(`${relative(ROOT, file)}: ${badLines[0]}`);
+      }
+    }
+    const unique = [...new Set(fat)].sort();
+    expect(
+      unique,
+      `A shared/ re-export shim into @insimul/core grew a local declaration — a moved module must live ONLY in core, not be re-implemented in shared/. Offending shim files (first stray line shown):\n${unique.join('\n')}`,
     ).toEqual([]);
   });
 });

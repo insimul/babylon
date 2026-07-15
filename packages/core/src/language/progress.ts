@@ -10,12 +10,27 @@
  */
 
 import type { CEFRLevel } from './cefr';
-import type { AssessmentDimensionScores } from '@shared/assessment/assessment-types';
 
-// Re-export MasteryLevel from the generic module so consumers don't need to change imports.
-// The generic module defines the same union type.
-export type { MasteryLevel } from '@shared/feature-modules/knowledge-acquisition/types';
-import type { MasteryLevel } from '@shared/feature-modules/knowledge-acquisition/types';
+/**
+ * Per-dimension assessment scores (1–5 each). Structural stand-in for
+ * `AssessmentDimensionScores` in `shared/assessment/assessment-types.ts` — kept
+ * local so `@insimul/core` carries no `@shared/*` edge (US-CE6). The assessment
+ * module is an editor-layer concept; core only needs this shallow score shape,
+ * which stays structurally assignable to the shared definition.
+ */
+export interface AssessmentDimensionScores {
+  comprehension: number;
+  fluency: number;
+  vocabulary: number;
+  grammar: number;
+  pronunciation: number;
+}
+
+// Re-export MasteryLevel from the canonical core module so consumers don't need to
+// change imports. `mastery.ts` (also core) is the single source of this union;
+// the generic knowledge-acquisition module just re-exports the same type.
+export type { MasteryLevel } from './mastery';
+import type { MasteryLevel } from './mastery';
 import { getMasteryForCorrectCount, ENCOUNTER_LEARNING_THRESHOLD } from './mastery';
 
 /** How a word was encountered — affects mastery weighting */
@@ -462,9 +477,9 @@ export function computeDimensionTrend(
 // Bridge: VocabularyEntry ↔ KnowledgeEntry
 // ---------------------------------------------------------------------------
 
-import type { KnowledgeEntry } from '@shared/feature-modules/knowledge-acquisition/types';
-import type { PatternEntry } from '@shared/feature-modules/pattern-recognition/types';
-import type { ConversationRecord as GenericConversationRecord } from '@shared/feature-modules/conversation-analytics/types';
+import type { KnowledgeEntry } from '../feature-modules/knowledge-acquisition/types';
+import type { PatternEntry } from '../feature-modules/pattern-recognition/types';
+import type { ConversationRecord as GenericConversationRecord } from '../feature-modules/conversation-analytics/types';
 
 /**
  * Convert a language-learning VocabularyEntry to a generic KnowledgeEntry.
