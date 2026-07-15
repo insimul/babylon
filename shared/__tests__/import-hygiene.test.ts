@@ -318,3 +318,77 @@ describe('shim hygiene: moved modules are not re-implemented in shared/ (US-CE6)
     ).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-BC2 — Shim-completeness guard for the @insimul/babylon-game -> @insimul/babylon
+// consolidation.
+//
+// The save/data/loading layer moved from packages/babylon-game/src into
+// packages/babylon/src/data. To keep every existing consumer resolving (the platform's
+// npm dep + tsconfig/vite aliases, and shared/game-engine/rendering/BabylonGame.ts which
+// imports @insimul/babylon-game/{WorldStateManager,DataSource,diagnostics/ResourceProfiler}),
+// a one-line re-export shim was left at EVERY old importable path.
+//
+// packages/babylon-game/OLD_EXPORT_SURFACE.json snapshots that surface (generated at move
+// time, records history). This guard asserts every snapshotted path (a) still exists as a
+// shim under packages/babylon-game/src, (b) that shim re-exports into
+// packages/babylon/src/data (a thin passthrough, not a re-implementation), and (c) the
+// moved target actually exists. Deleting a shim requires deleting its snapshot entry — a
+// deliberate deprecation, never an accident.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OldExportSurface {
+  root: string;
+  movedTo: string;
+  paths: string[];
+}
+
+const BABYLON_GAME_SURFACE = join(ROOT, 'packages', 'babylon-game', 'OLD_EXPORT_SURFACE.json');
+
+describe('shim completeness: @insimul/babylon-game surface is fully shimmed into @insimul/babylon/data (US-BC2)', () => {
+  const snapshot: OldExportSurface = JSON.parse(readFileSync(BABYLON_GAME_SURFACE, 'utf8'));
+
+  it('the snapshot lists the whole moved surface (guard is wired up)', () => {
+    // The save/data/loading layer was ~19 importable modules; a truncated snapshot
+    // would let a missing shim slip through.
+    expect(snapshot.paths.length).toBeGreaterThan(15);
+  });
+
+  it('every old importable path still exists as a re-export shim into packages/babylon/src/data', () => {
+    const problems: string[] = [];
+    for (const rel of snapshot.paths) {
+      const shimFile = join(ROOT, snapshot.root, rel);
+      if (!existsSync(shimFile)) {
+        problems.push(`${snapshot.root}/${rel}  — MISSING shim (consumers of @insimul/babylon-game/${rel.replace(/\.(ts|tsx)$/, '')} would break)`);
+        continue;
+      }
+      const stripped = stripCommentsAndStrings(readFileSync(shimFile, 'utf8'));
+      if (!stripped.includes('babylon/src/data')) {
+        problems.push(`${snapshot.root}/${rel}  — not a shim into ${snapshot.movedTo} (grew a local declaration?)`);
+      }
+      // A shim must be a thin re-export (same rule as the core-extraction shims).
+      const badLines = stripped
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l !== '' && !(l.includes('babylon/src/data') || /^[\w$,{}*\s]+$/.test(l.replace(/\bas\b/g, ' '))));
+      if (badLines.length > 0) {
+        problems.push(`${snapshot.root}/${rel}  — non-shim line: ${badLines[0]}`);
+      }
+    }
+    const unique = [...new Set(problems)].sort();
+    expect(
+      unique,
+      `@insimul/babylon-game shim regressions — restore the one-line re-export shim (export * from '<relative>/packages/babylon/src/data/<path>'), or drop the snapshot entry if intentionally deprecating:\n${unique.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every moved target exists under packages/babylon/src/data', () => {
+    const missing = snapshot.paths
+      .filter((rel) => !existsSync(join(ROOT, snapshot.movedTo, rel)))
+      .map((rel) => `${snapshot.movedTo}/${rel}`);
+    expect(
+      missing,
+      `A snapshotted module is missing from its new home — the shim points at a file that no longer exists:\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+});

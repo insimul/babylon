@@ -21,6 +21,14 @@ export default defineConfig({
       // point at the moved SDK; alias it so the scoped run resolves without a
       // node_modules symlink (mirrors the root vitest.config.ts).
       '@insimul/typescript': r('../typescript/src'),
+      // US-BC2: the save/data/loading suites (SaveFileDataSource-delta,
+      // offline-migration, optimization/*) moved here into src/data. They pull
+      // @shared/* (save-file, game-engine, prolog, quests, …), @insimul/core, and the
+      // legacy @insimul/babylon-game shims — alias all three at the repo root so the
+      // scoped run resolves exactly as the root vitest.config.ts does.
+      '@shared': r('../../shared'),
+      '@insimul/core': r('../core/src'),
+      '@insimul/babylon-game': r('../babylon-game/src'),
     },
   },
   test: {

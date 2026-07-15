@@ -1,0 +1,26 @@
+{
+  "_comment": "US-BC2 snapshot of the OLD @insimul/babylon-game export surface (every importable src file before the save/data/loading layer moved to @insimul/babylon/data). The import-hygiene shim-completeness guard asserts each path below still exists under packages/babylon-game/src as a one-line re-export shim into packages/babylon/src/data. Do NOT delete a shim without deleting its entry here (a real deprecation), and do NOT add entries by hand — this records history.",
+  "root": "packages/babylon-game/src",
+  "movedTo": "packages/babylon/src/data",
+  "paths": [
+    "BabylonWorld.tsx",
+    "DataSource.ts",
+    "SaveFileDataSource.ts",
+    "SaveQueue.ts",
+    "WorldStateManager.ts",
+    "diagnostics/ResourceProfiler.ts",
+    "optimization/AssetLoadQueue.ts",
+    "optimization/GameDataCache.ts",
+    "optimization/HardwareDetector.ts",
+    "optimization/LoadingScreen.tsx",
+    "optimization/MeshMemoryManager.ts",
+    "optimization/NetworkMetrics.ts",
+    "optimization/QuickResumeCache.ts",
+    "optimization/RenderOptimizer.ts",
+    "optimization/StartupOrchestrator.ts",
+    "optimization/StartupProfiler.ts",
+    "optimization/loadingTips.ts",
+    "optimization/performanceSettings.ts",
+    "ui/SaveMigrationPromptModal.tsx"
+  ]
+}

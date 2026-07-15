@@ -200,6 +200,47 @@ To keep core `@shared`-free, US-CE6 removed the last pure-type edges two ways:
   the editor-layer `assessment/` module into core. Keep stand-ins in sync if the
   Babylon-side shape changes.
 
+## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
+
+The web/Babylon side is collapsing into ONE package, `packages/babylon`
+(`@insimul/babylon`), organized as `src/{conversation,data,engine,templates}`. Each old
+package/dir moves in and leaves **cross-package one-line re-export shims** at its old path
+so every existing consumer (the platform's npm deps + tsconfig/vite aliases, the export
+pipeline's vendored source paths) keeps resolving unchanged:
+
+- **US-BC1** — `packages/typescript/src` → `src/conversation`; typescript files are shims.
+- **US-BC2** — `packages/babylon-game/src` → `src/data`; babylon-game files are shims.
+  `packages/babylon-game/OLD_EXPORT_SURFACE.json` snapshots the shimmed surface and the
+  import-hygiene guard fails if a shim goes missing / stops being a thin re-export.
+- **US-BC3 (next)** — `shared/game-engine` + `shared/voice` → `src/engine`, same shim rule.
+
+Conventions when moving a tree in:
+
+- **`git mv` the whole subtree** preserving internal structure so intra-tree relative
+  imports stay valid and `@shared/*` imports resolve unchanged through the root alias
+  (they don't care where the file physically lives). Then write a shim at each OLD
+  importable (non-test) path: `export * from '<relative path into
+  ../../babylon/src/<area>/...>'` (no default exports exist, so `export *` is complete).
+  Tests move WITH the code (no shim); they're not an importable surface.
+- **Extend the exports map** in `packages/babylon/package.json` (`./<area>` barrel +
+  `./<area>/*` glob), and mirror it in **both** vitest configs' `@insimul/babylon` alias
+  (already points at the `src` directory) — the root `tsconfig.check.json`
+  `@insimul/babylon/*` path already covers deep subpaths.
+- **A barrel `index.ts` per area** is React-free: re-export collision-free runtime
+  modules flat, but **namespace** (`export * as foo from './foo'`) modules that share
+  symbol names (the optimization/diagnostics toolkits collide on `QualityPreset`,
+  `QUALITY_PRESETS`, `estimateMeshBytes`, …), and DON'T re-export React entry points
+  (`BabylonWorld`, `LoadingScreen`, the migration modal) — they stay deep-import-only so
+  importing the barrel never needs the optional `react` peer. `DataSource` is a type-only
+  `interface`; the runtime values are `ApiDataSource`/`FileDataSource`/`createDataSource`.
+- **React is an optional peer of `@insimul/babylon`** (`peerDependenciesMeta.react.optional`).
+  The scoped `packages/babylon/vitest.config.ts` needs `@shared`, `@insimul/core`, and
+  `@insimul/babylon-game` aliases (mirroring the root config) once the moved suites pull them.
+- **Guard the surface**: add subpath assertions to
+  `packages/babylon/src/__tests__/exports-map.test.ts` and shim-completeness to
+  `import-hygiene.test.ts`. Verify a guard actually FAILS on a violation (delete a shim,
+  run, restore) — a vacuous guard is worse than none.
+
 ### Install gotcha in this workspace
 
 The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists
