@@ -35,6 +35,11 @@ asserts every `@shared/...` import resolves in-repo and nothing imports `@shared
   vitest suites — `vitest.config.ts` excludes them by name so `vitest run` stays green.
   Migrate one to vitest (import `describe`/`it`/`expect` from `vitest`) to opt it in.
 - `vitest` is a dev-only dep; it resolves from the workspace-hoisted `node_modules`.
+- Any package under `packages/*` where `npm test` gets run directly (the ralph verify
+  gate does this per-package) needs its **own scoped `vitest.config.ts`** — without
+  one, vitest walks up to the root config, whose include globs match nothing from the
+  package cwd, and exits 1 with "No test files found". See
+  `packages/typescript/vitest.config.ts` and `packages/core/vitest.config.ts`.
 
 ## `@insimul/core` and the re-export-shim pattern (core-extraction)
 
