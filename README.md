@@ -55,3 +55,16 @@ relative imports that only resolve inside a *generated* game project, not standa
 > `GameQuestManager` cross-repo back-reference described in
 > `docs/PLATFORM_SPLIT_AND_ENGINE_PLUGINS.md` §A0 — is tracked follow-up. Do **not** add
 > new `@ts-nocheck` directives to silence errors.
+
+### Run the tests
+
+```bash
+npm test
+```
+
+`npm test` runs `vitest run`, which executes the package suites (currently
+`packages/babylon-game`) plus the **import-hygiene guard**
+(`shared/__tests__/import-hygiene.test.ts`) — a filesystem check that asserts every
+`@shared/...` import in `shared/` and `packages/*/src` resolves to a file **in this
+repo** and that nothing imports the platform-only `@shared/schema`, so the runtime can
+never silently regain a back-reference into `insimul-platform`.
