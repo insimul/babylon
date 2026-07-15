@@ -122,6 +122,36 @@ emitted JSON Schema counterparts. Conventions:
 - Golden save fixtures live in `packages/core/conformance/saves/` (copied
   read-only from `insimul-platform/shared/__tests__/fixtures/saves/`).
 
+### Conformance corpus (US-CE5)
+
+`packages/core/conformance/` is the language-neutral, data-only cross-engine
+parity gate (the future `libinsimul` C harness reads the same JSON). Layout and
+gotchas:
+
+- `conformance/prolog/*.json` — golden Prolog cases as `{ area, description,
+  cases: [{ name, kb: string[], query, expected: Binding[] }] }`. `expected` is
+  the full solution set: `[]` = fails, `[{}]` = succeeds with no bindings, one
+  object per solution otherwise. Compared as an **unordered multiset** so a native
+  engine may enumerate in any order. Format documented in `conformance/README.md`.
+- **The tests live under `src/`, the data under `conformance/`.** The root
+  `vitest.config.ts` `include` only matches `packages/core/src/**/*.test.ts`, so
+  the runner (`src/conformance/__tests__/*.test.ts`) reads the JSON via a relative
+  path up to `conformance/`. Don't put `*.test.ts` under `conformance/` — the root
+  gate won't run it.
+- **tau-prolog gotchas** (verified while authoring the corpus):
+  - `library(lists)` predicates (`member/2`, `length/2`, `nth0/3`, …) need
+    `:- use_module(library(lists)).` **in the program**, even though
+    `tau-engine.ts` calls `loadLists(pl)` at import — the module is registered
+    globally but not loaded into a fresh session without the directive.
+  - An anonymous `_` **in the query goal** leaks into `QueryResult.bindings` as
+    `{"_":"_"}`. To project one column cleanly, route it through a rule
+    (`qa(Q) :- quest(Q,_,_,_,active).`) — `_` inside a **rule body** does not leak.
+  - Atoms bind as JSON strings, integers as JSON numbers; quoted atoms
+    (`'Find the Sword'`) come back unquoted.
+- Migration conformance: `migrateSaveFile` (in `save-file.ts`) walks the
+  `save-file-migrations.ts` registry to `SAVE_FILE_VERSION`; the v1 fixture
+  exercises both steps (language-progress backfill, snapshot version stamping).
+
 ### Install gotcha in this workspace
 
 The **workspace-parent worktree** (`.worktrees/<name>/package.json`) lists
