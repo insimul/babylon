@@ -21,10 +21,10 @@ import { buildLanguageAwareSystemPrompt, buildWorldLanguageContext, extractLangu
 import type { WorldLanguageContext } from "@shared/language/language-utils";
 import { LanguageProgressTracker } from "../logic/LanguageProgressTracker";
 import { scorePronunciation, formatPronunciationFeedback } from "@shared/language/pronunciation-scoring";
-import { InsimulClient } from '@insimul/typescript';
+import { InsimulClient } from '@insimul/babylon/conversation';
 import * as Sentry from '@sentry/react';
 import type { ConversationQuestBridge } from '@shared/game-engine/logic/ConversationQuestBridge';
-import type { ConversationState } from '@insimul/typescript';
+import type { ConversationState } from '@insimul/babylon/conversation';
 import type { IDataSource as DataSource } from '@shared/game-engine/data-source';
 import { ConversationalActionDetector, type ConversationalAction, type NpcConversationTurnState, type DetectorContext } from "../logic/ConversationalActionDetector";
 import { ListenAndRepeatController, type RepeatAttemptResult } from "./ListenAndRepeatController";
@@ -33,7 +33,7 @@ import { ConversationDifficultyMonitor, type TurnMetrics } from "../logic/Conver
 import { buildScaffoldingDirective } from "@shared/language/cefr-adaptation";
 import { buildVocabularyRangeSummary } from "@shared/language/vocabulary-frequency";
 import type { CEFRLevel } from "@shared/language/cefr";
-import type { ChatProviderType, AudioChunkOutput, FacialData } from '@insimul/typescript';
+import type { ChatProviderType, AudioChunkOutput, FacialData } from '@insimul/babylon/conversation';
 import { StreamingAudioPlayer } from "./StreamingAudioPlayer";
 import type { StreamingAudioChunk } from "./StreamingAudioPlayer";
 import { LipSyncController } from "./LipSyncController";

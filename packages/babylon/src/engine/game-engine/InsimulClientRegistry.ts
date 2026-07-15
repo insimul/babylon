@@ -11,7 +11,7 @@
  *   if (client) { await client.synthesizeSpeech(text); }
  */
 
-import type { InsimulClient } from '@insimul/typescript';
+import type { InsimulClient } from '@insimul/babylon/conversation';
 
 let _instance: InsimulClient | null = null;
 

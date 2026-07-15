@@ -234,6 +234,24 @@ pipeline's vendored source paths) keeps resolving unchanged:
   export gate lives platform-side). `SMOKE_BREAK=1` disables the fix to demonstrate the gate
   fails. **A platform follow-up IS required** (the copy step must additionally vendor
   `packages/babylon/src -> src/insimul-babylon`) — recorded verbatim in progress.txt (US-BC4).
+- **US-BC5 (done)** — the two-package endgame is guarded + documented. Two new
+  `shared/__tests__/import-hygiene.test.ts` describe blocks: (1) **source-location** —
+  non-shim source may live only under `packages/{core,babylon}`; a file is a "shim" when
+  its stripped body re-exports into `babylon/src/` or `packages/core/src`. Pre-existing
+  stragglers are grandfathered in `shared/GRANDFATHERED_SOURCE.json` (79 files); the guard
+  fails on a NEW non-shim file under `shared/`/deprecated dirs AND on a stale snapshot
+  entry (so the list only shrinks). (2) **import direction** — `@insimul/babylon` may
+  import `@insimul/core` + itself among first-party packages, never a deprecated
+  passthrough (`@insimul/typescript`, `@insimul/babylon-game`) or a native-engine sibling.
+  Both direction/source guards scan SHIPPED source only (exclude `*.test.*`/`__tests__/`) —
+  `exports-map.test.ts` deliberately imports the deprecated aliases to prove the shims
+  resolve, which is correct and must not trip the direction guard. To keep babylon off its
+  own deprecated aliases, US-BC5 rewrote the 3 moved-in files that still imported them
+  (`InsimulClientRegistry`, `BabylonGame`, `BabylonChatPanel`) to `@insimul/babylon/{conversation,data}`
+  subpaths — pure specifier swap (same physical target via the shim), verified by check+tests.
+  README rewritten around the two-package model + quickstart; `CHANGELOG.md` seeded.
+  (`@shared/*` self-references inside babylon are fine — `@shared` is the shared tree, not
+  a separate npm package; only cross-PACKAGE `@insimul/*` deps are constrained.)
 
 Conventions when moving a tree in:
 

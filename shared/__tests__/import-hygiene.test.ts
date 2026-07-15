@@ -475,3 +475,187 @@ describe('shim completeness: shared/game-engine + shared/voice are fully shimmed
     ).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-BC5 — Source-location guard for the two-package endgame.
+//
+// The babylon-consolidation endgame is TWO first-party TS packages that hold real
+// source: packages/core (@insimul/core, the engine-agnostic contract) and
+// packages/babylon (@insimul/babylon, the web/Babylon runtime). Everything else that
+// still lives under shared/ or the deprecated packages/{typescript,babylon-game}/src
+// must be a thin re-export SHIM into one of those two homes — so a new module can
+// never quietly land back in shared/ (or a deprecated package) and re-fragment the
+// runtime.
+//
+// A file is a "shim" when its (comment/string-stripped) body re-exports into
+// packages/{core,babylon}/src (the babylon-game/typescript/game-engine/voice shims all
+// point at `.../babylon/src/...`; the core-extraction shims point at
+// `.../packages/core/src/...`). Non-shim source outside packages/{core,babylon} is only
+// tolerated for the pre-existing GAME/DOMAIN stragglers snapshotted in
+// shared/GRANDFATHERED_SOURCE.json (language-learning / assessment / quest / narrative /
+// onboarding / procedural / telemetry — future core/domain-package territory). That list
+// may only SHRINK: this guard fails on a NEW non-shim file anywhere under the legacy
+// roots, and fails if a snapshot entry stops being a non-shim file (moved out or turned
+// into a shim) so cleanups force a deliberate snapshot edit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GRANDFATHERED_SNAPSHOT = join(SHARED, 'GRANDFATHERED_SOURCE.json');
+
+// The legacy roots that must be shim-only save the grandfathered stragglers. The two
+// allowed homes for real source — packages/core/src and packages/babylon/src — are NOT
+// walked here (they are exactly where non-shim source belongs).
+const LEGACY_SOURCE_ROOTS = [
+  SHARED,
+  join(PACKAGES, 'typescript', 'src'),
+  join(PACKAGES, 'babylon-game', 'src'),
+];
+
+/** A file is a shim once its stripped body re-exports into packages/{core,babylon}/src. */
+function isShimFile(file: string): boolean {
+  const s = stripCommentsAndStrings(readFileSync(file, 'utf8'));
+  return s.includes('babylon/src/') || s.includes('packages/core/src');
+}
+
+/** Non-test, non-shim source files (repo-relative, sorted) under the legacy roots. */
+function collectLegacyNonShimSources(): string[] {
+  const files: string[] = [];
+  for (const root of LEGACY_SOURCE_ROOTS) {
+    if (existsSync(root)) walk(root, files);
+  }
+  return files
+    .filter((f) => !/\.test\.tsx?$/.test(f) && !f.includes(`${'/'}__tests__${'/'}`))
+    .filter((f) => !isShimFile(f))
+    .map((f) => relative(ROOT, f).replace(/\\/g, '/'))
+    .sort();
+}
+
+describe('source location: only packages/{core,babylon} hold non-shim source (US-BC5)', () => {
+  const snapshot: { files: string[] } = JSON.parse(readFileSync(GRANDFATHERED_SNAPSHOT, 'utf8'));
+  const allowed = new Set(snapshot.files);
+  const currentNonShim = collectLegacyNonShimSources();
+
+  it('the grandfathered snapshot is non-trivial (guard is wired up)', () => {
+    // A truncated/empty snapshot would let a new stray source file through the check
+    // below by making `allowed` too small to matter. The straggler domain layer is ~79 files.
+    expect(snapshot.files.length).toBeGreaterThan(50);
+  });
+
+  it('no NEW non-shim source lands under shared/ or a deprecated package (only packages/{core,babylon} may)', () => {
+    const strays = currentNonShim.filter((f) => !allowed.has(f));
+    expect(
+      strays,
+      `New non-shim source appeared outside packages/{core,babylon}. Move it INTO packages/core (contract) or packages/babylon (web runtime) and leave a one-line re-export shim at the old path — do NOT add it to shared/GRANDFATHERED_SOURCE.json to dodge this guard:\n${strays.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every grandfathered entry still exists as a non-shim file (the list may only shrink, deliberately)', () => {
+    const present = new Set(currentNonShim);
+    const stale = snapshot.files.filter((f) => !present.has(f));
+    expect(
+      stale,
+      `A grandfathered straggler no longer exists as a non-shim file (moved into packages/{core,babylon} or turned into a shim — good). Remove it from shared/GRANDFATHERED_SOURCE.json so the allowlist shrinks:\n${stale.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('the deprecated packages/{typescript,babylon-game}/src are 100% shims (no non-shim source at all)', () => {
+    const deprecatedStray = currentNonShim.filter(
+      (f) => f.startsWith('packages/typescript/src/') || f.startsWith('packages/babylon-game/src/'),
+    );
+    expect(
+      deprecatedStray,
+      `A deprecated passthrough package regained real source — it must stay 100% re-export shims into @insimul/babylon:\n${deprecatedStray.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-BC5 — Import-direction guard: @insimul/babylon -> @insimul/core only.
+//
+// The mirror of the core dependency-direction guard, for the top of the web stack.
+// @insimul/babylon is the web/Babylon runtime; the ONLY first-party PACKAGE it may
+// depend on is @insimul/core (the contract). It may of course import itself
+// (@insimul/babylon/*), the shared/ tree (@shared/* — the runtime's shared modules,
+// including its own engine shims and the straggler domain layer, NOT a separate
+// package), @babylonjs/*, react, and third-party deps. What it must NOT import:
+//   - the deprecated passthrough packages @insimul/typescript / @insimul/babylon-game
+//     (they re-export back INTO @insimul/babylon — a package cycle, and they block the
+//     deprecation timeline; import @insimul/babylon/conversation | /data instead);
+//   - a sibling native-engine package @insimul/{unity,unreal,godot};
+//   - a relative path that escapes the packages/babylon package (reach core via the
+//     @insimul/core specifier, never `../../core/src`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BABYLON_PKG = join(PACKAGES, 'babylon');
+const BABYLON_SRC = join(BABYLON_PKG, 'src');
+
+interface BabylonImport {
+  spec: string;
+  file: string;
+}
+
+function collectBabylonImports(): BabylonImport[] {
+  const imports: BabylonImport[] = [];
+  const all: string[] = [];
+  if (existsSync(BABYLON_SRC)) walk(BABYLON_SRC, all);
+  // Shipped source only — a package's dependency direction is what it SHIPS, not what
+  // its tests exercise. exports-map.test.ts deliberately imports the deprecated aliases
+  // (@insimul/typescript, @insimul/babylon-game/*) to prove those shims still resolve.
+  const files = all.filter((f) => !/\.test\.tsx?$/.test(f) && !f.includes(`${'/'}__tests__${'/'}`));
+  for (const file of files) {
+    const text = stripCommentsAndStrings(readFileSync(file, 'utf8'));
+    let m: RegExpExecArray | null;
+    ANY_IMPORT.lastIndex = 0;
+    while ((m = ANY_IMPORT.exec(text)) !== null) {
+      imports.push({ spec: m[1], file: relative(ROOT, file) });
+    }
+  }
+  return imports;
+}
+
+/** Returns a reason string if a first-party @insimul specifier is forbidden in babylon. */
+function forbiddenBabylonSpecifier(spec: string): string | null {
+  // @insimul/core is the ONLY allowed cross-package first-party dependency.
+  if (spec === '@insimul/core' || spec.startsWith('@insimul/core/')) return null;
+  // Self-imports (the package's own subpath entry points) are fine.
+  if (spec === '@insimul/babylon' || spec.startsWith('@insimul/babylon/')) return null;
+  if (spec === '@insimul/typescript' || spec.startsWith('@insimul/typescript/'))
+    return 'deprecated passthrough — import @insimul/babylon/conversation instead';
+  if (spec === '@insimul/babylon-game' || spec.startsWith('@insimul/babylon-game/'))
+    return 'deprecated passthrough — import @insimul/babylon/data instead';
+  if (/^@insimul\/(unity|unreal|godot)(\/|$)/.test(spec))
+    return 'sibling native-engine package (the web runtime must not depend on it)';
+  return null;
+}
+
+/** True if a relative specifier escapes the packages/babylon PACKAGE. */
+function relativeEscapesBabylon(spec: string, file: string): boolean {
+  if (!spec.startsWith('.')) return false;
+  const resolved = resolve(dirname(join(ROOT, file)), spec);
+  const rel = relative(BABYLON_PKG, resolved);
+  return rel === '..' || rel.startsWith(`..${'/'}`) || rel.startsWith('..\\');
+}
+
+describe('dependency direction: @insimul/babylon depends on @insimul/core only (US-BC5)', () => {
+  const babylonImports = collectBabylonImports();
+
+  it('scans a non-trivial number of packages/babylon/src sources (guard is wired up)', () => {
+    // Vacuous-pass sanity check — the consolidated web engine holds hundreds of modules.
+    expect(babylonImports.length).toBeGreaterThan(50);
+  });
+
+  it('imports no first-party package but @insimul/core (+ itself), and no relative path escaping packages/babylon/', () => {
+    const offenders = babylonImports
+      .map(({ spec, file }) => {
+        const reason =
+          forbiddenBabylonSpecifier(spec) ??
+          (relativeEscapesBabylon(spec, file) ? 'relative path escapes packages/babylon/' : null);
+        return reason ? `${spec}  [${reason}]  (in ${file})` : null;
+      })
+      .filter((x): x is string => x !== null);
+    const unique = [...new Set(offenders)].sort();
+    expect(
+      unique,
+      `@insimul/babylon must depend on @insimul/core only among first-party packages. Forbidden imports in packages/babylon/src:\n${unique.join('\n')}`,
+    ).toEqual([]);
+  });
+});
