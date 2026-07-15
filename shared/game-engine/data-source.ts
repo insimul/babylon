@@ -10,7 +10,7 @@
  * never on the concrete implementations.
  */
 
-import type { VisualAsset } from '@shared/schema';
+import type { VisualAsset } from '@shared/asset-types';
 
 // ─── Supporting Types ────────────────────────────────────────────────────────
 

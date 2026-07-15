@@ -7,7 +7,7 @@
  */
 
 import { Scene, Sound, Vector3, AbstractMesh, Observer } from '@babylonjs/core';
-import type { VisualAsset } from '@shared/schema';
+import type { VisualAsset } from '@shared/asset-types';
 
 export type AudioRole = 'footstep' | 'ambient' | 'combat' | 'interact' | 'music';
 

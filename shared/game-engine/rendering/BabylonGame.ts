@@ -259,7 +259,7 @@ import {
 } from "@shared/game-engine/logic/KeyboardMap";
 import { BabylonPhotographySystem, type SceneObject } from "@shared/game-engine/rendering/BabylonPhotographySystem";
 import { BabylonPhotoBookPanel } from "@shared/game-engine/rendering/BabylonPhotoBookPanel";
-import type { VisualAsset } from "@shared/schema";
+import type { VisualAsset } from "@shared/asset-types";
 import {
   PLAYER_MODEL_URL,
   NPC_DEFAULT_MODEL_URL,
