@@ -58,6 +58,22 @@ When you move a module `shared/foo.ts` into `packages/core/src/foo.ts`:
    the `@insimul/core` path aliases in `tsconfig.check.json`, and the `@insimul/core`
    alias in `vitest.config.ts` — no per-file wiring needed after that.
 
+Two gotchas when the moved set is large (e.g. the `shared/prolog/` toolchain, US-CE2):
+
+- **Side-effect-only modules** (no `import`/`export`, just top-level statements — e.g.
+  `tau-prolog-patch.ts` patches `globalThis`) are NOT modules to `tsc`, so `export *
+  from './x'` yields TS2306 and a bare re-export shim fails the same way. Use a
+  side-effect import instead — in the barrel omit it entirely (its real importer, e.g.
+  `tau-engine.ts`, already does `import './tau-prolog-patch'`), and make its shim
+  `import '../../packages/core/src/prolog/tau-prolog-patch';` (not `export *`).
+- **Ambiguous barrel names**: a flat `export *` barrel over many modules DOES error
+  (TS2308) when two modules export the same name (e.g. `ValidationResult`,
+  `PredicateArg`). Resolve by explicitly re-exporting one variant
+  (`export type { ValidationResult } from './content-validators';`) after the star
+  exports — both variants stay reachable via `@insimul/core/prolog/<module>`. (Check
+  for dupes up front: `grep -hoE "^export (const|function|class|type|interface|enum)
+  [A-Za-z0-9_]+" src/**/*.ts | sed ... | sort | uniq -d`.)
+
 Before committing a core-extraction story run, in order: `packages/core`
 `npm run typecheck`, root `npm run check`, root `npm test` (the import-hygiene
 guard already scans `packages/core/src`).

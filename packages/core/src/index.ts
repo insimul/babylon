@@ -3,9 +3,9 @@
  *
  * This package holds the parts of the runtime that native engine plugins
  * (Unreal/Unity/Godot) must consume WITHOUT dragging Babylon.js along: the
- * save-file format and its migrations, world types, and (in later
- * core-extraction stories) the Prolog toolchain, IR, and quest/data-source
- * types. It depends on NO @babylonjs/*, react, or DOM APIs.
+ * save-file format and its migrations, world types, the Prolog toolchain
+ * (see ./prolog), and (in later core-extraction stories) the IR and
+ * quest/data-source types. It depends on NO @babylonjs/*, react, or DOM APIs.
  *
  * Files here are also re-exported from their historical `shared/<name>` paths
  * via one-line shims, so existing `@shared/*` imports and the Babylon export
@@ -24,3 +24,4 @@ export * from './playthrough-overview';
 export * from './insimul-version';
 export * from './validation-failures';
 export * from './asset-types';
+export * from './prolog';

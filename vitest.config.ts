@@ -23,13 +23,15 @@ export default defineConfig({
       // Per-package vitest suites (currently only babylon-game ships runnable specs).
       'packages/babylon-game/src/**/*.test.{ts,tsx}',
     ],
-    // The four shared/*.test.ts files under shared/prolog and shared/game-engine/logic
-    // are legacy tsx harnesses (run via `npx tsx <file>`, no describe/it), NOT vitest
-    // suites — excluding them keeps `vitest run` green. Migrate them to vitest to opt in.
+    // These *.test.ts files are legacy tsx harnesses (run via `npx tsx <file>`, no
+    // describe/it), NOT vitest suites — excluding them keeps `vitest run` green.
+    // tau-engine.test.ts moved with tau-engine into packages/core/src/prolog (US-CE2);
+    // it is not matched by `include` above, but stays listed here to document intent.
+    // Migrate one to vitest (import describe/it/expect from 'vitest') to opt it in.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'shared/prolog/tau-engine.test.ts',
+      'packages/core/src/prolog/tau-engine.test.ts',
       'shared/game-engine/logic/VisualVocabularyDetector.test.ts',
       'shared/game-engine/logic/VocabularyCollectionSystem.test.ts',
       'shared/game-engine/logic/SaveConflictResolver.test.ts',
