@@ -26,10 +26,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@babylonjs/core": "^8.54.1",
-    "@babylonjs/gui": "^8.54.1",
-    "@babylonjs/inspector": "^8.56.1",
-    "@babylonjs/loaders": "^8.54.1",
     "@sentry/react": "^10.48.0",
     "tau-prolog": "^0.3.4"
   },

@@ -68,6 +68,22 @@ describe('@insimul/babylon exports map', () => {
     expect('BabylonWorld' in data).toBe(false);
     expect('LoadingScreen' in data).toBe(false);
   });
+
+  it('./engine subpath carries the Babylon engine barrel (US-BC3)', async () => {
+    // The curated game-engine surface (the same set @shared/game-engine exposed).
+    const engine = await import('@insimul/babylon/engine');
+    // vegetation-zones is one of the barrelled modules — a concrete runtime value.
+    expect(Array.isArray(engine.ELEVATION_ZONES)).toBe(true);
+  });
+
+  it('deep ./engine/* subpaths resolve (exports-map glob)', async () => {
+    // Deep pure-data engine modules (no @babylonjs) reachable via the glob.
+    const cats = await import('@insimul/babylon/engine/game-engine/building-categories.js');
+    expect(typeof cats.BUILDING_CATEGORY_GROUPINGS).toBe('object');
+    const voice = await import('@insimul/babylon/engine/voice/audio-utils.js');
+    // audio-utils exports helper functions.
+    expect(voice).toBeTruthy();
+  });
 });
 
 describe('legacy @insimul/typescript shims still resolve to the moved SDK', () => {
@@ -93,5 +109,24 @@ describe('legacy @insimul/babylon-game shims still resolve to the moved data lay
     expect(wsmShim.WorldStateManager).toBe(data.WorldStateManager);
     // Namespaced on the barrel, flat on the deep module — identity holds through both.
     expect(rpShim.ResourceProfiler).toBe(data.resourceProfiler.ResourceProfiler);
+  });
+});
+
+describe('legacy @shared/game-engine + @shared/voice shims still resolve to the moved engine (US-BC3)', () => {
+  it('an @shared/game-engine deep path re-exports the same value now living in @insimul/babylon/engine', async () => {
+    const [shim, moved] = await Promise.all([
+      import('@shared/game-engine/building-categories'),
+      import('@insimul/babylon/engine/game-engine/building-categories.js'),
+    ]);
+    expect(shim.BUILDING_CATEGORY_GROUPINGS).toBe(moved.BUILDING_CATEGORY_GROUPINGS);
+  });
+
+  it('an @shared/voice deep path re-exports the moved voice module', async () => {
+    const [shim, moved] = await Promise.all([
+      import('@shared/voice/audio-utils'),
+      import('@insimul/babylon/engine/voice/audio-utils.js'),
+    ]);
+    // Same module object identity through the shim.
+    expect(Object.keys(shim).sort()).toEqual(Object.keys(moved).sort());
   });
 });

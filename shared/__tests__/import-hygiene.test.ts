@@ -392,3 +392,86 @@ describe('shim completeness: @insimul/babylon-game surface is fully shimmed into
     ).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-BC3 — Shim-completeness guard for the shared/game-engine + shared/voice ->
+// @insimul/babylon/engine consolidation.
+//
+// The Babylon engine (rendering/, logic/, systems/, types/interfaces/IR/asset-pipeline/
+// world-type-presets) and the voice layer moved out of shared/ into
+// packages/babylon/src/engine/{game-engine,voice}. The platform's ~80 @shared/game-engine
+// + @shared/voice aliases and the export pipeline's shared/ vendoring depend on every old
+// path still resolving, so a one-line re-export shim was left at EACH old importable path.
+//
+// packages/babylon/OLD_ENGINE_EXPORT_SURFACE.json snapshots that surface (per source root:
+// game-engine, voice). This guard asserts every snapshotted path (a) still exists as a shim
+// under its old `root`, (b) re-exports into `movedTo` (a thin passthrough, not a
+// re-implementation), and (c) the moved target actually exists. Deleting a shim requires
+// deleting its snapshot entry — a deliberate deprecation, never an accident.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EngineSurface {
+  root: string;
+  movedTo: string;
+  paths: string[];
+}
+
+const ENGINE_SURFACE_SNAPSHOT = join(ROOT, 'packages', 'babylon', 'OLD_ENGINE_EXPORT_SURFACE.json');
+
+describe('shim completeness: shared/game-engine + shared/voice are fully shimmed into @insimul/babylon/engine (US-BC3)', () => {
+  const snapshot: { surfaces: EngineSurface[] } = JSON.parse(readFileSync(ENGINE_SURFACE_SNAPSHOT, 'utf8'));
+
+  it('the snapshot lists both moved source roots (guard is wired up)', () => {
+    const roots = snapshot.surfaces.map((s) => s.root).sort();
+    expect(roots).toEqual(['shared/game-engine', 'shared/voice']);
+  });
+
+  it('the game-engine surface is non-trivial (a truncated snapshot would let a missing shim slip through)', () => {
+    const ge = snapshot.surfaces.find((s) => s.root === 'shared/game-engine')!;
+    // ~254 importable engine modules moved; guard against an accidentally-empty snapshot.
+    expect(ge.paths.length).toBeGreaterThan(200);
+  });
+
+  it('every old importable path still exists as a re-export shim into packages/babylon/src/engine', () => {
+    const problems: string[] = [];
+    for (const surface of snapshot.surfaces) {
+      for (const rel of surface.paths) {
+        const shimFile = join(ROOT, surface.root, rel);
+        if (!existsSync(shimFile)) {
+          problems.push(`${surface.root}/${rel}  — MISSING shim (consumers of @shared/${surface.root.split('/').pop()}/${rel.replace(/\.(ts|tsx)$/, '')} would break)`);
+          continue;
+        }
+        const stripped = stripCommentsAndStrings(readFileSync(shimFile, 'utf8'));
+        if (!stripped.includes('babylon/src/engine')) {
+          problems.push(`${surface.root}/${rel}  — not a shim into ${surface.movedTo} (grew a local declaration?)`);
+        }
+        // A shim must be a thin re-export (same rule as the core-extraction / US-BC2 shims).
+        const badLines = stripped
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l !== '' && !(l.includes('babylon/src/engine') || /^[\w$,{}*\s]+$/.test(l.replace(/\bas\b/g, ' '))));
+        if (badLines.length > 0) {
+          problems.push(`${surface.root}/${rel}  — non-shim line: ${badLines[0]}`);
+        }
+      }
+    }
+    const unique = [...new Set(problems)].sort();
+    expect(
+      unique,
+      `@shared/game-engine|voice shim regressions — restore the one-line re-export shim (export * from '<relative>/packages/babylon/src/engine/<root>/<path>'), or drop the snapshot entry if intentionally deprecating:\n${unique.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every moved target exists under packages/babylon/src/engine', () => {
+    const missing: string[] = [];
+    for (const surface of snapshot.surfaces) {
+      for (const rel of surface.paths) {
+        if (!existsSync(join(ROOT, surface.movedTo, rel))) missing.push(`${surface.movedTo}/${rel}`);
+      }
+    }
+    expect(
+      missing,
+      `A snapshotted module is missing from its new home — the shim points at a file that no longer exists:\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+});

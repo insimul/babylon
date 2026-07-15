@@ -212,7 +212,12 @@ pipeline's vendored source paths) keeps resolving unchanged:
 - **US-BC2** — `packages/babylon-game/src` → `src/data`; babylon-game files are shims.
   `packages/babylon-game/OLD_EXPORT_SURFACE.json` snapshots the shimmed surface and the
   import-hygiene guard fails if a shim goes missing / stops being a thin re-export.
-- **US-BC3 (next)** — `shared/game-engine` + `shared/voice` → `src/engine`, same shim rule.
+- **US-BC3 (done)** — `shared/game-engine` + `shared/voice` → `src/engine/{game-engine,voice}`;
+  254+4 one-line shims at the old `@shared/...` paths. `packages/babylon/OLD_ENGINE_EXPORT_SURFACE.json`
+  snapshots both roots (`surfaces: [{root, movedTo, paths}]`). The `@babylonjs/*` deps moved
+  from the root `package.json` into `packages/babylon`'s. Exports map gained `./engine` +
+  `./engine/*` (barrel re-exports `./game-engine`'s curated index; rendering/logic/systems and
+  voice are deep-import only).
 
 Conventions when moving a tree in:
 
@@ -240,6 +245,24 @@ Conventions when moving a tree in:
   `packages/babylon/src/__tests__/exports-map.test.ts` and shim-completeness to
   `import-hygiene.test.ts`. Verify a guard actually FAILS on a violation (delete a shim,
   run, restore) — a vacuous guard is worse than none.
+
+Two gotchas learned moving `shared/game-engine` (a subtree with relative escapes, US-BC3):
+
+- **`git mv` preserves INTRA-tree relatives but breaks relatives that ESCAPE the tree.**
+  `@shared/*` imports survive (alias, location-independent), but a relative path that
+  pointed OUT of the old subtree (`../../narrative/...`, `../../packages/core/src/...`)
+  silently resolves to a now-nonexistent path at the new depth. tsc reports these as
+  `TS2307 Cannot find module` PLUS a cascade of `TS2305 has no exported member` / implicit-any
+  in files that imported the broken types — on a repo that was green on main, **treat every
+  new error as a symptom of the move**, not pre-existing debt. Fix by rewriting the escaping
+  relatives to aliases: `@shared/<sibling>` for shared/ siblings, `@insimul/core/<path>` for
+  the core shims (`babylon → core` is an allowed direction). Detect them with a resolve-check
+  script (relative specifier whose target file doesn't exist post-move), not by eyeballing.
+- **Moved `*.test.ts` land under a new `include` glob.** The 3 legacy tsx harnesses in
+  `game-engine/logic/*.test.ts` (broken `/game-engine/...` absolute imports, no describe/it)
+  were excluded by name at their old `shared/` path; after moving under
+  `packages/babylon/src/engine/` they matched BOTH the root and the scoped vitest `src/**`
+  include globs — re-add the exclude at the NEW path in **both** `vitest.config.ts` files.
 
 ### Install gotcha in this workspace
 

@@ -41,9 +41,12 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       'packages/core/src/prolog/tau-engine.test.ts',
-      'shared/game-engine/logic/VisualVocabularyDetector.test.ts',
-      'shared/game-engine/logic/VocabularyCollectionSystem.test.ts',
-      'shared/game-engine/logic/SaveConflictResolver.test.ts',
+      // Legacy tsx harnesses that moved with the engine (US-BC3: shared/game-engine ->
+      // packages/babylon/src/engine/game-engine). They import via a broken `/game-engine/...`
+      // absolute path and have no describe/it — keep them excluded from `vitest run`.
+      'packages/babylon/src/engine/game-engine/logic/VisualVocabularyDetector.test.ts',
+      'packages/babylon/src/engine/game-engine/logic/VocabularyCollectionSystem.test.ts',
+      'packages/babylon/src/engine/game-engine/logic/SaveConflictResolver.test.ts',
     ],
   },
 });

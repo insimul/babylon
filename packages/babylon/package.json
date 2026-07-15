@@ -26,6 +26,14 @@
     "./data/*": {
       "import": "./src/data/*",
       "types": "./src/data/*"
+    },
+    "./engine": {
+      "import": "./src/engine/index.ts",
+      "types": "./src/engine/index.ts"
+    },
+    "./engine/*": {
+      "import": "./src/engine/*",
+      "types": "./src/engine/*"
     }
   },
   "repository": {
@@ -59,6 +67,12 @@
     "web"
   ],
   "license": "Apache-2.0",
+  "dependencies": {
+    "@babylonjs/core": "^8.54.1",
+    "@babylonjs/gui": "^8.54.1",
+    "@babylonjs/inspector": "^8.56.1",
+    "@babylonjs/loaders": "^8.54.1"
+  },
   "peerDependencies": {
     "@mlc-ai/web-llm": "^0.2.82",
     "react": "^18.0.0"
