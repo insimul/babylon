@@ -317,6 +317,21 @@ Two gotchas learned moving `shared/game-engine` (a subtree with relative escapes
   were excluded by name at their old `shared/` path; after moving under
   `packages/babylon/src/engine/` they matched BOTH the root and the scoped vitest `src/**`
   include globs — re-add the exclude at the NEW path in **both** `vitest.config.ts` files.
+### Ensemble → Prolog converter is canonical, not the VESPACE e2e set (US-PC1)
+
+`packages/core/src/prolog/ensemble-converter.ts` is the **canonical** Ensemble →
+Prolog path (stable entry surface `convertVolitionRuleFile` / `convertEnsembleAction`,
+consumed by the platform `server/migrations/012-import-ensemble-as-prolog.ts` via the
+`@shared/prolog/ensemble-converter` shim). The verdict + capabilities table live in
+`packages/core/docs/ensemble-converter-decision.md`. The VESPACE e2e converter set
+(`insimul-platform/server/__tests__/vespace-rule-generation-e2e/`) is a **separate
+research/LLM-baseline harness** with an incompatible output vocabulary (decomposed
+`female(X)`/`affinity/3`, compact multi-head rules, a 3-tier action tree) and
+platform-only deps — do **not** promote it into core. New source-format converters
+(Kismet US-PC3, ToTT US-PC4) follow the legacy converter's preamble + `ConversionResult`
+contract, not the e2e vocabulary. Known gaps hardened in US-PC2: `ensemble-converter.ts`
+does not yet emit `rule_type/2` (which `content-validators.validateRuleContent`
+**requires**) or `rule_likelihood/2`.
 
 ### Install gotcha in this workspace
 
