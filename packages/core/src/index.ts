@@ -26,6 +26,14 @@ export * from './validation-failures';
 export * from './asset-types';
 export * from './prolog';
 
+// ── Radiant quest generation (US-RQ2) ──────────────────────────────────────
+// Pure, deterministic slot-filling engine over the radiant template vocabulary
+// (see prolog/predicate-schema radiant section + docs/radiant-templates.md).
+export * from './radiant/radiant-engine';
+// Starter template pack (US-RQ5) — genre-neutral base templates + the loader
+// convention (canonical data/radiant/base-templates.pl mirrored as a string).
+export * from './radiant/base-templates';
+
 // ── Quest contract (US-CE3) ────────────────────────────────────────────────
 // Quest-type registry, objective schema/fallbacks, hints, bonus math, branching,
 // timed challenges, and the save-file's quest view. NOTE: quest-difficulty(.-

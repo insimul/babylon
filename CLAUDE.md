@@ -164,6 +164,26 @@ gotchas:
 - Migration conformance: `migrateSaveFile` (in `save-file.ts`) walks the
   `save-file-migrations.ts` registry to `SAVE_FILE_VERSION`; the v1 fixture
   exercises both steps (language-progress backfill, snapshot version stamping).
+- **Radiant conformance (US-RQ4)**: `conformance/radiant/*.json` pins
+  `generateRadiantQuests` — each case is `{ kb, templates, seed, now, maxQuests?,
+  expected: { quests } }` and the runner (`src/conformance/__tests__/radiant-corpus.test.ts`)
+  feeds `kb ⧺ templates` to the engine. Unlike the Prolog corpus (unordered
+  solution *set*), radiant output is a single deterministic pick, so a case pins
+  the EXACT quest; `content` / `factsToAssert` / `factsToRetract` are compared as
+  sorted sets but the specific giver/item/target IS the contract (seed-driven).
+  Regenerate expected values with a `vite-node` dump of the engine, never by hand.
+  Format documented in `conformance/README.md` (§ "Radiant case format").
+- **Base template pack + loader (US-RQ5)**: a portable `.pl` data file
+  (`packages/core/data/radiant/base-templates.pl`) is the canonical, native-readable
+  source; because core is browser-safe (no fs), it is mirrored as the string constant
+  `BASE_RADIANT_TEMPLATES` in `src/radiant/base-templates.ts` (the
+  `HELPER_PREDICATES_PROLOG` convention) with a drift-guard test keeping the two
+  byte-identical. The loader seam is `GamePrologEngine.initialize({ radiantTemplates })`:
+  a world-layer template pack is **consulted** (like the base rule packs / `narrative_*`
+  templates), NOT asserted as a player fact, so it re-loads from the world export every
+  session and never lands in a save. Base packs must use only predicate-schema-guaranteed
+  predicates (`person`/`occupation`/`settlement`/`settlement_mayor`/`item_category`/
+  `business_owner`) so they are world-portable.
 
 ### Dependency-direction guard (US-CE6)
 

@@ -132,6 +132,15 @@ skill_gte(Actor, Skill, MinLevel) :-
 :- dynamic(friendship_tier/3).
 :- dynamic(assessment_completed/2).
 
+% ── Radiant quest generation (runtime provenance + cooldown bookkeeping) ──
+% Asserted by the radiant slot-filling engine when it emits a quest, and
+% persisted into save.currentState.prologFacts. Declared dynamic so the engine
+% can assert/retract them and so the save-restore fact validator recognises
+% them. The authored template predicates (radiant_template/2 etc.) are
+% consulted from world data and catalogued in predicate-schema.ts instead.
+:- dynamic(radiant_generated/3).
+:- dynamic(radiant_cooldown_until/2).
+
 % ── Collection objectives ────────────────────────────────────────────────
 % collect(Item, Count) — player collected enough of an item
 objective_complete(Player, QuestId, Idx) :-

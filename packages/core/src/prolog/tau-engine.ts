@@ -69,7 +69,14 @@ function extractBindings(answer: any): QueryBindings {
 export class TauPrologEngine {
   private session: any;
   private dynamicPredicates: Set<string> = new Set();
-  private consultedProgram: string = '';
+  // Accumulated consulted programs. rebuild() reconstructs the FULL KB from
+  // stored state, so consult() must ADD each program rather than replace the
+  // previous one — otherwise a caller that consults several packs into one
+  // engine (e.g. GamePrologEngine.initialize: world content + quests + helper
+  // rule packs, each a separate consult) silently keeps only the last, which
+  // breaks every rule defined in an earlier consult. Exact-duplicate chunks are
+  // skipped so an idempotent re-consult can't double-count in findall/aggregate.
+  private consultedPrograms: string[] = [];
   private factStore: Map<string, Set<string>> = new Map();
   private ruleStore: string[] = [];
 
@@ -99,7 +106,10 @@ export class TauPrologEngine {
    * Dynamic declarations are automatically prepended.
    */
   async consult(program: string): Promise<{ success: boolean; error?: string }> {
-    this.consultedProgram = program;
+    const trimmed = program.trim();
+    if (trimmed && !this.consultedPrograms.includes(trimmed)) {
+      this.consultedPrograms.push(trimmed);
+    }
 
     // Extract any dynamic declarations from the program itself
     const dynamicRegex = /:-\s*dynamic\s*\(?\s*([a-z_]\w*\s*\/\s*\d+)\s*\)?\s*\./g;
@@ -318,7 +328,7 @@ export class TauPrologEngine {
     this.dynamicPredicates.clear();
     this.factStore.clear();
     this.ruleStore = [];
-    this.consultedProgram = '';
+    this.consultedPrograms = [];
     this.session = pl.create(this.session.limit);
   }
 
@@ -350,9 +360,10 @@ export class TauPrologEngine {
     }
 
     // Consulted program
-    if (this.consultedProgram.trim()) {
+    const consulted = this.consultedProgramText();
+    if (consulted) {
       parts.push('% Consulted program');
-      parts.push(this.consultedProgram.trim());
+      parts.push(consulted);
       parts.push('');
     }
 
@@ -429,6 +440,11 @@ export class TauPrologEngine {
 
   // ── Internal ──────────────────────────────────────────────────────────────
 
+  /** Join every consulted program chunk into one program string. */
+  private consultedProgramText(): string {
+    return this.consultedPrograms.join('\n').trim();
+  }
+
   /**
    * Rebuild the tau-prolog session from stored state.
    * tau-prolog doesn't support incremental assert/retract well on
@@ -443,8 +459,9 @@ export class TauPrologEngine {
     });
 
     // Consulted program
-    if (this.consultedProgram.trim()) {
-      parts.push(this.consultedProgram.trim());
+    const consulted = this.consultedProgramText();
+    if (consulted) {
+      parts.push(consulted);
     }
 
     // Rules

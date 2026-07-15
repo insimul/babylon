@@ -16,6 +16,9 @@ never as code.**
   test (`src/conformance/__tests__/saves-migration.test.ts`) asserts
   `migrateSaveFile` lifts `v1-minimal` to the current `SAVE_FILE_VERSION`.
 - `prolog/*.json` — the golden Prolog query corpus (this file's main subject).
+- `radiant/*.json` — the radiant quest-generation corpus (see "Radiant case
+  format" below). Pins `generateRadiantQuests` — the contract the future native
+  `insimul_radiant_tick()` must match.
 
 ## Prolog case format
 
@@ -59,6 +62,77 @@ Field semantics (a conforming engine MUST reproduce these):
 **Order-independence.** `expected` is compared as an unordered multiset — a
 conforming engine need not enumerate solutions in the same order as `tau-prolog`,
 only produce the same set. Do not rely on solution order in a case.
+
+## Radiant case format
+
+Each file in `radiant/` is a JSON object with the same `{ area, description,
+cases }` envelope as the Prolog corpus, but each case pins the output of the
+**radiant quest generator** (`generateRadiantQuests`, in `src/radiant/`) rather
+than a single Prolog query:
+
+```jsonc
+{
+  "area": "radiant-single-slot",     // scenario this file covers
+  "description": "…",                // one line, human-facing
+  "cases": [
+    {
+      "name": "single-slot-fill-one-candidate",  // globally unique across radiant/
+      "kb": [                          // world facts + `:- dynamic(...)` decls
+        ":- dynamic(radiant_generated/3).",
+        "threat_species(wolves)."
+      ],
+      "templates": [                   // the radiant_* template pack
+        "radiant_template(rt_bounty, [category(bounty), title('Cull the {target}'), quest_type(bounty), difficulty(3)]).",
+        "radiant_precondition(rt_bounty, target, threat_species(Target)).",
+        "radiant_objective(rt_bounty, defeat(Target, 4))."
+      ],
+      "seed": "contract",              // RNG seed (string hashed to uint32, or a number)
+      "now": 1000,                     // in-game time (seconds): cooldowns + quest id/provenance
+      "maxQuests": 1,                  // OPTIONAL cap on quests generated this tick
+      "expected": {
+        "quests": [                    // one per generated quest, in engine output order
+          {
+            "questId": "radiant_rt_bounty_1000",
+            "templateId": "rt_bounty",
+            "content": [ "quest(…).", "quest_objective(…).", "quest_reward(…)." ],
+            "factsToAssert": [ "radiant_generated(…).", "radiant_cooldown_until(…)." ],
+            "factsToRetract": []
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Field semantics (a conforming engine MUST reproduce these):
+
+- **`kb`** — world facts + rules and the `:- dynamic(radiant_generated/3).` /
+  `:- dynamic(radiant_cooldown_until/2).` (and any other runtime) declarations.
+  Pre-seeded `radiant_generated/3` or `radiant_cooldown_until/2` facts here model
+  prior-tick state that drives exclusion / cooldown suppression.
+- **`templates`** — the `radiant_*` template pack (`radiant_template/2`,
+  `radiant_precondition/3`, `radiant_objective/2`, `radiant_reward/3`,
+  `radiant_cooldown/2`, `radiant_exclusion/2`). The harness concatenates `kb` +
+  `templates` into one program (`generateRadiantQuests(kb ⧺ templates, …)`).
+- **`seed`** / **`now`** / **`maxQuests`** — the generator options. `seed` drives
+  the deterministic candidate pick (a string is hashed to a uint32); `now` sets the
+  quest id suffix, `radiant_generated/3` timestamp, and cooldown arithmetic;
+  `maxQuests` caps the tick (templates process in sorted `TplId` order).
+- **`expected.quests`** — the generated quests. `content` (quest clauses) and
+  `factsToAssert` / `factsToRetract` are each compared as a **sorted set** (clause
+  order within a quest is irrelevant). An empty `quests` array means the tick
+  generated nothing (all templates skipped / suppressed).
+
+**Determinism is the whole point.** Unlike the Prolog corpus (unordered solution
+*set*), the radiant engine picks exactly ONE candidate per template via a seeded
+RNG over the *canonically sorted* candidate list, so `(kb, templates, seed, now)`
+pins an exact quest — `single-slot-fill-multi-candidate` and
+`single-slot-fill-alt-seed` share a KB and differ only by seed, and the expected
+giver differs accordingly. A native engine that sorts candidates or seeds its RNG
+differently will diverge here — which is exactly the contract violation this
+corpus exists to catch. The quest-list order is the deterministic sorted-`TplId`
+order.
 
 ## Purpose — the cross-engine parity gate
 
