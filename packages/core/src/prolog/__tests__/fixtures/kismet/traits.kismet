@@ -1,0 +1,45 @@
+# Kismet trait-dialect corpus (US-PC3 mass-conversion fixture).
+# Hand-authored in-repo — the platform client's unified-syntax Kismet test data
+# is not checked out in this worktree. Exercises every trait-dialect condition
+# and effect form the parser supports.
+
+trait rule modest_stays_humble {
+  category: personality
+  priority: 4
+  when:
+    ?x trait modest
+    ?x not trait vain
+  then:
+    ?x +status humble
+}
+
+trait rule confident_charmer {
+  category: personality
+  likelihood: 0.6
+  when:
+    ?x attr charisma > 6
+    ?x mood cheerful
+  then:
+    ?x +trait charming
+    ?x attr confidence + 2
+}
+
+trait rule betrayed_friend_sours {
+  category: friendship
+  priority: 7
+  when:
+    ?x rel friends ?y
+    ?y event insulted ?x
+  then:
+    ?x net affinity - 4 ?y
+    ?x +mood bitter
+}
+
+trait rule lonely_loses_status {
+  category: social
+  when:
+    ?x not status befriended
+  then:
+    ?x -status content
+    ?x +mood lonely
+}

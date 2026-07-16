@@ -1,0 +1,57 @@
+[
+  {
+    "name": "extrovert_seeks_company",
+    "type": "volition",
+    "category": "social",
+    "priority": 6,
+    "likelihood": 0.7,
+    "conditions": [
+      { "subject": "x", "attribute": "extroversion", "operator": ">", "value": 0.6 },
+      { "subject": "x", "attribute": "lonely", "value": true }
+    ],
+    "effects": [
+      { "subject": "x", "attribute": "wants", "value": "socialize", "weight": 3 }
+    ]
+  },
+  {
+    "name": "charged_pair_grows_closer",
+    "type": "trigger",
+    "category": "friendship",
+    "priority": 5,
+    "conditions": [
+      { "subject": "x", "object": "y", "attribute": "charge", "operator": ">=", "value": 0.4 },
+      { "subject": "x", "object": "y", "attribute": "friends" }
+    ],
+    "effects": [
+      { "subject": "x", "object": "y", "attribute": "salience", "operator": "+", "value": 0.1 },
+      { "subject": "x", "attribute": "happy", "value": true }
+    ]
+  },
+  {
+    "name": "spark_kindles_attraction",
+    "type": "trigger",
+    "category": "romance",
+    "conditions": [
+      { "subject": "x", "object": "y", "attribute": "spark", "operator": ">", "value": 0.5 },
+      { "subject": "x", "attribute": "married", "value": false }
+    ],
+    "effects": [
+      { "subject": "x", "object": "y", "attribute": "attracted_to", "value": true }
+    ]
+  },
+  {
+    "name": "insult_sours_relationship",
+    "type": "trigger",
+    "category": "conflict",
+    "priority": 7,
+    "conditions": [
+      { "subject": "y", "object": "x", "attribute": "insulted" },
+      { "subject": "x", "object": "y", "attribute": "likes" }
+    ],
+    "effects": [
+      { "subject": "x", "object": "y", "attribute": "charge", "operator": "-", "value": 0.3 },
+      { "subject": "x", "object": "y", "attribute": "resents", "value": true },
+      { "subject": "x", "attribute": "likes", "object": "y", "value": false }
+    ]
+  }
+]

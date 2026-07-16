@@ -1,0 +1,60 @@
+{
+  "socializing": [
+    {
+      "name": "agreeable_person_makes_friends",
+      "type": "trigger",
+      "priority": 5,
+      "conditions": [
+        { "subject": "x", "attribute": "agreeableness", "operator": ">", "value": 0.5 },
+        { "subject": "x", "object": "y", "attribute": "acquaintances" }
+      ],
+      "effects": [
+        { "subject": "x", "object": "y", "attribute": "friends", "value": true },
+        { "subject": "x", "object": "y", "attribute": "charge", "operator": "+", "value": 0.2 }
+      ]
+    },
+    {
+      "name": "neurotic_grows_anxious_alone",
+      "type": "trigger",
+      "conditions": [
+        { "subject": "x", "attribute": "neuroticism", "operator": ">=", "value": 0.7 },
+        { "subject": "x", "attribute": "lonely", "value": true }
+      ],
+      "effects": [
+        { "subject": "x", "attribute": "anxious", "value": true },
+        { "subject": "x", "attribute": "confidence", "operator": "-", "value": 1 }
+      ]
+    }
+  ],
+  "employment": [
+    {
+      "name": "conscientious_worker_promoted",
+      "type": "trigger",
+      "priority": 6,
+      "likelihood": 0.4,
+      "conditions": [
+        { "subject": "x", "attribute": "conscientiousness", "operator": ">", "value": 0.6 },
+        { "subject": "x", "attribute": "employed", "value": true }
+      ],
+      "effects": [
+        { "subject": "x", "attribute": "wealth", "operator": "+", "value": 2 },
+        { "subject": "x", "attribute": "content", "value": true }
+      ]
+    }
+  ],
+  "romance": [
+    {
+      "name": "mutual_love_becomes_courtship",
+      "type": "volition",
+      "priority": 8,
+      "likelihood": 0.9,
+      "conditions": [
+        { "subject": "x", "object": "y", "attribute": "loves" },
+        { "subject": "y", "object": "x", "attribute": "loves" }
+      ],
+      "effects": [
+        { "subject": "x", "attribute": "wants", "value": "court", "object": "y", "weight": 5 }
+      ]
+    }
+  ]
+}

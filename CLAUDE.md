@@ -317,6 +317,121 @@ Two gotchas learned moving `shared/game-engine` (a subtree with relative escapes
   were excluded by name at their old `shared/` path; after moving under
   `packages/babylon/src/engine/` they matched BOTH the root and the scoped vitest `src/**`
   include globs — re-add the exclude at the NEW path in **both** `vitest.config.ts` files.
+### Ensemble → Prolog converter is canonical, not the VESPACE e2e set (US-PC1)
+
+`packages/core/src/prolog/ensemble-converter.ts` is the **canonical** Ensemble →
+Prolog path (stable entry surface `convertVolitionRuleFile` / `convertEnsembleAction`,
+consumed by the platform `server/migrations/012-import-ensemble-as-prolog.ts` via the
+`@shared/prolog/ensemble-converter` shim). The verdict + capabilities table live in
+`packages/core/docs/ensemble-converter-decision.md`. The VESPACE e2e converter set
+(`insimul-platform/server/__tests__/vespace-rule-generation-e2e/`) is a **separate
+research/LLM-baseline harness** with an incompatible output vocabulary (decomposed
+`female(X)`/`affinity/3`, compact multi-head rules, a 3-tier action tree) and
+platform-only deps — do **not** promote it into core. New source-format converters
+(Kismet US-PC3, ToTT US-PC4) follow the legacy converter's preamble + `ConversionResult`
+contract, not the e2e vocabulary.
+
+### Ensemble converter completeness contract (US-PC2)
+
+`ensemble-converter.ts` now emits the full rule preamble. Two hard-won details the
+Kismet/ToTT converters MUST replicate:
+
+- **`rule_type/2` is a hard requirement** — `content-validators.validateRuleContent`
+  rejects any rule prologContent lacking it (a 422 at the save path). The ensemble
+  converter emits `rule_type(Name, volition)` by default (these are volition-rule
+  files), overridable to `trigger` via the source rule's `type` field. Every source
+  converter must emit a `rule_type/2`.
+- **`rule_likelihood/2`** is emitted only when the source carries a likelihood, clamped
+  to `[0.0, 1.0]` (`normalizeLikelihood`); non-finite values are dropped, not emitted.
+- **Category matching is case- AND separator-insensitive** via `normalizeCategory`
+  (splits camelCase, folds `_`/`-`/whitespace to a single space, lowercases). Source
+  corpora spell multi-word VESPACE categories as `"directed status"` / `"DirectedStatus"`
+  / `"directed_status"` interchangeably — normalize before the category `switch`, don't
+  compare raw strings.
+- **The 1:1 registry rule**: predicates the converter emits must be in
+  `predicate-schema.ts`. US-PC2 added `rule_type/2`, `rule_category/2`, `rule_source/2`,
+  `rule_effect/2` (the source-format arity; editor `rule-converter.ts` still emits
+  `rule_effect/4`) to the `rule` block, and the action-preamble predicates
+  (`action_source/2`, `action_difficulty/2`, `action_duration/2`, `action_leads_to/2`,
+  `action_accept/1`, `action_reject/1`) to the `action` block. The mass-conversion test
+  (`__tests__/ensemble-mass-conversion.test.ts`) validates every emitted ground fact
+  against `getCurrentPredicateSchema()`, so an unregistered predicate fails CI.
+- **Fixture corpus**: platform `data/ensemble/VESPACE/*.json` is NOT checked out in this
+  worktree (the `insimul-platform` submodule dir is empty here), so the VESPACE-style
+  seed corpus is hand-authored under `__tests__/fixtures/ensemble/`. When the platform
+  submodule IS available, copy real seeds into that dir to widen coverage.
+
+### Kismet direct converter + shared converter-types (US-PC3)
+
+`packages/core/src/prolog/kismet-converter.ts` converts the Kismet social-sim DSL
+(a text format, not JSON) to Prolog. Key facts for the ToTT converter (US-PC4) and
+anyone touching the three source-format converters:
+
+- **`ConversionResult` now lives in `converter-types.ts`** (shim at
+  `shared/prolog/converter-types.ts`). `ensemble-converter.ts` re-exports it
+  (`export type { ConversionResult } from './converter-types'`) so the stable
+  `@shared/prolog/ensemble-converter` import path (migration-012) is unchanged.
+  ToTT should `import type { ConversionResult } from './converter-types'` too.
+- **Three dialects, three parse paths**: `trait` / `volition` share
+  `parseKismetCondition` + `parseKismetEffect` (explicit-keyword grammar:
+  `?A trait X`, `?A net type op n ?B`, `?A wants intent ?B weight n`, …);
+  `pattern` uses `parseKismetPatternCondition` + `parseKismetPatternEffect`
+  (infix verbs mapped by `KISMET_PATTERN_VERBS` to `relationship`/`directed_status`).
+  `rule_type/2` is dialect-driven: `volition` → `volition`, `trait`/`pattern` →
+  `trigger`.
+- **`?Var → PascalCase`** via `kismetVarToProlog` (`?x → X`, `?best_friend →
+  BestFriend`); a leading digit/lowercase result is prefixed `V_`. Negation is
+  accepted both leading (`not ?A trait X`) and infix (`?A not trait X`).
+- **No new predicates needed** — Kismet emits the same preamble the `rule` block
+  already registers (`rule_active/1`, `rule_type/2`, `rule_category/2`,
+  `rule_source/2` with value `kismet`, `rule_priority/2`, `rule_likelihood/2`,
+  `rule_applies/3`, `rule_effect/2`). `rule_source` VALUES (`ensemble|kismet|tott`)
+  are atom args, not separate predicates, so no schema change for a new source.
+- **Fixture corpus** is hand-authored under `__tests__/fixtures/kismet/*.kismet`
+  (one file per dialect) — the platform client's unified-syntax Kismet test data
+  isn't checked out here. Same two gates as ensemble: `kismet-converter.test.ts`
+  (per-dialect ?Var + preamble) and `kismet-mass-conversion.test.ts` (zero
+  skipped + `validateRuleContent` + `validatePrologFact` vs the registry).
+
+### Talk-of-the-Town direct converter + predicate map (US-PC4)
+
+`packages/core/src/prolog/tott-converter.ts` converts Talk-of-the-Town source
+rules to Prolog. Three files share the `tott-` prefix — keep them straight (each
+one's header cross-references the other two):
+
+- **`tott-converter.ts`** — the direct source converter (US-PC4).
+- **`tott-predicate-map.ts`** — the source-attribute → predicate-kind table
+  (`TOTT_PREDICATE_MAP`, `resolveTottKind`) the converter consults. Big-Five
+  features → `attribute/3`; `charge`/`spark`/`salience` → `network/4`; social ties
+  → `relationship/3`; directed feelings → `directed_status/3`; plus status / mood /
+  event / intent. An unmapped attribute is resolved **structurally** by
+  `resolveTottKind` (second-actor + numeric ⇒ network; +boolean ⇒ directed_status;
+  one-actor numeric ⇒ attribute; boolean ⇒ trait) so no corpus clause is dropped.
+- **`tott-predicates.ts`** — the pre-existing *helper predicate library*
+  (`getTotTPredicates()`, standing hiring/social/economics/lifecycle rules). NOT a
+  converter. Do not confuse it with the two above.
+
+Key facts:
+
+- **Three source shapes, one internal model.** `parseTottFlat` (array of rule
+  objects), `parseTottCategorized` (`{category: rule[]}`, rules inherit the key),
+  and `parseTottPython` (the `class Name(VolitionRule):` DSL with `def when/then`
+  bodies) all normalize to `TottRule`/`TottClause`, then flow through one
+  condition/effect emitter. `convertTottSource` auto-detects: a string starting
+  with `[`/`{` is JSON, otherwise Python; a non-string array/object routes to
+  flat/categorized.
+- **`mapTottRuleType`** folds `volition|desire|want|intent` → `volition`, else
+  `trigger` (always emits *some* `rule_type/2` — the hard gate). **`mapTottCategory`**
+  canonicalizes synonyms (`social`→`socializing`, `romantic`→`romance`,
+  `work`→`employment`) then sanitizes to an atom (`general` when absent).
+- **Boolean negation is dual-encoded**: a condition negates via an explicit
+  `negate` flag (Python `not x.trait(...)`) OR `value: false` (the JSON
+  "attribute is absent" form) — `conditionToGoal` treats both as `\+`. On effects,
+  `value: false` emits the `remove_`/`remove_directed_status` variant.
+- **No new predicates** — same preamble the `rule` block registers; `tott` is a
+  `rule_source` atom value. Fixtures hand-authored under `__tests__/fixtures/tott/`
+  (`flat.json`, `categorized.json`, `python.tott`, one per shape). Same two gates
+  as ensemble/kismet: `tott-converter.test.ts` + `tott-mass-conversion.test.ts`.
 
 ### Install gotcha in this workspace
 

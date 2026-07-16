@@ -1,0 +1,27 @@
+{
+  "fileName": "social.json",
+  "category": "social standing",
+  "rules": [
+    {
+      "name": "Anyone Envies The Rich",
+      "title": "A bystander (someone/other only) envies visible wealth",
+      "conditions": [
+        { "category": "attribute", "type": "wealth", "first": "someone", "operator": ">", "value": 80 },
+        { "category": "trait", "type": "greedy", "first": "someone" }
+      ],
+      "effects": [
+        { "category": "status", "type": "envious", "first": "someone" }
+      ]
+    },
+    {
+      "name": "Other Spreads Rumor",
+      "title": "A third party (other only) spreads a rumor",
+      "conditions": [
+        { "category": "status", "type": "gossipy", "first": "other" }
+      ],
+      "effects": [
+        { "category": "intent", "type": "gossip", "first": "other", "weight": 2 }
+      ]
+    }
+  ]
+}

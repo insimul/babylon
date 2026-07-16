@@ -17,7 +17,9 @@ export * from './action-hydrator';
 export * from './action-prerequisites';
 export * from './advanced-predicates';
 export * from './content-validators';
+export * from './converter-types';
 export * from './ensemble-converter';
+export * from './kismet-converter';
 export * from './export-validator';
 export * from './gameplay-predicates';
 export * from './helper-predicates';
@@ -41,6 +43,8 @@ export * from './rule-converter';
 export * from './tau-engine';
 // tau-prolog-patch is a side-effect-only global patch (no exports); tau-engine
 // imports it directly, so the barrel does not re-export it.
+export * from './tott-converter';
+export * from './tott-predicate-map';
 export * from './tott-predicates';
 export * from './truth-converter';
 export * from './types';
