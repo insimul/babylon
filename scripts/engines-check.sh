@@ -111,6 +111,14 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/addons/insimul/editor/reimport/run_reimport_headless.sh
 	echo "== godot: binding-dock headless test (US-GB3, skips without a godot binary) =="
 	bash packages/godot/addons/insimul/editor/dock/run_binding_dock_headless.sh
+	echo "== godot: editor-connect headless test (US-GE1, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/connect/run_connect_headless.sh
+	echo "== godot: World Browser dock headless test (US-GE2, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/browser/run_browser_headless.sh
+	echo "== godot: Generation Console dock headless test (US-GE2, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/generation/run_generation_headless.sh
+	echo "== godot: Conversation Tester dock headless test (US-GE3, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/conversation/run_conversation_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi

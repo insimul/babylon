@@ -77,6 +77,144 @@ namespace Insimul.Generated.Api
         public string? Version { get; set; }
     }
 
+    public class WorldListResponse
+    {
+        [JsonPropertyName("worlds")]
+        public List<object> Worlds { get; set; } = null!;
+    }
+
+    public class WorldDetailRequest
+    {
+        [JsonPropertyName("worldId")]
+        public string WorldId { get; set; } = null!;
+    }
+
+    public class WorldDetailResponse
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = null!;
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = null!;
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("worldVersion")]
+        public long? WorldVersion { get; set; }
+
+        [JsonPropertyName("saveFormatVersion")]
+        public long? SaveFormatVersion { get; set; }
+
+        [JsonPropertyName("engineRevision")]
+        public string? EngineRevision { get; set; }
+
+        [JsonPropertyName("stats")]
+        public Dictionary<string, object>? Stats { get; set; }
+
+        [JsonPropertyName("webUrl")]
+        public string? WebUrl { get; set; }
+    }
+
+    public class ImportRequest
+    {
+        [JsonPropertyName("worldId")]
+        public string WorldId { get; set; } = null!;
+
+        [JsonPropertyName("dryRun")]
+        public bool? DryRun { get; set; }
+    }
+
+    public class ImportReport
+    {
+        [JsonPropertyName("worldId")]
+        public string WorldId { get; set; } = null!;
+
+        [JsonPropertyName("dryRun")]
+        public bool DryRun { get; set; }
+
+        [JsonPropertyName("added")]
+        public long? Added { get; set; }
+
+        [JsonPropertyName("updated")]
+        public long? Updated { get; set; }
+
+        [JsonPropertyName("removed")]
+        public long? Removed { get; set; }
+
+        [JsonPropertyName("unchanged")]
+        public long? Unchanged { get; set; }
+
+        [JsonPropertyName("messages")]
+        public List<object>? Messages { get; set; }
+    }
+
+    public class StartJobRequest
+    {
+        [JsonPropertyName("worldId")]
+        public string WorldId { get; set; } = null!;
+
+        [JsonPropertyName("generator")]
+        public string Generator { get; set; } = null!;
+    }
+
+    public class JobRef
+    {
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; } = null!;
+    }
+
+    public class GenerationJob
+    {
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; } = null!;
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = null!;
+
+        [JsonPropertyName("stage")]
+        public string? Stage { get; set; }
+
+        [JsonPropertyName("progress")]
+        public double? Progress { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("added")]
+        public long? Added { get; set; }
+
+        [JsonPropertyName("updated")]
+        public long? Updated { get; set; }
+
+        [JsonPropertyName("removed")]
+        public long? Removed { get; set; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+    }
+
+    public class SyncReport
+    {
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; } = null!;
+
+        [JsonPropertyName("applied")]
+        public bool Applied { get; set; }
+
+        [JsonPropertyName("added")]
+        public long? Added { get; set; }
+
+        [JsonPropertyName("updated")]
+        public long? Updated { get; set; }
+
+        [JsonPropertyName("removed")]
+        public long? Removed { get; set; }
+
+        [JsonPropertyName("messages")]
+        public List<object>? Messages { get; set; }
+    }
+
     /// <summary>
     /// Transport-agnostic REST client generated from the Insimul OpenAPI v1 spec.
     /// Uses System.Net.Http; the Unity plugin adapts it to UnityWebRequest at the
@@ -149,6 +287,86 @@ namespace Insimul.Generated.Api
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             return JsonSerializer.Deserialize<HealthResponse>(json, JsonOptions)!;
+        }
+
+        /// <summary>List the worlds available to the editor.</summary>
+        public async Task<WorldListResponse> ListWorldsAsync(CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, _baseUrl + "/api/worlds");
+            var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<WorldListResponse>(json, JsonOptions)!;
+        }
+
+        /// <summary>Fetch a single world's detail + stats.</summary>
+        public async Task<WorldDetailResponse> GetWorldDetailAsync(WorldDetailRequest body, CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/worlds/detail");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<WorldDetailResponse>(json, JsonOptions)!;
+        }
+
+        /// <summary>Import/sync a world into the generation pipeline (dry-run supported).</summary>
+        public async Task<ImportReport> ImportWorldAsync(ImportRequest body, CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/generation/import");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<ImportReport>(json, JsonOptions)!;
+        }
+
+        /// <summary>Start a generation job for a world.</summary>
+        public async Task<GenerationJob> StartGenerationJobAsync(StartJobRequest body, CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/generation/jobs");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<GenerationJob>(json, JsonOptions)!;
+        }
+
+        /// <summary>Poll a generation job's current status (polling fallback for SSE).</summary>
+        public async Task<GenerationJob> GetGenerationJobAsync(JobRef body, CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/generation/jobs/status");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<GenerationJob>(json, JsonOptions)!;
+        }
+
+        /// <summary>Stream a generation job's progress as SSE.</summary>
+        public async Task<HttpResponseMessage> StreamGenerationJobAsync(JobRef body, CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/generation/jobs/events");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            return await _http.SendAsync(
+                request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>Apply a completed job's output and return the diff summary.</summary>
+        public async Task<SyncReport> SyncGenerationJobAsync(JobRef body, CancellationToken cancellationToken = default)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/api/generation/jobs/sync");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return JsonSerializer.Deserialize<SyncReport>(json, JsonOptions)!;
         }
     }
 }
