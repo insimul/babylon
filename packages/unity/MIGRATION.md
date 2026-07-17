@@ -37,12 +37,20 @@ Today these hand-maintained parallel re-declarations are the drift-prone status 
 
 The migration order (later stories in this and the per-engine runtime PRDs):
 
-1. **US-CG1 (this story):** generate the schema-derived DTOs alongside the
+1. **US-CG1:** generate the schema-derived DTOs alongside the
    hand-written ones. No deletions. ✅
-2. **US-CG5:** point the *live SDK* code (`Runtime/InsimulTypes.cs`) at the
-   generated `Insimul.Generated` namespace for types that duplicate schema shapes.
-   Conversation-event types stay hand-written (they are proto-derived). Add a
-   type-provenance table to this package's README.
+2. **US-CG5 (this story):** audited the *live SDK* code (`Runtime/`) for types that
+   duplicate the generated schema DTOs. **None were found** — the SDK carries no
+   `SaveFile`/`SaveFileEnvelope`/`WorldIr` re-declaration. Its one world-data type,
+   `InsimulExportedWorld`, is the *distilled offline export* (`world_export.json`) —
+   a flattened dialogue-context shape, not the schema `WorldIr`, read via Unity's
+   `JsonUtility` (which can't deserialize the `Dictionary<string, object>` sections
+   a schema-faithful `WorldIr` needs) — so it stays hand-written. Conversation-event
+   types stay hand-written (proto-derived). Added a **type-provenance table** to the
+   unity / unreal / godot READMEs (generated / hand-written / template-legacy) and a
+   documented **Unity-batchmode compile check** for the `Runtime/` SDK (which can't
+   compile under the pure-.NET `verify-cs` project because it depends on
+   `UnityEngine`). New save/load or World-IR code should consume `Insimul.Generated`. ✅
 3. **Per-engine Unity runtime PRD (out of scope here):** retire the
    `templates/scripts/data/*.cs` re-declarations once the export pipeline consumes
    the generated DTOs. Those `.cs` are the *last* to go because a shipped game

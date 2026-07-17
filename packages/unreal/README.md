@@ -380,3 +380,25 @@ intermediates), zips it to `dist/Insimul-<version>.zip` in FAB/Marketplace layou
 and asserts the file set. It does **not** publish. See the repo-root
 `docs/RELEASING.md` for the full version-bump + submission flow (`VERSIONS.json` is
 the single version source).
+## Type provenance
+
+Insimul's C++ types fall into three tiers. **Only the *generated* tier is derived
+from the canonical `@insimul/core` schemas** (regenerate with `npm run codegen`
+from the `insimul-runtime` root); the others are hand-maintained and stay that way.
+
+| Tier | Files | Source of truth | Editable? |
+| --- | --- | --- | --- |
+| **Generated** | `Source/InsimulRuntime/Generated/InsimulGenerated.h` — plain `Insimul::Generated` structs (`SaveFile`, `SaveFileEnvelope`, `WorldIr` + nested) with `from_json`/`to_json` | `packages/core/schemas/{save-file,save-envelope,world-ir}.schema.json` | **No** — `npm run codegen`, drift-guarded (`codegen:verify-cpp`) |
+| **Hand-written (SDK)** | `Source/InsimulRuntime/Public/InsimulTypes.h` (the reflected `FInsimul*` UStructs Blueprints bind to — proto-derived conversation + provider types), `InsimulWorldExport.h` (the distilled `FInsimulExportedWorld` offline-export shape), and the plugin runtime (components/actors/widgets/subsystems/networking) | Hand-maintained (engine-facing / proto-derived) | **Yes** |
+| **Template-legacy** | `templates/source/data/*.h` — ~16 parallel re-declarations (`CharacterData.h`, `QuestData.h`, `SettlementData.h`, …) vendored into exported games | Hand-maintained (drift-prone) | Retired by the per-engine Unreal runtime PRD — **not** this PRD |
+
+**UStruct boundary:** the generated plain structs are the wire/DTO layer; the
+hand-written `FInsimul*` UStructs in `InsimulTypes.h` convert at the boundary. See
+`Source/InsimulRuntime/Generated/README.md` for the convention.
+
+**Why nothing in the plugin was migrated to `Insimul::Generated`:** no live plugin
+type duplicates a generated schema DTO. `FInsimulExportedWorld` is the *distilled
+offline export* (`GET /api/conversation/export/{worldId}` → `world_export.json`) —
+a flattened dialogue-context shape, **not** the full `WorldIr` — so it stays
+hand-written. New save/load or World-IR code should convert through
+`Insimul::Generated` at the boundary.

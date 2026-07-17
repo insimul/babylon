@@ -212,6 +212,49 @@ and asserts its layout — SDK sources only, no `templates/` tree — then print
 OpenUPM readiness checklist. It does **not** publish. See the repo-root
 `docs/RELEASING.md` for the full version-bump + publish flow (`VERSIONS.json` is
 the single version source).
+## Type provenance
+
+Insimul's C# types fall into three tiers. **Only the *generated* tier is derived
+from the canonical `@insimul/core` schemas** (regenerate with `npm run codegen`);
+the others are hand-maintained and stay that way.
+
+| Tier | Files | Source of truth | Editable? |
+| --- | --- | --- | --- |
+| **Generated** | `Runtime/Generated/InsimulGenerated.cs` (`Insimul.Generated` — `SaveFile`, `SaveFileEnvelope`, `WorldIr` + nested `CurrentState`/`WorldSnapshot`/`World`/`Meta`, `Status`/`Format` enums) | `packages/core/schemas/{save-file,save-envelope,world-ir}.schema.json` | **No** — `npm run codegen`, drift-guarded |
+| **Generated (API)** | `Runtime/Generated/Api/InsimulApiClient.cs` (`Insimul.Generated.Api`) | `packages/core/openapi/insimul-v1.yaml` | **No** — `npm run codegen`, drift-guarded |
+| **Hand-written (SDK)** | `Runtime/InsimulTypes.cs` — conversation events (`InsimulViseme`/`InsimulTextChunk`/`InsimulAudioChunk`/`InsimulFacialData`/`InsimulActionTrigger` + the `SSE*` parse structs, proto-derived), provider config (`InsimulConfig`, the `Insimul*Provider` enums), and the distilled offline export DTOs (`InsimulExportedWorld`/`InsimulExportedCharacter`/`InsimulDialogueContext`); the `MonoBehaviour` runtime (`InsimulManager`, `InsimulNPC`, `InsimulHttpClient`, `InsimulLocalProvider`, audio/mic/tts/stt/lipsync) | Hand-maintained (engine-facing / proto-derived) | **Yes** |
+| **Template-legacy** | `templates/scripts/data/*.cs` — 15 parallel re-declarations (`InsimulWorldIR.cs`, `InsimulCharacterData.cs`, `InsimulQuestData.cs`, …) vendored into exported games | Hand-maintained (drift-prone) | Retired by the per-engine Unity runtime PRD — **not** this PRD |
+
+**Why nothing in `Runtime/` was migrated to `Insimul.Generated`:** the live SDK
+carries no type that duplicates a generated schema DTO. The one world-data type it
+parses, `InsimulExportedWorld`, is the *distilled offline export*
+(`GET /api/conversation/export/{worldId}` → `world_export.json`) — a deliberately
+flattened dialogue-context shape, **not** the full `WorldIr`, and it is read with
+Unity's `JsonUtility`, which cannot deserialize the `Dictionary<string, object>`
+sections a schema-faithful `WorldIr` requires. It therefore stays hand-written.
+New save/load or World-IR code should consume `Insimul.Generated` directly.
+
+## Verifying the SDK compiles
+
+The `Runtime/` SDK depends on `UnityEngine` (`[Header]`, `[Range]`,
+`UnityEvent<T>`, `MonoBehaviour`), so it **cannot** be hosted in the pure-.NET
+`tools/codegen/verify-cs/` project — that project compiles only the engine-free
+*generated* DTOs (`Runtime/Generated/**/*.cs`) via `npm run codegen:verify-cs`.
+
+To compile-check the full `Runtime/` SDK, run Unity in batchmode against a project
+that imports this package (Unity supplies the `UnityEngine` assemblies):
+
+```bash
+# CI compile-check: Unity compiles the SDK asmdef; a compile error is a non-zero exit.
+"$UNITY" -batchmode -quit -nographics \
+  -projectPath /path/to/UnityProjectWithInsimul \
+  -logFile - \
+  -executeMethod UnityEditor.SyncVS.SyncSolution   # or a custom compile-and-assert method
+```
+
+A green `npm run codegen:verify-cs` (generated DTOs) plus a green Unity-batchmode
+run (SDK, including its reference to `Insimul.Generated`) together cover the whole
+`Runtime/` surface.
 
 ## License
 
