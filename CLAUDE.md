@@ -477,3 +477,34 @@ prebuilt `build/libinsimul.a`). Layout + conventions established in US-XP1:
   a fresh KB. Round-trip plain clauses.
 - **`npm install`** needs `--legacy-peer-deps` here (pre-existing react `@types`
   peer conflict); never commit the generated `package-lock.json`.
+## Native engine plugins (Unity/Unreal/Godot native Prolog)
+
+The three engine packages (`packages/{unity,unreal,godot}`) each ship a **fake**
+substring-matching Prolog engine in `templates/` (`PrologEngine.cs`,
+`PrologEngine.cpp`, `prolog_engine.gd`). The native-prolog PRDs replace each with a
+thin engine-layer wrapper over **libinsimul** (the shared C-ABI Prolog core from
+`insimul-native/`, plan §3.1) — Unity via P/Invoke, Unreal via a ThirdParty module,
+Godot via a **GDExtension** (`packages/godot/gdextension/`).
+
+**Harness constraint (all three legs):** the Ralph machine has clang++ but **no**
+`cmake`/`scons`/`godot`/`godot-cpp`, and **libinsimul is not built** (its bootstrap
+PRD is an unlanded dependency). So the pattern is: put the term-marshalling logic
+(the JSON binding-set → engine-native value decode) in a **dependency-free plain-C++
+core** that host-tests under clang++, and keep the engine-coupled files (godot-cpp /
+UE / P/Invoke) **syntax-gated only** with a documented structural fallback. The
+libinsimul C ABI is vendored as a **contract header** (`gdextension/vendor/insimul/
+insimul.h`) matching libinsimul US-LI2 so the wrapper compiles against the exact ABI
+it will link. `autoMerge` is off for these PRDs — a human reviews toolchain wiring.
+
+- **libinsimul binding format** (the cross-wrapper contract): one query solution =
+  a JSON object `{ "Var": <term> }`; `{}` = success/no-bindings, absent = fail.
+  Terms: atom→string, int→number, float→number, list→array, compound `f(a,b)`→
+  `{"functor":"f","args":[...]}`. Golden cases live in
+  `packages/core/conformance/prolog/*.json` (the parity gate).
+- **Godot GDExtension layout:** `gdextension/src/prolog_value.{h,cpp}` is the
+  host-tested marshalling core (no godot-cpp, no libinsimul); `insimul_prolog.{h,cpp}`
+  is the `InsimulProlog` RefCounted wrapper (godot-cpp; syntax-gated);
+  `test/run_host_tests.sh` compiles+runs the core with clang++ (the real gate);
+  `smoke/test_smoke.gd` is a `godot --headless -s` end-to-end for when a Godot binary
+  is available. godot-cpp pin (`godot-4.2-stable`) and libinsimul consumption are in
+  `gdextension/THIRD_PARTY.md`.

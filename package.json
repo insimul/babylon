@@ -25,7 +25,7 @@
     "check": "tsc -p tsconfig.check.json",
     "engines:manifests": "node scripts/engines/validate-manifests.mjs",
     "engines:templates": "node scripts/engines/validate-templates.mjs",
-    "engines:check": "node tools/engines-check.mjs",
+    "engines:check": "bash scripts/engines-check.sh",
     "engines:unreal:host": "bash tools/verify-unreal/run-host-tests.sh",
     "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
@@ -33,7 +33,11 @@
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",
-    "tau-prolog": "^0.3.4"
+    "tau-prolog": "^0.3.4",
+    "@babylonjs/core": "^8.54.1",
+    "@babylonjs/gui": "^8.54.1",
+    "@babylonjs/inspector": "^8.56.1",
+    "@babylonjs/loaders": "^8.54.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
