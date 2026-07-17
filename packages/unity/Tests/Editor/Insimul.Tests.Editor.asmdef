@@ -4,7 +4,8 @@
   "references": [
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner",
-    "Insimul.Runtime"
+    "Insimul.Runtime",
+    "Insimul.Editor"
   ],
   "includePlatforms": [
     "Editor"
