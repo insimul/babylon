@@ -48,6 +48,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/gdextension/test/run_conformance.sh
 	echo "== godot: GDScript structural lint (US-GP3, godot --check-only stand-in) =="
 	python3 packages/godot/gdextension/tests/gdscript_structural_lint.py
+	echo "== godot: world-source headless test (US-GC1, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/tests/run_world_source_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi
