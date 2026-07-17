@@ -27,6 +27,7 @@ namespace Insimul.Verify
 
             Section("Pure (no native library)");
             RunParseBindingSetTests();
+            RunVersionHandshakeTests();
 
             if (skipNative)
             {
@@ -98,6 +99,75 @@ namespace Insimul.Verify
             });
         }
 
+        // ---- Version handshake (US-UP3) -------------------------------------
+
+        // Pure (no native library): the version comparison takes the native stamp
+        // as an argument, so the compatible AND mismatch paths are exercised with
+        // MOCKED stamps — no libinsimul required.
+        private static void RunVersionHandshakeTests()
+        {
+            Case("ParseSemver: MAJOR.MINOR.PATCH", () =>
+            {
+                var v = InsimulProlog.ParseSemver("1.2.3");
+                AssertEqual(1, v.Major);
+                AssertEqual(2, v.Minor);
+                AssertEqual(3, v.Patch);
+            });
+
+            Case("ParseSemver: tolerates leading v and pre-release/build metadata", () =>
+            {
+                AssertEqual("0.1.0", InsimulProlog.ParseSemver("v0.1.0").ToString());
+                AssertEqual("0.1.0", InsimulProlog.ParseSemver("0.1.0-rc.1+build.5").ToString());
+            });
+
+            Case("ParseSemver: malformed throws InsimulPrologException", () =>
+            {
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseSemver("1.2"));
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseSemver("1.x.0"));
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseSemver(""));
+            });
+
+            Case("CheckNativeVersion: exact match is compatible", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("0.1.0", "0.1.0");
+                AssertTrue(c.Compatible, "exact match should be compatible");
+                AssertEqual("0.1.0", c.ActualSemver);
+            });
+
+            Case("CheckNativeVersion: differing PATCH is compatible", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("0.1.7", "0.1.0");
+                AssertTrue(c.Compatible, "patch drift should stay compatible");
+            });
+
+            Case("CheckNativeVersion: MINOR drift is a mismatch", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("0.2.0", "0.1.0");
+                AssertTrue(!c.Compatible, "minor drift should be incompatible");
+                AssertTrue(c.Message.Contains("0.2.0") && c.Message.Contains("0.1.0"),
+                    "mismatch message should name both versions");
+            });
+
+            Case("CheckNativeVersion: MAJOR drift is a mismatch", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("1.1.0", "0.1.0");
+                AssertTrue(!c.Compatible, "major drift should be incompatible");
+            });
+
+            Case("CheckNativeVersion: unparseable actual is a mismatch (not a throw)", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("garbage", "0.1.0");
+                AssertTrue(!c.Compatible, "unparseable native version is incompatible");
+                AssertTrue(c.Message.Contains("garbage"), "message should surface the bad stamp");
+            });
+
+            Case("ExpectedNativeSemver is a well-formed semver", () =>
+            {
+                var v = InsimulProlog.ParseSemver(InsimulProlog.ExpectedNativeSemver);
+                AssertTrue(v.Major >= 0 && v.Minor >= 0 && v.Patch >= 0, "expected semver should parse");
+            });
+        }
+
         // ---- Native tests ----------------------------------------------------
 
         private static void RunNativeTests()
@@ -107,6 +177,17 @@ namespace Insimul.Verify
                 string v = InsimulProlog.NativeVersion;
                 AssertTrue(!string.IsNullOrWhiteSpace(v), "version should be non-empty");
                 Console.WriteLine($"      libinsimul {v}");
+            });
+
+            Case("VerifyNativeVersion: loaded library is ABI-compatible", () =>
+            {
+                // This reads the REAL native version. If the locally built
+                // libinsimul drifts from ExpectedNativeSemver on MAJOR.MINOR, this
+                // fails loudly — the handshake doing its job. Bump
+                // ExpectedNativeSemver (and re-fetch) to reconcile.
+                var check = InsimulProlog.VerifyNativeVersion();
+                AssertTrue(check.Compatible, check.Message);
+                Console.WriteLine($"      {check.Message}");
             });
 
             Case("consult + query: single solution with binding", () =>

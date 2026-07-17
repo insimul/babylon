@@ -31,6 +31,21 @@ engine-agnostic core of the Unity native-Prolog work (US-UP1…UP4).
   throws `InvalidOperationException` on cross-thread use. libinsimul is
   single-threaded per KB.
 
+## Version handshake (US-UP3)
+
+`InsimulProlog` carries a `const ExpectedNativeSemver` (the ABI this wrapper was
+authored against — keep it in lockstep with `insimul-native/VERSION`). The
+comparison surface is **pure and stamp-driven** so the mismatch path is unit
+tested with mocked versions (no native lib): `ParseSemver(string)` →
+`Semver`, `CheckNativeVersion(actualStamp, expectedStamp)` → `NativeVersionCheck`
+(compatibility keys on MAJOR.MINOR; a differing PATCH is compatible), and
+`VerifyNativeVersion()` which reads the loaded library and **throws
+`InsimulPrologException` loudly on drift**. `packages/unity/scripts/fetch-native.sh`
+greps `ExpectedNativeSemver` out of this file to cross-check the fetched
+`dist/VERSION` — if you bump the constant, the fetch drift check follows
+automatically. Binaries + import settings live under `Runtime/Plugins/` (fetched,
+not committed; see its README).
+
 ## Gotcha: System.Text.Json in the Unity asmdef
 
 `InsimulProlog.cs` uses `System.Text.Json` (`JsonElement`, `JsonDocument`).

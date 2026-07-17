@@ -79,6 +79,143 @@ namespace Insimul.Prolog
             }
         }
 
+        // --- Version handshake (US-UP3) --------------------------------------
+        //
+        // The C# wrapper (NativeMethods.cs) is a hand-maintained mirror of the
+        // libinsimul C ABI, so a mismatched native binary can silently corrupt
+        // marshaling. The handshake below turns that into a loud, early failure.
+        //
+        // ExpectedNativeSemver is the ABI this build of the wrapper was written
+        // against — keep it in lockstep with insimul-native/VERSION (the fetch
+        // script cross-checks the two). Compatibility is judged on MAJOR.MINOR
+        // only: a differing PATCH is a bug-fix-compatible native build, but any
+        // MAJOR or MINOR drift is treated as a breaking ABI change (this is the
+        // pre-1.0 convention where MINOR is the breaking axis).
+
+        /// <summary>The libinsimul ABI version this wrapper was authored against.</summary>
+        public const string ExpectedNativeSemver = "0.1.0";
+
+        /// <summary>A parsed semantic version (pre-release / build metadata are ignored).</summary>
+        public readonly struct Semver
+        {
+            public Semver(int major, int minor, int patch)
+            {
+                Major = major;
+                Minor = minor;
+                Patch = patch;
+            }
+
+            public int Major { get; }
+            public int Minor { get; }
+            public int Patch { get; }
+
+            public override string ToString() => $"{Major}.{Minor}.{Patch}";
+        }
+
+        /// <summary>The outcome of comparing a native version stamp against an expectation.</summary>
+        public readonly struct NativeVersionCheck
+        {
+            public NativeVersionCheck(bool compatible, string actualSemver, string expectedSemver, string message)
+            {
+                Compatible = compatible;
+                ActualSemver = actualSemver;
+                ExpectedSemver = expectedSemver;
+                Message = message;
+            }
+
+            /// <summary>True if the actual ABI is compatible with the expectation (MAJOR.MINOR match).</summary>
+            public bool Compatible { get; }
+            /// <summary>The native library's reported version string.</summary>
+            public string ActualSemver { get; }
+            /// <summary>The version this wrapper was built against.</summary>
+            public string ExpectedSemver { get; }
+            /// <summary>A human-readable summary (loud on mismatch, quiet on match).</summary>
+            public string Message { get; }
+        }
+
+        /// <summary>
+        /// Parses a <c>MAJOR.MINOR.PATCH</c> semver string. A leading <c>v</c> and
+        /// any trailing <c>-prerelease</c> / <c>+build</c> metadata are tolerated
+        /// and ignored. Pure and native-free, so it is unit testable without a
+        /// loaded library. Throws <see cref="InsimulPrologException"/> on malformed
+        /// input.
+        /// </summary>
+        public static Semver ParseSemver(string version)
+        {
+            if (string.IsNullOrWhiteSpace(version))
+                throw new InsimulPrologException("libinsimul: empty version string.");
+
+            string core = version.Trim();
+            if (core.StartsWith("v", StringComparison.OrdinalIgnoreCase)) core = core.Substring(1);
+            // Drop pre-release / build metadata (SemVer §9-10) — ABI parity keys on
+            // the numeric core only.
+            int cut = core.IndexOfAny(new[] { '-', '+' });
+            if (cut >= 0) core = core.Substring(0, cut);
+
+            string[] parts = core.Split('.');
+            if (parts.Length != 3)
+                throw new InsimulPrologException($"libinsimul: malformed semver '{version}' (expected MAJOR.MINOR.PATCH).");
+
+            if (!int.TryParse(parts[0], out int major) ||
+                !int.TryParse(parts[1], out int minor) ||
+                !int.TryParse(parts[2], out int patch) ||
+                major < 0 || minor < 0 || patch < 0)
+            {
+                throw new InsimulPrologException($"libinsimul: malformed semver '{version}' (non-numeric component).");
+            }
+
+            return new Semver(major, minor, patch);
+        }
+
+        /// <summary>
+        /// Compares a native version <paramref name="actualStamp"/> against an
+        /// <paramref name="expectedStamp"/> without touching the native library —
+        /// the stamp is passed in, so the mismatch path is unit testable with a
+        /// mocked version. Compatibility keys on MAJOR.MINOR (a differing PATCH is
+        /// compatible).
+        /// </summary>
+        public static NativeVersionCheck CheckNativeVersion(string actualStamp, string expectedStamp)
+        {
+            Semver expected = ParseSemver(expectedStamp);
+
+            Semver actual;
+            try
+            {
+                actual = ParseSemver(actualStamp);
+            }
+            catch (InsimulPrologException ex)
+            {
+                return new NativeVersionCheck(
+                    compatible: false,
+                    actualSemver: actualStamp,
+                    expectedSemver: expectedStamp,
+                    message: $"libinsimul: could not parse native version '{actualStamp}': {ex.Message}");
+            }
+
+            bool compatible = actual.Major == expected.Major && actual.Minor == expected.Minor;
+            string message = compatible
+                ? $"libinsimul {actual} is compatible with the wrapper (expected {expected}.x)."
+                : $"libinsimul ABI mismatch: native library reports {actual} but this wrapper was built " +
+                  $"against {expected} (compatible: {expected.Major}.{expected.Minor}.x). Re-fetch the native " +
+                  $"binaries with scripts/fetch-native.sh or update the wrapper.";
+
+            return new NativeVersionCheck(compatible, actual.ToString(), expected.ToString(), message);
+        }
+
+        /// <summary>
+        /// Reads the loaded library's version and throws
+        /// <see cref="InsimulPrologException"/> if it is ABI-incompatible with
+        /// <see cref="ExpectedNativeSemver"/>. Call once at startup to fail loudly
+        /// on a stale or mismatched native binary. Returns the (compatible) check
+        /// result so callers can log the confirmed version.
+        /// </summary>
+        public static NativeVersionCheck VerifyNativeVersion()
+        {
+            NativeVersionCheck check = CheckNativeVersion(NativeVersion, ExpectedNativeSemver);
+            if (!check.Compatible) throw new InsimulPrologException(check.Message);
+            return check;
+        }
+
         /// <summary>Loads a Prolog program (facts + rules) into the KB.</summary>
         public void Consult(string program)
         {

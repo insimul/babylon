@@ -34,7 +34,11 @@ It then puts the library on the platform loader path (`DYLD_LIBRARY_PATH` /
 - **Pure (`ParseBindingSet`)** — binding-set JSON parsing (atoms→string,
   integers→number, empty object, malformed/non-object rejection). Runs with no
   native library.
-- **Native** — version handshake; consult/assert/retract; query with single,
+- **Pure (version handshake, US-UP3)** — `ParseSemver` and `CheckNativeVersion`
+  with **mocked** version stamps: exact/patch-drift compatibility and
+  major/minor/unparseable mismatch paths, none of which touch the native library.
+- **Native** — version handshake (`VerifyNativeVersion` against the real library);
+  consult/assert/retract; query with single,
   ground, failing, multiple, and rule-unification solutions; snapshot→restore
   round-trip; **disposal safety** (double-dispose; query iterator after KB
   dispose throws `ObjectDisposedException`; method-after-dispose throws); and
