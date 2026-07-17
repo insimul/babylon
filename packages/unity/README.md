@@ -203,6 +203,16 @@ transform fixups (pivot offset, scale, footprint alignment) and socket metadata.
 - The resolver, matcher, and unbound reporting are UnityEngine-free and host-tested
   on a bare .NET SDK (`tools/verify-unity`, `RunBindingResolverTests`); the
   ScriptableObject is verified by the C# structural gate.
+- A bundled **CC0 placeholder pack** ships as the lowest-precedence tier so any
+  imported world is instantiable out of the box. The pure recipe
+  ([`Runtime/Binding/PlaceholderPack.cs`](Runtime/Binding/PlaceholderPack.cs)) covers
+  every base taxonomy node (`building.*`, `npc.*`, `item.*`, `prop.*`, `terrain.*`);
+  **Insimul ▸ Generate Placeholder Pack**
+  ([`Editor/PlaceholderPackGenerator.cs`](Editor/PlaceholderPackGenerator.cs))
+  materializes primitive prefabs + a pre-wired table. Coverage (every golden-world
+  archetype resolves) is host-tested (`RunPlaceholderPackTests`); licensing note in
+  [`Runtime/Binding/Placeholder/LICENSE.md`](Runtime/Binding/Placeholder/LICENSE.md)
+  (all content original/CC0). Your own project table always overrides it.
 
 ## Export pipeline: what gets copied and substituted
 

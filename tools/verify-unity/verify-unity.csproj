@@ -84,6 +84,13 @@
     <Compile Include="../../packages/unity/Runtime/Binding/ArchetypeKey.cs" />
     <Compile Include="../../packages/unity/Runtime/Binding/BindingModel.cs" />
     <Compile Include="../../packages/unity/Runtime/Binding/BindingResolver.cs" />
+    <!-- Placeholder asset pack (US-UB2): the pure, UnityEngine-free recipe +
+         Placeholder-tier BindingLayer. The editor generator that materializes its
+         primitive prefabs (Editor/PlaceholderPackGenerator.cs) is UnityEngine-
+         coupled and thus NOT included (structural gate only) — RunPlaceholderPackTests
+         proves the coverage guarantee (every golden-world key resolves) over this. -->
+    <Compile Include="../../packages/unity/Runtime/Binding/PlaceholderPack.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/PlaceholderPackCorpus.cs" />
   </ItemGroup>
 
 </Project>

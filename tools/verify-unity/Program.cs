@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using Insimul.Binding;
+using Insimul.Binding.TestSupport;
 using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
 using Insimul.Quest;
@@ -46,6 +47,7 @@ namespace Insimul.Verify
             RunRadiantPureTests();
             RunBootstrapTests();
             RunBindingResolverTests();
+            RunPlaceholderPackTests();
 
             if (skipNative)
             {
@@ -1523,6 +1525,111 @@ namespace Insimul.Verify
                 var r = resolver.Resolve("prop.street.market-stall");
                 AssertEqual(false, r.Rule.HasAsset);
             });
+        }
+
+        // ---- Placeholder asset pack (US-UB2) --------------------------------
+
+        private static void RunPlaceholderPackTests()
+        {
+            Case("PlaceholderPack.Specs cover the five base-node wildcards", () =>
+            {
+                var patterns = new HashSet<string>();
+                foreach (var s in PlaceholderPack.Specs) patterns.Add(s.Pattern);
+                AssertEqual(true, patterns.Contains("building.*"));
+                AssertEqual(true, patterns.Contains("npc.*"));
+                AssertEqual(true, patterns.Contains("item.*"));
+                AssertEqual(true, patterns.Contains("prop.*"));
+                AssertEqual(true, patterns.Contains("terrain.*"));
+            });
+
+            Case("PlaceholderPack.Specs are deterministic + ordinally sorted", () =>
+            {
+                var a = PlaceholderPack.Specs;
+                var b = PlaceholderPack.Specs;
+                AssertEqual(a.Count, b.Count);
+                for (int i = 0; i < a.Count; i++)
+                {
+                    AssertEqual(a[i].Pattern, b[i].Pattern);
+                    AssertEqual(a[i].AssetRef, b[i].AssetRef);
+                    if (i > 0)
+                        AssertTrue(string.CompareOrdinal(a[i - 1].Pattern, a[i].Pattern) < 0,
+                                   "specs must be strictly ordinally sorted (no dup patterns)");
+                }
+            });
+
+            Case("Placeholder AssetRefs are deterministic placeholder: handles", () =>
+            {
+                foreach (var s in PlaceholderPack.Specs)
+                {
+                    AssertTrue(s.AssetRef.StartsWith(PlaceholderPack.AssetPrefix),
+                               $"{s.Pattern} -> {s.AssetRef} must be a placeholder: handle");
+                    AssertTrue(!s.AssetRef.Contains("*"),
+                               $"{s.AssetRef} must strip the wildcard");
+                }
+                // The base-node handle strips the wildcard.
+                var building = FindSpec("building.*");
+                AssertEqual("placeholder:building", building.AssetRef);
+                var grass = FindSpec("terrain.texture.grass");
+                AssertEqual("placeholder:terrain.texture.grass", grass.AssetRef);
+            });
+
+            Case("PlaceholderPack.BuildLayer is Placeholder-tier, sorted, every rule bound", () =>
+            {
+                var layer = PlaceholderPack.BuildLayer();
+                AssertEqual(BindingSourceKind.Placeholder, layer.Kind);
+                AssertEqual(PlaceholderPack.Name, layer.Name);
+                AssertEqual(PlaceholderPack.Specs.Count, layer.Rules.Count);
+                for (int i = 1; i < layer.Rules.Count; i++)
+                    AssertTrue(string.CompareOrdinal(layer.Rules[i - 1].Key, layer.Rules[i].Key) <= 0,
+                               "layer rules must be ordinally sorted");
+                foreach (var r in layer.Rules)
+                    AssertTrue(r.HasAsset, $"placeholder rule {r.Key} must carry an asset handle");
+            });
+
+            Case("Every golden-world archetype resolves against the placeholder pack", () =>
+            {
+                var keys = PlaceholderPackCorpus.GoldenArchetypeKeys();
+                AssertTrue(keys.Count > 0, "golden-world-archetypes.json must load with keys");
+
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var report = resolver.CollectUnbound(keys);
+                if (!report.AllBound)
+                    throw new Exception("unbound golden keys: " + string.Join(", ", report.MissingKeys));
+                AssertEqual(0, report.MissingCount);
+                AssertEqual(report.RequestedCount, report.BoundCount);
+
+                // Each resolves via the Placeholder tier to a placeholder: handle.
+                foreach (var key in keys)
+                {
+                    var r = resolver.Resolve(key);
+                    AssertTrue(r != null, $"golden key {key} resolved to null");
+                    AssertEqual(BindingSourceKind.Placeholder, r.Source);
+                    AssertTrue(r.Rule.HasAsset, $"golden key {key} resolved to an empty asset");
+                }
+            });
+
+            Case("Placeholder is the fallback: a project rule overrides it", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.commercial.bakery.medium", "my-bakery")),
+                    PlaceholderPack.BuildLayer(),
+                });
+                var over = resolver.Resolve("building.commercial.bakery.medium");
+                AssertEqual("my-bakery", over.Rule.AssetRef);
+                AssertEqual(BindingSourceKind.Project, over.Source);
+                // An unbound-in-project key still falls through to the placeholder.
+                var fell = resolver.Resolve("npc.guard");
+                AssertEqual(BindingSourceKind.Placeholder, fell.Source);
+            });
+        }
+
+        private static PlaceholderSpec FindSpec(string pattern)
+        {
+            foreach (var s in PlaceholderPack.Specs)
+                if (s.Pattern == pattern) return s;
+            throw new Exception($"no placeholder spec for pattern {pattern}");
         }
 
         // ---- Mini test framework --------------------------------------------
