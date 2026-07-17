@@ -32,6 +32,7 @@
     "engines:unreal:placeholder": "bash tools/verify-unreal/run-placeholder-tests.sh",
     "engines:unreal:reimport": "bash tools/verify-unreal/run-reimport-tests.sh",
     "engines:unreal:binding-editor": "bash tools/verify-unreal/run-binding-editor-tests.sh",
+    "engines:unreal:connect": "bash tools/verify-unreal/run-connect-tests.sh",
     "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
     "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell",
