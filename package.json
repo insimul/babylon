@@ -37,6 +37,7 @@
     "engines:unreal:generation": "bash tools/verify-unreal/run-generation-tests.sh",
     "engines:unreal:conversation": "bash tools/verify-unreal/run-conversation-tests.sh",
     "engines:unreal:ui": "bash tools/verify-unreal/run-ui-tests.sh",
+    "engines:unreal:quest-ui": "bash tools/verify-unreal/run-quest-ui-tests.sh",
     "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
     "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell",

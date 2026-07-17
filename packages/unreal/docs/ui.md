@@ -99,3 +99,42 @@ shared corpus: the registry cases (default / override precedence / missing
 diagnostics + the real WBP default map), the loading cases (weighted progress,
 monotonicity, labels, completion, tips), and the theme-token table. The gate is
 also wired into `npm run engines:check` under the Unreal block.
+
+## Quest panels + notifications (US-XU2)
+
+`Portable/InsimulQuestJournalModel.{h,cpp}` is the engine-neutral view-model the
+three quest panels share — the JOURNAL (`QuestJournalWidget`: tab filtering +
+counts), the TRACKER HUD (`InsimulQuestTrackerWidget`: a bounded set of tracked
+active quests, `max_tracked`), and the OFFER dialog (`InsimulQuestOfferPanel`:
+accept / decline; radiant `quest_offered` arrivals land here via `Upsert`).
+Lifecycle transitions mirror the real `FInsimulQuestSystem` signals: accept
+(available→active), complete (active→completed, auto-untracked), upsert (a radiant
+arrival appears as available). It mirrors `packages/core/src/ui/quest-journal-model.ts`
+and the Godot `quest_journal_model.gd` case-for-case against the shared corpus
+`conformance/ui/quest-journal-cases.json`.
+
+**Event-driven (no polling):** every state-changing op emits a `FQuestJournalEvent`
+(`Reset`/`QuestAdded`/`QuestUpdated`/`QuestAccepted`/`QuestDeclined`/`QuestCompleted`/
+`QuestTracked`/`QuestUntracked`/`FilterChanged`) to registered listeners
+synchronously. Read-only ops (`Filtered`/`Counts`/`TrackedIds`) and rejected ops
+(accepting a non-available quest, tracking past `max_tracked`) emit **nothing**. The
+UE seam `UInsimulQuestJournal` (`Public/InsimulQuestJournal.h`) wraps the portable
+model (pimpl) and forwards these events through the `OnQuestJournalChanged` dynamic
+multicast delegate, so the UMG widgets rebuild only when the model changes — they
+never poll each frame.
+
+`Portable/InsimulNotifications.{h,cpp}` is the transient-toast queue (push / tick
+lifetime expiry / dismiss / `kind→color` mapping to the shared theme tokens),
+mirroring `notifications.ts` / `insimul_notifications.gd`. It ties into the quest
+panels as the "+ notifications" seam: a listener on the quest model `Push`es a toast
+on accept / complete / radiant-arrival, and the toast Control ages them on its own
+timer — no polling either direction.
+
+### Tests
+
+`npm run engines:unreal:quest-ui` (`tools/verify-unreal/run-quest-ui-tests.sh`)
+grep-guards the cores as UE-free, then compiles + runs `test_quest_journal.cpp` (29
+assertions): the full quest-journal corpus matrix, the event-driven surface
+(mutations push events; read-only/rejected ops are silent), the notifications core,
+and the quest-events-drive-toasts integration. Wired into `npm run engines:check`
+under the Unreal block.

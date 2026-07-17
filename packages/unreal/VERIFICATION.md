@@ -570,3 +570,53 @@ the Godot leg (`insimul_ui_registry.gd` / `loading_screen_model.gd` /
 default map (WBP asset paths vs Godot `.tscn`) and the native theme representation
 (Slate vs Godot `Theme`) differ by design. Any resolution / progress / token
 divergence found in the human pass is a bug — file it against US-XU1.
+
+## US-XU2 — Quest journal / tracker / offer + notifications (Unreal editor required)
+
+**Automated cores are green before the human pass; the UMG seam is
+editor-verified (autoMerge off).**
+
+### 0. Automated pre-checks
+
+- [ ] `npm run engines:unreal:quest-ui` — the quest-UI host gate is green (29
+      assertions): the full `conformance/ui/quest-journal-cases.json` matrix (tab
+      filtering + counts, accept/decline offers, bounded tracker HUD, radiant
+      arrival via upsert), the **event-driven** surface (every mutation pushes a
+      `FQuestJournalEvent`; read-only + rejected ops emit nothing — proving no
+      polling), the toast notifications core (push / tick-expiry / dismiss /
+      kind→color), and the quest-events-drive-toasts integration.
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE seam
+      (`UInsimulQuestJournal` + its `OnQuestJournalChanged` dynamic multicast
+      delegate) and the grep-guard confirms `InsimulQuestJournalModel` /
+      `InsimulNotifications` stay UE-free.
+
+### 1. Journal filtering + counts
+
+- [ ] Open the quest journal (WBP_QuestJournal). Confirm the tab row shows the
+      per-status counts and switching tabs (All / Active / Completed / Available)
+      partitions the list to exactly the matching quests, in stable order.
+
+### 2. Tracker HUD (bounded, event-driven)
+
+- [ ] Track an active quest — it appears on the HUD tracker immediately (the widget
+      rebuilds off the `QuestTracked` event, not a tick). Track past the configured
+      max: further tracks are rejected with no HUD change. Untrack frees a slot.
+- [ ] Complete a tracked active quest: it auto-untracks (drops off the HUD) and moves
+      to the Completed tab in one event round-trip.
+
+### 3. Offer dialog + radiant arrival + toasts
+
+- [ ] Trigger a quest offer (InsimulQuestOfferPanel). Accept → the quest moves to
+      Active and a success toast fires; Decline → the offer is removed entirely.
+- [ ] Let a radiant quest arrive (quest_offered): it appears under the Available tab
+      and raises an info toast, with no per-frame polling on the panels. Toasts age
+      out on their own timer.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the journal/tracker/offer + notifications contract.** The cores
+mirror the Godot leg (`quest_journal_model.gd` / `insimul_notifications.gd`) and the
+shared `quest-journal-cases.json` case-for-case; only the UMG widget layer (dynamic
+multicast delegate vs Godot signals) differs by design. Any lifecycle / filtering /
+tracking / notification divergence found in the human pass is a bug — file it
+against US-XU2.
