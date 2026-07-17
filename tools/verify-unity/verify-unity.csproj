@@ -120,6 +120,20 @@
     <Compile Include="../../packages/unity/Runtime/Binding/BindingPack.cs" />
     <Compile Include="../../packages/unity/Runtime/Binding/BindingEditorModel.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/BindingEditorCorpus.cs" />
+    <!-- Default-UI view-models (US-UU1): the pure, UnityEngine-free cores — the
+         panel registry (default map / creator override / diagnostics), the
+         weighted-phase loading-screen model, the notification queue, and the
+         design-token set. The UGUI-coupled views + catalog/manager/theme
+         ScriptableObjects (Runtime/UI/InsimulUI{Manager,Catalog,ThemeAsset}.cs,
+         InsimulLoadingScreen.cs, InsimulNotificationCenter.cs) are structural-gate-
+         only. RunUiRegistry/LoadingScreen/Notification/ThemeToken tests in
+         Program.cs drive these against the shared corpus
+         (packages/core/conformance/ui/*.json). -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulUIRegistry.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulLoadingScreenModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulNotifications.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulUITheme.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/UiCorpus.cs" />
   </ItemGroup>
 
 </Project>

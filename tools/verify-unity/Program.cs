@@ -25,6 +25,8 @@ using Insimul.Save;
 using Insimul.Save.TestSupport;
 using Insimul.Scene;
 using Insimul.Scene.TestSupport;
+using Insimul.UI;
+using Insimul.UI.TestSupport;
 using Insimul.World;
 using Insimul.World.TestSupport;
 
@@ -53,6 +55,10 @@ namespace Insimul.Verify
             RunSceneGenTests();
             RunReimportDiffTests();
             RunBindingEditorTests();
+            RunUiRegistryTests();
+            RunLoadingScreenTests();
+            RunNotificationTests();
+            RunThemeTokenTests();
 
             if (skipNative)
             {
@@ -2019,6 +2025,188 @@ namespace Insimul.Verify
                 AssertEqual(0, BindingPack.Import("").Rules.Count);
                 AssertEqual(0, BindingPack.Import("}{ not json").Rules.Count);
             });
+        }
+
+        // ---- Default UI (US-UU1) --------------------------------------------
+
+        private static void RunUiRegistryTests()
+        {
+            Section("Default UI — panel registry (US-UU1)");
+
+            Case("Shipped default map resolves every corpus panel key", () =>
+            {
+                var keys = UiCorpus.LoadPanelKeys();
+                AssertTrue(keys.Count > 0, "registry-cases.json → panel_keys must load");
+                var registry = new InsimulUIRegistry();
+                foreach (string key in keys)
+                    AssertTrue(registry.Has(key), $"default map missing panel '{key}'");
+            });
+
+            var cases = UiCorpus.LoadRegistryCases();
+            AssertTrue(cases.Count > 0, "registry-cases.json must load");
+            foreach (RegistryCase c in cases)
+            {
+                Case($"registry: {c.Name}", () =>
+                {
+                    var registry = new InsimulUIRegistry(c.Defaults);
+                    registry.ApplyOverrides(c.Overrides);
+                    string scene = registry.SceneRef(c.Resolve);
+                    AssertEqual(c.ExpectedScene, scene);
+                    AssertEqual(c.ExpectedOverridden, registry.IsOverridden(c.Resolve));
+                    // A missing key must record a diagnostic; a resolved key must not.
+                    AssertEqual(c.ExpectedMissing, registry.HasDiagnostics());
+                    if (c.ExpectedMissing)
+                    {
+                        var diags = registry.Diagnostics();
+                        AssertEqual("missing_panel", diags[diags.Count - 1].Kind);
+                        AssertEqual(c.Resolve, diags[diags.Count - 1].Key);
+                    }
+                });
+            }
+        }
+
+        private static void RunLoadingScreenTests()
+        {
+            Section("Default UI — loading screen view-model (US-UU1)");
+
+            var phases = UiCorpus.LoadPhases();
+            var tips = UiCorpus.LoadTips();
+            AssertTrue(phases.Count > 0, "loading-phases.json → phases must load");
+
+            Case("Shipped default phase table matches the corpus", () =>
+            {
+                AssertEqual(phases.Count, InsimulLoadingScreenModel.DefaultPhases.Count);
+                for (int i = 0; i < phases.Count; i++)
+                {
+                    AssertEqual(phases[i].Key, InsimulLoadingScreenModel.DefaultPhases[i].Key);
+                    AssertEqual(phases[i].Label, InsimulLoadingScreenModel.DefaultPhases[i].Label);
+                    AssertEqual(phases[i].Weight, InsimulLoadingScreenModel.DefaultPhases[i].Weight);
+                }
+                AssertEqual(tips.Count, InsimulLoadingScreenModel.DefaultTips.Count);
+                for (int i = 0; i < tips.Count; i++)
+                    AssertEqual(tips[i], InsimulLoadingScreenModel.DefaultTips[i]);
+            });
+
+            var cases = UiCorpus.LoadLoadingCases();
+            AssertTrue(cases.Count > 0, "loading-phases.json → cases must load");
+            foreach (LoadingCase c in cases)
+            {
+                Case($"loading: {c.Name}", () =>
+                {
+                    var model = new InsimulLoadingScreenModel(phases, tips);
+                    foreach (LoadingStep s in c.Steps)
+                    {
+                        model.Advance(s.Advance);
+                        AssertTrue(Math.Abs(model.Progress() - s.ExpectedProgress) < 0.0001f,
+                            $"phase '{s.Advance}': progress expected {s.ExpectedProgress}, got {model.Progress()}");
+                        AssertEqual(s.ExpectedLabel, model.Label());
+                        AssertEqual(s.ExpectedComplete, model.IsComplete());
+                    }
+                });
+            }
+
+            Case("Deterministic per-phase tip wraps the tip pool", () =>
+            {
+                var model = new InsimulLoadingScreenModel(phases, tips);
+                model.Advance("init");
+                AssertEqual(tips[0], model.Tip());
+                model.Advance("systems"); // index 4 -> 4 % tips.Count
+                AssertEqual(tips[4 % tips.Count], model.Tip());
+            });
+        }
+
+        private static void RunNotificationTests()
+        {
+            Section("Default UI — notification queue (US-UU1)");
+
+            Case("Push assigns ids and maps kind -> token color", () =>
+            {
+                var n = new InsimulNotifications();
+                int id1 = n.Push("hello");
+                int id2 = n.Push("done", NotificationKind.Success);
+                AssertEqual(2, n.Count);
+                AssertTrue(id2 != id1, "ids are unique");
+                var vis = n.Visible();
+                AssertEqual("accent", vis[0].Color);   // Info -> accent
+                AssertEqual("success", vis[1].Color);
+                AssertEqual("warning", KindColorOf(NotificationKind.Warning));
+                AssertEqual("danger", KindColorOf(NotificationKind.Danger));
+            });
+
+            Case("Tick ages notifications out; returns true only when the set changes", () =>
+            {
+                var n = new InsimulNotifications();
+                n.Push("a", NotificationKind.Info, 4f);
+                n.Push("b", NotificationKind.Info, 2f);
+                AssertTrue(!n.Tick(1f), "nothing expired yet");
+                AssertEqual(2, n.Count);
+                AssertTrue(n.Tick(1.5f), "b (2s) expired at t=2.5");
+                AssertEqual(1, n.Count);
+                AssertEqual("a", n.Visible()[0].Text);
+            });
+
+            Case("Dismiss removes early; unknown id is a no-op", () =>
+            {
+                var n = new InsimulNotifications();
+                int id = n.Push("x");
+                AssertTrue(n.Dismiss(id), "known id removed");
+                AssertEqual(0, n.Count);
+                AssertTrue(!n.Dismiss(9999), "unknown id is a no-op");
+            });
+        }
+
+        private static string KindColorOf(NotificationKind kind) =>
+            InsimulNotifications.KindColor[kind];
+
+        private static void RunThemeTokenTests()
+        {
+            Section("Default UI — theme-token parity (US-UU1)");
+
+            Case("Color tokens match theme-tokens.json exactly", () =>
+            {
+                var colors = UiCorpus.LoadThemeColors();
+                AssertTrue(colors.Count > 0, "theme-tokens.json → colors must load");
+                AssertEqual(colors.Count, InsimulUITheme.Colors.Count);
+                foreach (var kv in colors)
+                {
+                    AssertTrue(InsimulUITheme.Colors.TryGetValue(kv.Key, out string mine),
+                        $"missing color token '{kv.Key}'");
+                    AssertEqual(kv.Value, mine);
+                }
+            });
+
+            Case("Numeric tokens (spacing/radius/font_size) match theme-tokens.json", () =>
+            {
+                AssertNumericTokens(UiCorpus.LoadThemeInts("spacing"), InsimulUITheme.Spacing, "spacing");
+                AssertNumericTokens(UiCorpus.LoadThemeInts("radius"), InsimulUITheme.Radius, "radius");
+                AssertNumericTokens(UiCorpus.LoadThemeInts("font_size"), InsimulUITheme.FontSize, "font_size");
+            });
+
+            Case("Hex parser yields the expected RGBA (incl. alpha)", () =>
+            {
+                ThemeColor accent = InsimulUITheme.Color("accent"); // #5b8cff
+                AssertEqual((byte)0x5b, accent.R);
+                AssertEqual((byte)0x8c, accent.G);
+                AssertEqual((byte)0xff, accent.B);
+                AssertEqual((byte)0xff, accent.A);
+                ThemeColor overlay = InsimulUITheme.Color("overlay"); // #0a0b10cc
+                AssertEqual((byte)0xcc, overlay.A);
+                AssertThrows<FormatException>(() => InsimulUITheme.ParseHex("#12"));
+            });
+        }
+
+        private static void AssertNumericTokens(
+            IReadOnlyDictionary<string, int> expected,
+            IReadOnlyDictionary<string, int> actual,
+            string group)
+        {
+            AssertTrue(expected.Count > 0, $"theme-tokens.json → {group} must load");
+            AssertEqual(expected.Count, actual.Count);
+            foreach (var kv in expected)
+            {
+                AssertTrue(actual.TryGetValue(kv.Key, out int mine), $"missing {group} token '{kv.Key}'");
+                AssertEqual(kv.Value, mine);
+            }
         }
 
         private static double Round3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);
