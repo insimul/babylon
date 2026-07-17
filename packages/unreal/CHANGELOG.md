@@ -57,6 +57,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `InsimulPcgVegetation` stage that feeds graph parameters from the IR biome/density
   slice. Licensing note `data/placeholders/LICENSE.md` (all original / CC0).
   Conventions in `docs/scene-generation.md`; wired into `npm run engines:check`.
+- **Conservative re-import diff + Binding Editor (US-XG4).** Two new UE-free cores.
+  The re-import policy (`Source/InsimulEditor/Portable/InsimulReimportDiff.{h,cpp}`)
+  matches existing actors to the fresh placement manifest by `InsimulEntityId` and
+  classifies each into added / updated / unchanged / skipped(hand edit) /
+  deprecated: only `generated=true` actors are ever refreshed, hand edits are
+  preserved verbatim, dropped generated actors are reparented under `Deprecated/`
+  (never deleted), and the dry-run report serializes byte-identical to the
+  cross-engine golden (`Tests/fixtures/reimport/golden-diff-report.json`,
+  byte-identical to Unity's + Godot's). The Binding Editor view-model
+  (`Portable/InsimulBindingEditorModel.{h,cpp}`) turns the world's archetype keys
+  into a taxonomy tree annotated with bound / placeholder / unbound status,
+  partitions bound/unbound keys, and ranks name/tag asset suggestions — the same
+  cases the Unity leg proves. UE-coupled seams (syntax-gated only): the
+  `UInsimulReimport` driver (`DryRun`/`Apply`, one Undo transaction, live-tree
+  mutator) and the `UInsimulBindingEditorWidget` Editor Utility Widget (bind /
+  bind-descendants / pack import-export / suggestions over the Asset Registry).
+  Host gates `npm run engines:unreal:reimport` (19/19) +
+  `engines:unreal:binding-editor` (17/17), both wired into
+  `npm run engines:check`. Policy + editor loop documented in `docs/reimport.md`;
+  human checklist in `VERIFICATION.md` (US-XG4). `InsimulEditor.Build.cs` gains
+  `AssetRegistry` + `Blutility`/`UMG`/`UMGEditor` deps for the utility widget.
 
 ### Notes
 - `EngineVersion` is intentionally left unset: this is a source plugin that builds

@@ -31,6 +31,12 @@ public class InsimulEditor : ModuleRules
             "Slate",
             "SlateCore",
             "AssetTools",
+            "AssetRegistry",
+            // The Binding Editor is an Editor Utility Widget (US-XG4); Blutility +
+            // UMG back the UEditorUtilityWidget base + its UMG surface.
+            "Blutility",
+            "UMG",
+            "UMGEditor",
             // Terrain + settlement generation (US-XG2): Landscape sculpt/splines,
             // Level Instances for interiors, World Partition + NavMesh setup.
             "Landscape",

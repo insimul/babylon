@@ -91,6 +91,10 @@ if changed_matches "packages/unreal/"; then
 	bash tools/verify-unreal/run-scene-tests.sh
 	echo "== unreal: placeholder pack coverage host tests (US-XG3) =="
 	bash tools/verify-unreal/run-placeholder-tests.sh
+	echo "== unreal: re-import diff policy host tests (US-XG4) =="
+	bash tools/verify-unreal/run-reimport-tests.sh
+	echo "== unreal: binding-editor view-model host tests (US-XG4) =="
+	bash tools/verify-unreal/run-binding-editor-tests.sh
 else
 	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
 fi

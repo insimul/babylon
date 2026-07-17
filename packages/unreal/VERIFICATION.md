@@ -229,3 +229,93 @@ semantics):
 
 Any delta discovered during the human pass that is **not** listed here is a bug —
 file it against this story rather than accepting it.
+
+---
+
+## US-XG4 — Scene generation ▸ re-import ▸ Binding Editor (full editor loop)
+
+**Goal:** confirm the interactive Editor-module pipeline (US-XG1..4) works
+end-to-end in a real UE editor — import the golden world, bind a custom mesh,
+regenerate, and verify placement + the conservative re-import diff. The placement
+math + resolver + placeholder coverage + re-import policy + binding-editor logic
+all host-test green (`npm run engines:check`); this is the human pass over the
+UE-coupled seam (the `UInsimul*` widgets / generators / drivers that UBT compiles
+but the harness only syntax-gates).
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:check` → green. Includes the five unreal host gates:
+      binding resolver (21/21), scene placement (13/13), placeholder coverage
+      (12/12), **re-import diff (19/19)**, **binding-editor view-model (17/17)**,
+      plus the C++ structural syntax gate over every `.h/.cpp`.
+- [ ] The InsimulEditor module builds under UBT (Development Editor target) with
+      no UHT errors on the `USTRUCT`/`UCLASS`/`UFUNCTION` reflection surface —
+      `UInsimulSceneGenerator`, `UInsimulReimport`, `UInsimulBindingEditorWidget`,
+      `UInsimulEntityIdComponent`, `UInsimulBindingTable`,
+      `UInsimulPlaceholderPackGenerator`, `UInsimulPcgVegetation`.
+
+### 1. Import the golden world + placeholder coverage
+
+- [ ] Generate the placeholder pack (**Insimul ▸ Generate Placeholder Pack**) →
+      a `UInsimulBindingTable` (SourceKind = Placeholder) + primitive meshes are
+      written under `Content/Insimul/Placeholders/`.
+- [ ] Run **Insimul ▸ Generate Scene From World IR** on the golden world export.
+      The scene populates: terrain, roads, buildings (+ interiors), props, a
+      NavMesh bounds volume. Every generated actor carries a
+      `UInsimulEntityIdComponent` (+ the `Insimul.Generated` tag).
+- [ ] With ONLY the placeholder pack bound, **every** archetype the golden IR uses
+      resolves (nothing renders as an unbound/empty actor) — the coverage rule.
+
+### 2. Binding Editor: bind a custom mesh
+
+Open the Binding Editor utility widget (a Blueprint child of
+`UInsimulBindingEditorWidget`), set `WorldArchetypes` to the golden world's keys.
+
+- [ ] `BuildRows()` shows the taxonomy-grouped archetype list; used-archetype
+      leaves show **Placeholder** status (bound only via the placeholder tier).
+- [ ] `SuggestBindings("building.commercial.bakery")` ranks project assets whose
+      name/path/tags contain the most dot-segments first.
+- [ ] **Bind** a custom StaticMesh/Blueprint to a building archetype in the
+      project table. That row now shows **Bound** (project tier wins over
+      placeholder); `BoundKeys()` includes it, `UnboundKeys()` does not.
+- [ ] **Bind-descendants** on a parent key (e.g. `building`) — every `building.*`
+      archetype with no more-specific entry now resolves to it.
+- [ ] **Export Pack** → portable `insimul-binding-pack` JSON; re-**Import Pack**
+      of that JSON reproduces the same table (keys + fixups preserved).
+
+### 3. Regenerate + verify placement
+
+- [ ] Re-run **Generate Scene From World IR**. The building you bound now spawns
+      your custom asset at the SAME lot footprint / transform the placeholder used
+      — placement is a pure function of the IR, independent of the bound asset.
+- [ ] The spawned transform matches the host golden manifest coordinates (the
+      cross-engine determinism the `run-scene-tests.sh` gate pins).
+
+### 4. Conservative re-import diff (the payoff)
+
+- [ ] Hand-edit the scene: move a generated building, and add a hand-placed prop
+      (no `UInsimulEntityIdComponent`). Mark one generated actor `bGenerated=false`
+      (an adopted override).
+- [ ] Run **Insimul ▸ Re-import World IR (Diff)** (dry run) on a *changed* IR
+      export. The summary logs canonical counts: added / updated / unchanged /
+      skipped / deprecated. Confirm the JSON matches
+      `UInsimulReimport::DryRun(...).ReportJson`.
+- [ ] **Apply** the re-import (one Undo group):
+  - [ ] Moved generated actors are snapped back to the fresh IR transform
+        (**Updated**).
+  - [ ] The hand-placed prop is untouched, and the `bGenerated=false` override is
+        **Skipped** (not updated, not deprecated) — hand edits survive.
+  - [ ] A generated actor the new IR dropped is reparented under the `Deprecated/`
+        folder, **not deleted**.
+  - [ ] Brand-new IR ids are materialized + stamped (**Added**).
+- [ ] Undo restores the pre-apply state in one step.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the numeric + policy contract.** The scene placement numbers,
+the placeholder coverage set, the re-import classification, and the binding-editor
+decisions are all pinned byte-for-byte against the shared cross-engine fixtures
+(the Unity manifests/goldens are copied verbatim). Only the engine-specific
+asset-ref strings (`placeholder:building` vs a real `/Game/...` path) differ, by
+design. Any classification / placement / coverage difference discovered in the
+human pass is a bug — file it against US-XG4.
