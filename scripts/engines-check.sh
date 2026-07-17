@@ -51,11 +51,16 @@ if changed_matches "packages/unity/"; then
 	echo "== unity: C# structural syntax gate (US-EP3) =="
 	node tools/verify-unity/check.mjs
 	if command -v dotnet >/dev/null 2>&1; then
-		echo "== unity: pure host tests — Prolog wrapper + world source (US-UC1) =="
+		echo "== unity: pure host tests — Prolog wrapper + world source + save system =="
 		bash tools/verify-unity/run.sh --pure
 	else
 		echo "unity: dotnet not found — SKIP host dotnet tests (structural gate only)"
 	fi
+	# Save-system portability cross-check (US-UC2): recompute the golden integrity
+	# vectors from the TS authority (the exact canonical bytes the C# side targets)
+	# + validate a C#-produced envelope if the dotnet run wrote one. Needs vite-node.
+	echo "== unity: save-system portability cross-check (US-UC2) =="
+	npx vite-node tools/verify-unity/cross-check.mjs
 else
 	echo "engines:check: no packages/unity/ changes — skipping unity gates"
 fi

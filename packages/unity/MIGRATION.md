@@ -106,6 +106,71 @@ Not superseded (kept hand-written, out of scope for world loading):
 `InsimulBiomeZoneData.cs`, `InsimulWaterFeatureData.cs`, `InsimulDialogueContext.cs`
 — these are presentation/asset/dialogue-context concerns, not schema world data.
 
+## Portable save system (US-UC2)
+
+`Runtime/Save/InsimulSaveSystem.cs` + `Runtime/Save/JsonVal.cs` are the new
+engine-agnostic save core — the C# port of the semantics authority in
+`packages/core/src` (`save-file.ts`, `save-envelope.ts`, `save-file-migrations.ts`,
+`save-extensions.ts`) and the twin of the Unreal
+`Source/InsimulRuntime/Portable/InsimulSaveSystem.*`. It implements:
+
+- **new-game** construction of a fresh, current-version `SaveFile` (embeds the
+  read-only `worldSnapshot`, initializes `currentState` defaults, empty
+  `prologFacts`),
+- **load + version-gated migration** up to `SaveFileVersion` (v1→v2 language-
+  progress backfill, v2→v3 snapshot-version stamping) PLUS the unconditional
+  `migrateExtensions()` extension-registry backfill,
+- **canonical-JSON serialization + SHA-256 integrity** byte-compatible with
+  `computeSaveFileIntegrity()` — `CanonicalJson` in `JsonVal.cs` reproduces
+  `JSON.stringify(sortDeep(value))` exactly (ordinal-sorted keys, ECMAScript
+  number rendering, JSON string escaping),
+- **export/import Envelope** build + validation (`insimul-save-v2`), and
+- **`SnapshotFacts` / `RestoreFacts`** over `currentState.prologFacts` (the
+  canonical truth the Prolog runtime hydrates from — `save.currentState` ONLY;
+  `worldSnapshot` is never mutated).
+
+`Runtime/Save/PersistentDataSaveStore.cs` is the thin Unity adapter — local slot
+files under `Application.persistentDataPath/saves/slot-N.json` (atomic temp-then-
+move writes) plus an `IInsimulSaveSync` server-sync seam. It holds no save-format
+logic, so the runtimes can't diverge. **Server sync note:** the v1 saves API is
+*not* in the currently-generated OpenAPI surface (only conversation endpoints are
+emitted), so `IInsimulSaveSync` is a game-supplied hook rather than a generated
+client call; envelopes are the wire format.
+
+### Why System.Text.Json, not JsonUtility
+
+Same rationale as US-UC1: `JsonUtility` cannot round-trip the schema-faithful
+`Dictionary<string,object>` / `object[]` sections and would silently drop them.
+`System.Text.Json` is used ONLY to bootstrap-parse into the mutable `JsonVal`
+tree; **all canonical output is emitted by the hand-rolled `CanonicalJson` writer,
+never by `System.Text.Json`**, so the integrity bytes are reproducible across the
+TS / Unreal / Unity runtimes.
+
+### The portability contract (cross-runtime parity)
+
+- `tools/verify-unity/Program.cs` (`RunSaveSystemTests`, host-side gate) asserts
+  the C# `CanonicalJson.Integrity` of each golden fixture equals the committed
+  vector in `packages/core/conformance/saves/integrity-vectors.json`, and that
+  loading+migrating `v1-minimal`/`v2-typical` reproduces the **byte-identical
+  TS-migration golden** (`Tests/Editor/fixtures/save/*.migrated.canonical.json`,
+  regenerate via a `vite-node` dump — never hand-author).
+- `tools/verify-unity/cross-check.mjs` (node side, run via `vite-node`) recomputes
+  the same vectors from the TS authority and validates a C#-produced envelope
+  (written by the dotnet run to `tools/verify-unity/cross-check/`) via
+  `validateSaveFileEnvelope` + the zod schemas — THE PORTABILITY TEST. On a box
+  without the .NET SDK the envelope leg reports PENDING (autoMerge is off; CI runs
+  the dotnet half).
+
+### Retired template file
+
+| Template file (retirement pending export-pipeline cutover) | Superseded by |
+| ---------------------------------------------------------- | ------------- |
+| `templates/scripts/systems/SaveSystem.cs`                  | `Runtime/Save/InsimulSaveSystem.cs` + `PersistentDataSaveStore.cs` |
+
+Not deleted yet — a shipped game still vendors `SaveSystem.cs` for the current
+export/scene path; it retires once the template bootstrap (US-UC5) consumes the
+new core.
+
 ## Regenerating
 
 ```

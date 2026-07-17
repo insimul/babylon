@@ -11,8 +11,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO;
 using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
+using Insimul.Save;
+using Insimul.Save.TestSupport;
 using Insimul.World;
 using Insimul.World.TestSupport;
 
@@ -32,6 +35,7 @@ namespace Insimul.Verify
             RunVersionHandshakeTests();
             RunAdapterPureTests();
             RunWorldSourceTests();
+            RunSaveSystemTests();
 
             if (skipNative)
             {
@@ -45,6 +49,7 @@ namespace Insimul.Verify
                 RunNativeTests();
                 RunAdapterNativeTests();
                 RunConformanceCorpus();
+                RunSaveKbRoundTripNative();
             }
             catch (DllNotFoundException ex)
             {
@@ -657,6 +662,262 @@ namespace Insimul.Verify
                 ? "radiant corpus present but " + ConformanceCorpus.RadiantSkipReason
                 : "no radiant corpus; " + ConformanceCorpus.RadiantSkipReason;
             Console.WriteLine($"  SKIP  {radiantNote}");
+        }
+
+        // ---- Save system (US-UC2) -------------------------------------------
+
+        private static void RunSaveSystemTests()
+        {
+            Section("Save system (US-UC2, pure)");
+
+            // Minimal world snapshot for new-game construction.
+            const string worldSnapshot =
+                "{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}";
+
+            Case("NewGame: builds a fresh current-version save with default currentState", () =>
+            {
+                var sys = new InsimulSaveSystem();
+                sys.NewGame(worldSnapshot, new NewGameOptions
+                {
+                    Id = "save-1",
+                    UserId = "u1",
+                    WorldId = "w1",
+                    Name = "New Game",
+                    SlotIndex = 0,
+                    CreatedAt = "2026-07-17T00:00:00.000Z",
+                });
+                AssertTrue(sys.IsLoaded, "should be loaded");
+                AssertEqual(InsimulSaveSystem.SaveFileVersion, sys.Version);
+                AssertEqual(0, sys.RestoreFacts().Count);
+                // worldSnapshot embedded verbatim; currentState present.
+                AssertTrue(sys.SaveFile.TryGet("worldSnapshot", out _), "worldSnapshot embedded");
+                AssertTrue(sys.SaveFile.TryGet("currentState", out _), "currentState present");
+            });
+
+            Case("NewGame: rejects a snapshot missing a world object", () =>
+            {
+                var sys = new InsimulSaveSystem();
+                AssertThrows<SaveLoadException>(() =>
+                    sys.NewGame("{\"settlements\":[]}", new NewGameOptions { Id = "x" }));
+            });
+
+            Case("Load: rejects a save from a newer build", () =>
+            {
+                var sys = new InsimulSaveSystem();
+                AssertThrows<SaveLoadException>(() =>
+                    sys.Load("{\"version\":999,\"worldSnapshot\":{},\"currentState\":{}}"));
+            });
+
+            // ── Canonical-JSON + SHA-256 parity vectors (C# side of the anchor) ──
+            string vectorsJson = SaveSystemCorpus.ReadIntegrityVectors();
+            if (vectorsJson == null)
+            {
+                Console.WriteLine("  SKIP  integrity vectors not reachable (set INSIMUL_CONFORMANCE_DIR)");
+            }
+            else
+            {
+                using var vdoc = JsonDocument.Parse(vectorsJson);
+                var vectors = vdoc.RootElement.GetProperty("vectors");
+                foreach (var name in new[] { "v1-minimal.json", "v2-typical.json", "v2-with-extensions.json" })
+                {
+                    string fixture = SaveSystemCorpus.ReadGoldenSave(name);
+                    string expected = vectors.TryGetProperty(name, out var ev) ? ev.GetString() : null;
+                    Case($"integrity vector: {name} == committed (canonical JSON + SHA-256 parity)", () =>
+                    {
+                        AssertTrue(fixture != null, $"{name} reachable");
+                        AssertTrue(expected != null, $"{name} vector present");
+                        // Hash the RAW fixture (vectors are on raw, un-migrated saves).
+                        string actual = CanonicalJson.Integrity(JsonVal.Parse(fixture));
+                        AssertEqual(expected, actual);
+                    });
+                }
+            }
+
+            // ── Golden Babylon saves LOAD in C# (portability, load side) ──
+            foreach (var name in new[] { "v1-minimal.json", "v2-typical.json", "v2-with-extensions.json" })
+            {
+                string fixture = SaveSystemCorpus.ReadGoldenSave(name);
+                if (fixture == null) continue;
+                Case($"Load: golden {name} loads + migrates to current version", () =>
+                {
+                    var sys = new InsimulSaveSystem();
+                    sys.Load(fixture);
+                    AssertEqual(InsimulSaveSystem.SaveFileVersion, sys.Version);
+                    AssertTrue(sys.SaveFile.TryGet("currentState", out _), "currentState present");
+                });
+            }
+
+            // ── Migration parity: migrated output identical to TS ──
+            var migratedVectorsJson = SaveSystemCorpus.ReadSaveFixture("migrated-integrity-vectors.json");
+            foreach (var name in new[] { "v1-minimal", "v2-typical" })
+            {
+                string fixture = SaveSystemCorpus.ReadGoldenSave($"{name}.json");
+                string goldenCanonical = SaveSystemCorpus.ReadSaveFixture($"{name}.migrated.canonical.json");
+                if (fixture == null || goldenCanonical == null) continue;
+                Case($"Migration: {name} lifts to TS-identical canonical output", () =>
+                {
+                    var sys = new InsimulSaveSystem();
+                    sys.Load(fixture);
+                    AssertEqual(InsimulSaveSystem.SaveFileVersion, sys.Version);
+                    AssertEqual(goldenCanonical, sys.SerializeCanonical());
+                    if (migratedVectorsJson != null)
+                    {
+                        using var mdoc = JsonDocument.Parse(migratedVectorsJson);
+                        string mv = mdoc.RootElement.GetProperty("vectors").GetProperty($"{name}.json").GetString();
+                        AssertEqual(mv, sys.ComputeIntegrity());
+                    }
+                });
+            }
+
+            // ── prologFacts snapshot / restore round-trip (pure) ──
+            Case("SnapshotFacts -> serialize -> Load -> RestoreFacts is identity", () =>
+            {
+                var facts = new List<PrologFact>
+                {
+                    new PrologFact("player_cefr_level", new[] { PrologArg.Atom("player"), PrologArg.Atom("A2") }),
+                    new PrologFact("gold", new[] { PrologArg.Atom("player"), PrologArg.Number(42) }),
+                    new PrologFact("in_settlement", new[] { PrologArg.Atom("player"), PrologArg.Atom("settlement-1") }),
+                };
+                var a = new InsimulSaveSystem();
+                a.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                a.SnapshotFacts(facts);
+                string json = a.SerializeCanonical();
+
+                var b = new InsimulSaveSystem();
+                b.Load(json);
+                var restored = b.RestoreFacts();
+                AssertEqual(facts.Count, restored.Count);
+                for (int i = 0; i < facts.Count; i++)
+                    AssertTrue(facts[i].Equals(restored[i]), $"fact {i} round-trips");
+            });
+
+            // ── Envelope build / validate / tamper ──
+            Case("Envelope: build -> validate ok; integrity hashes saveFile only", () =>
+            {
+                var sys = new InsimulSaveSystem();
+                sys.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                // exportedAt/insimulVersion differ but integrity is stable (hashes saveFile only).
+                string env1 = sys.BuildEnvelopeJson("1.2.3", "2026-01-01T00:00:00.000Z");
+                string env2 = sys.BuildEnvelopeJson("9.9.9", "2027-01-01T00:00:00.000Z");
+                var i1 = ExtractIntegrity(env1);
+                var i2 = ExtractIntegrity(env2);
+                AssertEqual(i1, i2);
+                AssertTrue(InsimulSaveSystem.ValidateEnvelope(env1).Ok, "envelope validates");
+            });
+
+            Case("Envelope: tampered saveFile -> integrity_mismatch", () =>
+            {
+                var sys = new InsimulSaveSystem();
+                sys.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                string env = sys.BuildEnvelopeJson("1.0.0", "2026-01-01T00:00:00.000Z");
+                string tampered = env.Replace("\"totalPlaytime\":0", "\"totalPlaytime\":9999");
+                AssertTrue(!ReferenceEquals(tampered, env) && tampered != env, "tamper applied");
+                var r = InsimulSaveSystem.ValidateEnvelope(tampered);
+                AssertTrue(!r.Ok, "tampered envelope rejected");
+                AssertEqual("integrity_mismatch", r.Code);
+            });
+
+            Case("Envelope: wrong format -> invalid_format", () =>
+            {
+                var r = InsimulSaveSystem.ValidateEnvelope("{\"format\":\"nope\",\"saveFile\":{},\"integrity\":\"x\"}");
+                AssertTrue(!r.Ok, "rejected");
+                AssertEqual("invalid_format", r.Code);
+            });
+
+            // ── Emit the cross-check envelope for the node portability test ──
+            EmitCrossCheckEnvelope();
+        }
+
+        /// <summary>Read the integrity field out of a canonical envelope JSON.</summary>
+        private static string ExtractIntegrity(string envelopeJson)
+        {
+            using var doc = JsonDocument.Parse(envelopeJson);
+            return doc.RootElement.GetProperty("integrity").GetString();
+        }
+
+        /// <summary>
+        /// Write a C#-produced envelope (from a loaded+migrated golden save) into
+        /// tools/verify-unity/cross-check/ so tools/verify-unity/cross-check.mjs can
+        /// validate it against the TS contract — THE PORTABILITY TEST.
+        /// </summary>
+        private static void EmitCrossCheckEnvelope()
+        {
+            string fixture = SaveSystemCorpus.ReadGoldenSave("v2-typical.json");
+            string dir = SaveSystemCorpus.LocateCrossCheckDir();
+            if (fixture == null || dir == null)
+            {
+                Console.WriteLine("  SKIP  cross-check envelope not emitted (corpus/tools dir unreachable)");
+                return;
+            }
+            Case("Cross-check: emit C#-produced envelope for the node portability test", () =>
+            {
+                var sys = new InsimulSaveSystem();
+                sys.Load(fixture);
+                string env = sys.BuildEnvelopeJson("unity-host-test", "2026-07-17T00:00:00.000Z");
+                // Self-check before writing: the envelope must validate in C#.
+                AssertTrue(InsimulSaveSystem.ValidateEnvelope(env).Ok, "produced envelope validates in C#");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "csharp-produced.envelope.json"), env);
+            });
+        }
+
+        // ---- Save system KB round-trip (US-UC2, native) ---------------------
+
+        private static void RunSaveKbRoundTripNative()
+        {
+            Section("Save system KB round-trip (US-UC2, native)");
+
+            const string worldSnapshot =
+                "{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}";
+
+            Case("new-game -> assert facts -> save -> load -> re-hydrate KB: identical queries", () =>
+            {
+                var facts = new List<PrologFact>
+                {
+                    new PrologFact("player_cefr_level", new[] { PrologArg.Atom("player"), PrologArg.Atom("a2") }),
+                    new PrologFact("gold", new[] { PrologArg.Atom("player"), PrologArg.Number(42) }),
+                    new PrologFact("in_settlement", new[] { PrologArg.Atom("player"), PrologArg.Atom("s1") }),
+                };
+
+                // Build the source KB and mirror the facts into the save.
+                using var kbA = new InsimulProlog();
+                foreach (var f in facts) kbA.Assert(FactToClause(f));
+
+                var sys = new InsimulSaveSystem();
+                sys.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                sys.SnapshotFacts(facts);
+                string json = sys.SerializeCanonical();
+
+                // Load a fresh save and re-hydrate a fresh KB from currentState.prologFacts.
+                var loaded = new InsimulSaveSystem();
+                loaded.Load(json);
+                using var kbB = new InsimulProlog();
+                foreach (var f in loaded.RestoreFacts()) kbB.Assert(FactToClause(f));
+
+                // Identical query results across the two KBs.
+                AssertEqual(kbA.Holds("player_cefr_level(player, a2)"),
+                            kbB.Holds("player_cefr_level(player, a2)"));
+                AssertTrue(kbB.Holds("gold(player, 42)"), "gold fact re-hydrated");
+                AssertTrue(kbB.Holds("in_settlement(player, s1)"), "settlement fact re-hydrated");
+                AssertTrue(!kbB.Holds("gold(player, 43)"), "no phantom facts");
+            });
+        }
+
+        /// <summary>Render a <see cref="PrologFact"/> as a clause for InsimulProlog.Assert.</summary>
+        private static string FactToClause(PrologFact fact)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append(fact.Predicate).Append('(');
+            for (int i = 0; i < fact.Args.Count; i++)
+            {
+                if (i != 0) sb.Append(", ");
+                var arg = fact.Args[i];
+                sb.Append(arg.IsNumber
+                    ? arg.Num.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : arg.Str);
+            }
+            sb.Append(')');
+            return sb.ToString();
         }
 
         // ---- Mini test framework --------------------------------------------

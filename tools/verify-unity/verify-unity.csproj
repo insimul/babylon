@@ -40,6 +40,14 @@
     <Compile Include="../../packages/unity/Runtime/World/InsimulWorldSource.cs" />
     <Compile Include="../../packages/unity/Runtime/Generated/InsimulGenerated.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/WorldSourceCorpus.cs" />
+    <!-- Portable save system (US-UC2): engine-agnostic, UnityEngine-free. The
+         mutable JSON model + canonical-JSON/SHA-256 core + migration chain. Its
+         shared fixture locator + the console tests in Program.cs drive it against
+         the golden saves + the TS-migration goldens. The StreamingAssets slot
+         adapter is UnityEngine-coupled and thus NOT included (structural gate only). -->
+    <Compile Include="../../packages/unity/Runtime/Save/JsonVal.cs" />
+    <Compile Include="../../packages/unity/Runtime/Save/InsimulSaveSystem.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/SaveSystemCorpus.cs" />
     <!-- The wrapper under test, referenced in place (no vendoring). -->
     <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
     <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />
