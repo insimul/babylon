@@ -34,9 +34,19 @@ replacing the hand-mirrored, drift-prone type re-declarations.
 - `quicktype-runner.mjs` — locates and invokes the pinned local `quicktype`
   (deterministic/offline; not `npx`).
 - `emit-csharp.mjs` — C# (System.Text.Json) emitter (US-CG1).
+- `emit-cpp.mjs` — C++ (nlohmann::json, C++17) emitter (US-CG2).
+- `emit-gdscript.mjs` — Godot 4 GDScript emitter (US-CG3); hand-rolled, since
+  quicktype has no GDScript target. One `class_name Insimul*` script per top-level
+  schema, with `from_dict`/`to_dict` and per-field validation.
+- `gdscript-verify.mjs` — the structural self-test (`structuralCheck`,
+  `collectSchemaKeys`) shared by the verify runner and the emitter unit test.
 - `verify-cs/` — a net8.0, Unity-free console project + `run.mjs` that compiles the
   generated DTOs on a stock .NET SDK (`npm run codegen:verify-cs`). Skips loudly
   when `dotnet` is not on PATH.
+- `verify-cpp/` — a clang++/g++ `-fsyntax-only` smoke build over the generated
+  header (`npm run codegen:verify-cpp`).
+- `verify-gdscript/` — `run.mjs` runs `godot --headless --check-only` when a `godot`
+  binary is on PATH, else the structural self-test (`npm run codegen:verify-gdscript`).
 
 ## Determinism
 
@@ -48,4 +58,6 @@ invokes that exact install — so two runs produce byte-identical output.
 
 1. Change the zod schema in `@insimul/core` and run `npm run schemas` there.
 2. `npm run codegen` at the root; commit the regenerated `Generated/` files.
-3. `npm test` (drift guard) + `npm run codegen:verify-cs` where a .NET SDK exists.
+3. `npm test` (drift guard) + the per-lang verify scripts: `codegen:verify-cs`
+   (needs a .NET SDK), `codegen:verify-cpp` (clang++/g++), `codegen:verify-gdscript`
+   (godot if present, else the structural self-test).

@@ -56,6 +56,26 @@ describe('codegen drift guard', () => {
     expect(committed).toContain('#include "nlohmann/json.hpp"');
   });
 
+  it('committed GDScript DTOs cover SaveFile, SaveFileEnvelope, WorldIR', () => {
+    const gdRels = written.filter((p) => p.endsWith('.gd'));
+    expect(gdRels.length, 'three GDScript files should be generated').toBe(3);
+    const byName = (needle: string) => gdRels.find((p) => p.includes(needle));
+    const expected: Array<[string, string]> = [
+      ['InsimulSaveFile.gd', 'class_name InsimulSaveFile'],
+      ['InsimulSaveFileEnvelope.gd', 'class_name InsimulSaveFileEnvelope'],
+      ['InsimulWorldIR.gd', 'class_name InsimulWorldIR'],
+    ];
+    for (const [file, decl] of expected) {
+      const rel = byName(file);
+      expect(rel, `${file} should be generated`).toBeTruthy();
+      const committed = readFileSync(join(REPO_ROOT, rel!), 'utf8');
+      expect(committed, `${file} should declare ${decl}`).toContain(decl);
+      // Godot 4 DTOs, not the hand-written conversation types.
+      expect(committed).toContain('static func from_dict(');
+      expect(committed).toContain('func to_dict(');
+    }
+  });
+
   it('committed generated output is byte-identical to a fresh regeneration', () => {
     const drifted: string[] = [];
     for (const rel of written) {
