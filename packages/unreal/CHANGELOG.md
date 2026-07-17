@@ -28,6 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`resolver-matrix.json` + Unity's `unity-fixture-pack.json`) as the Unity/Godot legs
   (`npm run engines:unreal:binding`; wired into `npm run engines:check`).
 
+- **Terrain + settlement generation pipeline (US-XG2).** New UE-free placement
+  core (`Source/InsimulEditor/Portable/InsimulScenePlacement.{h,cpp}`): given a
+  parsed World IR + the binding resolver it computes the deterministic, canonically
+  ordered PLACEMENT MANIFEST (terrain chunks from the IR heightmap, roads at road-
+  point centroids, buildings on grid-snapped + zone-scaled footprints, interiors,
+  props, and a nav bake root) — bilinear heightmap sampling, 1-unit footprint grid,
+  zone-role scaling, `0.001` coordinate quantization, all host-tested. The archetype
+  keys + numbers mirror the Unity leg exactly, so the host gate
+  (`npm run engines:unreal:scene`) asserts every node reproduces Unity's committed
+  golden manifest (byte-copied fixtures) — the cross-engine determinism contract.
+  The UE-coupled materializer (`InsimulSceneGenerator` entry point + pipeline stages,
+  `InsimulEntityIdComponent` identity stamp + `Insimul.Generated` tag) is syntax-
+  gated; `Landscape`/`LandscapeEditor`/`Foliage`/`NavigationSystem`/`PCG` deps
+  declared in `InsimulEditor.Build.cs`. Conventions in `docs/scene-generation.md`.
+  Wired into `npm run engines:check`.
+
 ### Notes
 - `EngineVersion` is intentionally left unset: this is a source plugin that builds
   against the installed engine. It is pinned per target at release time (FAB /

@@ -31,6 +31,15 @@ public class InsimulEditor : ModuleRules
             "Slate",
             "SlateCore",
             "AssetTools",
+            // Terrain + settlement generation (US-XG2): Landscape sculpt/splines,
+            // Level Instances for interiors, World Partition + NavMesh setup.
+            "Landscape",
+            "LandscapeEditor",
+            "Foliage",
+            "NavigationSystem",
+            // PCG-driven vegetation scatter seeded from IR biome/density (US-XG3);
+            // declared here so the generation pipeline can feed PCG graph params.
+            "PCG",
         });
     }
 }

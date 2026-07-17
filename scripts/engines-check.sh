@@ -87,6 +87,8 @@ if changed_matches "packages/unreal/"; then
 	node tools/verify-unreal/check.mjs
 	echo "== unreal: Asset Binding Layer resolver host tests (US-XG1) =="
 	bash tools/verify-unreal/run-binding-tests.sh
+	echo "== unreal: scene-generation placement host tests (US-XG2) =="
+	bash tools/verify-unreal/run-scene-tests.sh
 else
 	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
 fi

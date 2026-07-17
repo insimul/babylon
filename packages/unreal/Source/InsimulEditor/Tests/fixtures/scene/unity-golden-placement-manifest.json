@@ -1,0 +1,21 @@
+{
+  "_comment": "The expected placement manifest SceneGenerator.ComputePlacement produces for golden-ir.json against PlaceholderPack.BuildLayer() (US-UB3). Nodes are in canonical EntityId (ordinal) order; this is the placement-math + determinism contract. Position/rotationY/scale are quantized to 0.001 and match the Godot cross-engine golden numerically (only the Unity-native archetype/assetRef/bindingSource strings differ). Regenerate with a host dump (RunSceneGenTests --dump), never by hand.",
+  "manifestVersion": 1,
+  "seed": "golden-seed-1",
+  "nodeCount": 13,
+  "nodes": [
+    { "entityId": "bld-house", "kind": "building", "archetype": "building.residential", "assetRef": "placeholder:building.residential", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 71, "y": 1.16, "z": 25 }, "rotationY": 3.142, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "bld-shop", "kind": "building", "archetype": "building.commercial", "assetRef": "placeholder:building.commercial", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 30, "y": 1.968, "z": 41 }, "rotationY": 0, "scale": { "x": 1.3, "y": 1.3, "z": 1.3 } },
+    { "entityId": "bld-townhall", "kind": "building", "archetype": "building.downtown", "assetRef": "placeholder:building", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 50, "y": 3.92, "z": 51 }, "rotationY": 1.571, "scale": { "x": 1.4, "y": 1.4, "z": 1.4 } },
+    { "entityId": "bld-townhall.interior", "kind": "interior", "archetype": "", "assetRef": "", "bindingSource": "", "generated": true, "position": { "x": 0, "y": 0, "z": 0 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "nav.region", "kind": "nav_region", "archetype": "", "assetRef": "", "bindingSource": "", "generated": true, "position": { "x": 0, "y": 0, "z": 0 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "prop-lamp-1", "kind": "prop", "archetype": "prop.lamp", "assetRef": "placeholder:prop", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 55.5, "y": 0.89, "z": 12.5 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "prop-tree-1", "kind": "prop", "archetype": "prop.tree", "assetRef": "placeholder:prop", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 20, "y": 1.28, "z": 60 }, "rotationY": 0.785, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "road-main", "kind": "road", "archetype": "terrain.texture.road", "assetRef": "placeholder:terrain.texture.road", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 50, "y": 0.8, "z": 10 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "road-side", "kind": "road", "archetype": "terrain.texture.road", "assetRef": "placeholder:terrain.texture.road", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 50, "y": 4, "z": 50 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "terrain.chunk.0_0", "kind": "terrain_chunk", "archetype": "terrain.chunk", "assetRef": "placeholder:terrain", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 25, "y": 1, "z": 25 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "terrain.chunk.0_1", "kind": "terrain_chunk", "archetype": "terrain.chunk", "assetRef": "placeholder:terrain", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 25, "y": 1, "z": 75 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "terrain.chunk.1_0", "kind": "terrain_chunk", "archetype": "terrain.chunk", "assetRef": "placeholder:terrain", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 75, "y": 1, "z": 25 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } },
+    { "entityId": "terrain.chunk.1_1", "kind": "terrain_chunk", "archetype": "terrain.chunk", "assetRef": "placeholder:terrain", "bindingSource": "insimul-placeholder", "generated": true, "position": { "x": 75, "y": 1, "z": 75 }, "rotationY": 0, "scale": { "x": 1, "y": 1, "z": 1 } }
+  ]
+}
