@@ -44,6 +44,18 @@ describe('codegen drift guard', () => {
     }
   });
 
+  it('committed C++ DTOs cover SaveFile, SaveFileEnvelope, WorldIR', () => {
+    const cppRel = written.find((p) => p.endsWith('.h'));
+    expect(cppRel, 'a C++ header should be generated').toBeTruthy();
+    const committed = readFileSync(join(REPO_ROOT, cppRel!), 'utf8');
+    for (const s of ['struct SaveFile', 'struct SaveFileEnvelope', 'struct WorldIr']) {
+      expect(committed, `generated C++ should declare ${s}`).toContain(s);
+    }
+    // Plain structs, not UStructs, and depending only on the vendored single header.
+    expect(committed, 'C++ DTOs must not carry UE reflection macros').not.toContain('USTRUCT');
+    expect(committed).toContain('#include "nlohmann/json.hpp"');
+  });
+
   it('committed generated output is byte-identical to a fresh regeneration', () => {
     const drifted: string[] = [];
     for (const rel of written) {

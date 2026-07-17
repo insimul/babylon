@@ -16,11 +16,15 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { emitCSharp } from './emit-csharp.mjs';
+import { emitCpp } from './emit-cpp.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 
-export const GENERATORS = [{ name: 'csharp', emit: emitCSharp }];
+export const GENERATORS = [
+  { name: 'csharp', emit: emitCSharp },
+  { name: 'cpp', emit: emitCpp },
+];
 
 /** Run every generator, writing under `baseDir`. Returns the flat list of paths. */
 export function runCodegen(baseDir) {
