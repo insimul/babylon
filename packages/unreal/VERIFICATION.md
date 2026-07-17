@@ -456,3 +456,68 @@ the core `generation-console.ts` + `job-poller.ts` case-for-case (same
 `EditorApplication.update` vs `SceneTreeTimer`) and HTTP client differ, by design.
 Any status / progress / diff / teardown difference found in the human pass is a bug
 — file it against US-XE3.
+
+---
+
+## US-XE4 — Conversation Tester: talk to an NPC in the editor (Unreal editor + backend required)
+
+The whole turn lifecycle (send → stream reply chunks → complete/error), the
+character-list + SSE parsing, and the multi-turn transcript over one session id live
+in the Unreal-Engine-free `insimul::FConversationTesterModel`, host-tested headless
+over a routing transport + a scripted conversation stream
+(`test_conversation_tester.cpp`, `npm run engines:unreal:conversation`). This is the
+**human pass** for the UE-coupled seam only a real editor + backend can exercise: the
+`FInsimulHttpConversationStream` SSE POST driven off the editor tick, and the
+tab's pump / dispose wiring. A running backend (`UInsimulSettings::ServerURL`,
+authenticated) with the conversation service and at least one world with characters is
+required. **Text streaming works in edit mode; audio playback + lip sync do not (Play
+mode only) — see the README ▸ Conversation Tester window mode constraint.**
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:unreal:conversation` — the view-model host gate is green
+      (30 cases: parsing, character load incl. 401 re-auth, send guards, the turn
+      lifecycle over a scripted stream, multi-turn session sharing, character-switch
+      reset, dispose-on-teardown).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE-coupled
+      seam (`FInsimulHttpConversationClient` / `FInsimulHttpConversationStream`).
+
+### 1. Load characters + two-turn conversation
+
+- [ ] With the session authenticated (Project Settings ▸ Insimul), open **Insimul ▸
+      Conversation Tester**. Select a world (copy the id from the World Browser) and
+      click **Load characters** — the **Character** picker fills with the world's NPCs.
+- [ ] Pick a character, type a message, and click **Send**: the **Transcript** shows a
+      **You** line immediately, then an **NPC** line as the reply streams in, without
+      freezing the editor (the request runs off the editor tick, not blocking).
+- [ ] Send a **second** turn to the same character and confirm the reply is coherent
+      in context (the two turns share one conversation session) and **both** exchanges
+      remain in the transcript (four lines total).
+
+### 2. Audio, switching, and re-auth
+
+- [ ] If the world's characters have TTS enabled, confirm a **TTS audio: N chunk(s)
+      returned (not played in edit mode)** line appears — audio is not played here by
+      design (drive Play mode with `InsimulConversationComponent` to hear it).
+- [ ] Switch to a **different** character in the picker: the transcript clears (a fresh
+      conversation), and the next turn starts a **new** session id.
+- [ ] Let the token expire / revoke it and **Load characters** again: the load fails and
+      the panel shows the **Session expired — re-authenticate** state (the `NeedsReauth`
+      flag armed by the 401 on `getWorldDetail`).
+
+### 3. Domain-reload safety
+
+- [ ] Send a turn, then force a **recompile** (Live Coding) or **enter Play mode** while
+      it is streaming. Confirm the editor does not throw, **no** `/api/conversation/stream`
+      request keeps running after the reload/close, and re-opening the window starts
+      clean (the tab's `Dispose()` → cancel-request + drop-late-callback path).
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the parsing + lifecycle + teardown contract.**
+`FConversationTesterModel` mirrors `InsimulConversationTesterModel.cs` / the core
+`conversation-tester.ts` case-for-case (same `ConversationTesterTests` set). Only the
+engine-specific streaming HTTP client (`FHttpModule` vs `UnityWebRequest` vs
+`HTTPRequest`) and the edit-mode audio-playback wall (shared across all three) differ,
+by design. Any load / send-guard / transcript / teardown difference found in the human
+pass is a bug — file it against US-XE4.

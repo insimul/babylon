@@ -192,3 +192,65 @@ the generation happened server-side, so the local scene picks up the new world I
 through the same US-XG2/US-XG4 re-import pipeline. The v1 API has no cancel
 endpoint, so `Cancel()` is client-side only: it stops the editor tracking the job
 (disposing the poll loop); the server job may still finish.
+
+## Conversation Tester (US-XE4)
+
+The Conversation Tester lets a creator **talk to any character of the connected
+world from the editor**: it loads the world's characters (via `getWorldDetail`)
+into a picker, streams each turn's reply from the conversation SDK's
+`streamConversation` (`/api/conversation/stream`) SSE endpoint, and keeps the
+exchange in an inspectable transcript (**You** / **NPC** lines).
+
+```
+InsimulEditor/
+  Portable/                              UE-FREE, host-tested
+    InsimulConversationTesterModel.{h,cpp}  FConversationTesterModel: the per-turn
+                                         state machine (Idle → Sending → Streaming →
+                                         Idle/Error), character-list + SSE parsing,
+                                         send guards, and the multi-turn transcript
+                                         over one session id, drained from an injected
+                                         IConversationStream in Pump()
+  Private/Connect/                       UE-COUPLED, syntax-gated only
+    InsimulHttpConversationStream.*      FInsimulHttpConversationClient +
+                                         FInsimulHttpConversationStream: one
+                                         non-blocking streamConversation POST via
+                                         FHttpModule through the shared session,
+                                         buffering the parsed SSE events; disposal
+                                         aborts the in-flight request
+  Tests/test_conversation_tester.cpp     host gate (30 cases): parsing, character load
+                                         (incl. 401 re-auth), send guards, the turn
+                                         lifecycle over a scripted stream, multi-turn
+                                         session sharing, character-switch reset, and
+                                         dispose-on-teardown
+```
+
+Run it with `npm run engines:unreal:conversation` (also part of
+`npm run engines:check`). It is the case-for-case mirror of the Unity leg
+(`ConversationTesterTests`) and the core `conversation-tester.ts`.
+
+**Edit-mode constraint — text streaming works in edit mode; audio does not.** The
+production stream drives **one non-blocking `FHttpModule` POST** and parses the same
+`data: {json}` SSE the runtime conversation client emits, buffering the events for
+the model to drain in `Pump()` — no running game world (no PIE) is required for the
+**text** transcript. Audio **playback** and lip sync are **not** available in the
+tester: they need the runtime audio components (`AInsimulAICharacter`'s
+`SpeechAudioComponent` / procedural sound wave). The tester reports how many TTS
+audio chunks a reply returned (`AudioChunkCount()`) but never plays them; drive a
+Play-mode scene with the runtime `InsimulConversationComponent` to hear audio.
+
+**Reply streaming bypasses `AuthenticatedRequest`.** Character load goes through the
+shared session's `AuthenticatedRequest` (so a 401/403 clears the token + arms
+`NeedsReauth`), but the reply stream issues its POST directly (like the Generation
+Console poll). So a 401 **mid-stream** is a conversation **error**, not an immediate
+session re-auth; the next `AuthenticatedRequest` (e.g. a World Browser refresh)
+re-arms `NeedsReauth`.
+
+**Domain-reload safety.** The window subscribes a tick (→ `model.Pump()` each frame)
+and calls `model.Dispose()` when the tab is torn down. `Dispose()` releases the
+stream; the production `FInsimulHttpConversationStream`'s destructor flips a shared
+"alive" flag (so a completion callback that fires after teardown is dropped) **and**
+cancels the in-flight `FHttpModule` request — the same zombie-response guard the
+Generation Console's poller gives, so no orphaned request survives a recompile /
+Live Coding pass / entering Play mode. Switching characters starts a fresh
+conversation (new session id, cleared transcript); the two turns of a conversation
+share one session id.

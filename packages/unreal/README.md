@@ -275,6 +275,49 @@ Prolog->RestoreFromString(Image);
 > **Thread affinity:** the KB is single-thread-owned. Every call must run on the
 > game thread — off-thread calls are logged and ignored (they return `false`/`""`).
 
+## Editor panels (Insimul ▸ …)
+
+The editor plugin connects to the Insimul backend through one shared session
+(**Project Settings ▸ Insimul** for the URL + credential; the token is stored
+per-user in `GEditorPerProjectIni`, never committed). See
+[`docs/editor-connect.md`](docs/editor-connect.md) for the full architecture. The
+panels — **World Browser** (US-XE2), **Generation Console** (US-XE3), and
+**Conversation Tester** (US-XE4) — are thin views over Unreal-Engine-free,
+host-tested view-models (`Source/InsimulEditor/Portable/*`); only the
+`FHttpModule` / Slate seams under `Source/InsimulEditor/Private/Connect/` are
+UE-coupled (structural syntax gate only).
+
+### Conversation Tester window
+
+Talk to any character of the connected world from the editor: load the world's
+characters into a picker (via `getWorldDetail`), then stream each turn's reply from
+the conversation SDK's `streamConversation` SSE endpoint into an inspectable
+transcript (**You** / **NPC** lines). The window is a thin view over the
+Unreal-Engine-free, host-tested
+[`InsimulConversationTesterModel`](Source/InsimulEditor/Portable/InsimulConversationTesterModel.h)
+(the per-turn state machine Idle → Sending → Streaming → Idle/Error, transcript, SSE
+parsing), unit-tested headless over a scripted stream
+([`test_conversation_tester.cpp`](Source/InsimulEditor/Tests/test_conversation_tester.cpp),
+`npm run engines:unreal:conversation`).
+
+- **Mode constraint — text streaming works in edit mode; audio does not.** The
+  production stream drives **one non-blocking `FHttpModule` POST** and parses the same
+  `data: {json}` SSE the runtime conversation client emits, so the **text** transcript
+  streams with **no running game world** (no PIE required). Audio **playback** and lip
+  sync are **not** available in the tester — they need the runtime audio components
+  (`AInsimulAICharacter`'s `SpeechAudioComponent` / procedural sound wave). The tester
+  reports how many TTS audio chunks a reply returned but never plays them; drive a
+  **Play-mode** scene with the runtime `InsimulConversationComponent` to hear audio.
+  (This matches the Unity Conversation Tester decision, which hit the same edit-mode
+  audio wall.)
+- **Domain-reload safety:** the window pumps `model.Pump()` each tick and calls
+  `model.Dispose()` on teardown; the production stream's destructor drops any late
+  completion callback (a shared "alive" flag) **and** cancels the in-flight
+  `FHttpModule` request, so no orphaned request survives a recompile / Live Coding pass
+  / entering Play mode — the same guard the Generation Console poller uses.
+- The human end-to-end pass (pick an NPC, exchange two turns) is
+  [`VERIFICATION.md`](VERIFICATION.md) § US-XE4.
+
 ## World Export JSON Format
 
 The plugin reads world data in this format (produced by `GET /api/conversation/export/{worldId}`):

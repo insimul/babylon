@@ -101,6 +101,8 @@ if changed_matches "packages/unreal/"; then
 	bash tools/verify-unreal/run-world-browser-tests.sh
 	echo "== unreal: Generation Console view-model host tests (US-XE3) =="
 	bash tools/verify-unreal/run-generation-tests.sh
+	echo "== unreal: Conversation Tester view-model host tests (US-XE4) =="
+	bash tools/verify-unreal/run-conversation-tests.sh
 else
 	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
 fi
