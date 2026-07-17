@@ -50,13 +50,33 @@ target_include_directories(insimul_kb_tests PRIVATE
 
 target_link_libraries(insimul_kb_tests PRIVATE "${INSIMUL_LIB}")
 
+# --- Conformance corpus runner (US-XP2) -------------------------------------
+# Same wrapper + libinsimul, driving the golden Prolog corpus under
+# packages/core/conformance/prolog. The default corpus dir is baked in at compile
+# time (INSIMUL_CONFORMANCE_DIR env overrides it at run time).
+add_executable(insimul_conformance
+  conformance_runner.cpp
+  "${WRAPPER_DIR}/InsimulKB.cpp")
+
+target_include_directories(insimul_conformance PRIVATE
+  "${WRAPPER_DIR}"
+  "${INSIMUL_INCLUDE_DIR}")
+
+target_compile_definitions(insimul_conformance PRIVATE
+  "INSIMUL_CONFORMANCE_DEFAULT_DIR=\"${REPO_ROOT}/packages/core/conformance\"")
+
+target_link_libraries(insimul_conformance PRIVATE "${INSIMUL_LIB}")
+
 # libinsimul.a embeds Trealla, which needs libm + pthread (see the native
 # CMakeLists INTERFACE deps).
 find_package(Threads REQUIRED)
-target_link_libraries(insimul_kb_tests PRIVATE Threads::Threads)
+target_link_libraries(insimul_kb_tests    PRIVATE Threads::Threads)
+target_link_libraries(insimul_conformance PRIVATE Threads::Threads)
 if(NOT WIN32)
-  target_link_libraries(insimul_kb_tests PRIVATE m)
+  target_link_libraries(insimul_kb_tests    PRIVATE m)
+  target_link_libraries(insimul_conformance PRIVATE m)
 endif()
 
 enable_testing()
-add_test(NAME insimul_kb COMMAND insimul_kb_tests)
+add_test(NAME insimul_kb          COMMAND insimul_kb_tests)
+add_test(NAME insimul_conformance COMMAND insimul_conformance)

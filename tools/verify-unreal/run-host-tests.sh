@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 #
-# US-XP1 host verification for the plain C++ InsimulKB wrapper.
+# US-XP1/US-XP2 host verification for the plain C++ InsimulKB wrapper.
 #
 #   1. grep-guard: assert the wrapper core (InsimulKB.{h,cpp}) pulls in NO Unreal
 #      headers / types — it must stay engine-agnostic.
-#   2. build + run the wrapper unit tests against a locally built libinsimul.
+#   2. build + run, against a locally built libinsimul, BOTH ctest targets:
+#        - insimul_kb          : the wrapper unit tests (US-XP1), and
+#        - insimul_conformance : the golden Prolog conformance corpus
+#          (packages/core/conformance/prolog) via the wrapper (US-XP2).
 #
 # libinsimul is consumed from an insimul-native checkout (its build/ holds the
 # static archive). Point at one with INSIMUL_NATIVE_ROOT, else common locations

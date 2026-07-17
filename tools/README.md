@@ -64,3 +64,19 @@ alongside `npm run check` / `npm test`. That file lives in the workspace parent
 (outside this repo), so the one-line edit is recorded in
 `.chief/state/progress.txt` (US-EP3) for a human to apply — this PRD implements the
 script; run-all just needs to call it.
+
+## Unreal host conformance (US-XP2)
+
+Beyond the structural gate, `engines:check` runs a **real** conformance step for
+Unreal: `tools/verify-unreal/conformance.mjs` drives the golden Prolog corpus
+(`packages/core/conformance/prolog/*.json`) through the C++ `InsimulKB` wrapper and
+the actual `libinsimul` engine (the host mirror of the native `tests/conformance.c`
+and the Unity `tools/verify-unity` corpus pass). It compares each case's solution
+set to `expected` as an unordered multiset, prints a per-case `[PASS]/[FAIL]/[AMEND]`
+table, and SKIPs the radiant corpus (libinsimul exposes no radiant tick yet).
+
+Unlike the structural gate it needs the native toolchain, so it runs **only when
+unreal sources changed AND `cmake` + a built `libinsimul.a` are present**, and SKIPs
+(green) otherwise — `engines:check` therefore stays runnable without the native SDK.
+Run it directly (building the lib on first use) with `npm run engines:unreal:host`;
+point at a native checkout via `INSIMUL_NATIVE_ROOT`.
