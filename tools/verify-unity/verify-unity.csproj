@@ -133,6 +133,14 @@
     <Compile Include="../../packages/unity/Runtime/UI/InsimulLoadingScreenModel.cs" />
     <Compile Include="../../packages/unity/Runtime/UI/InsimulNotifications.cs" />
     <Compile Include="../../packages/unity/Runtime/UI/InsimulUITheme.cs" />
+    <!-- Quest journal / tracker / offer view-models (US-UU2): the pure,
+         UnityEngine-free journal/tracker/offer model + the runtime-event feed that
+         drives it off the KB-backed InsimulQuestRuntime signals (no polling). The
+         UGUI views (Runtime/UI/InsimulQuest{Journal,Tracker,OfferPanel}.cs) are
+         structural-gate-only. RunQuestJournal/QuestFeed tests in Program.cs drive
+         these against the shared corpus (quest-journal-cases.json) + a live runtime. -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulQuestJournalModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulQuestFeed.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/UiCorpus.cs" />
   </ItemGroup>
 

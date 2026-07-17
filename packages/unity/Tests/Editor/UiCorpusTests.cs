@@ -12,6 +12,7 @@
 
 using System.Collections.Generic;
 using NUnit.Framework;
+using Insimul.Quest;
 using Insimul.UI;
 using Insimul.UI.TestSupport;
 
@@ -109,6 +110,96 @@ namespace Insimul.Prolog.Tests.Editor
             Assert.That(n.Dismiss(a), Is.True);
             Assert.That(n.Dismiss(9999), Is.False);
             Assert.That(n.Count, Is.EqualTo(0));
+        }
+
+        // ── Quest journal / tracker / offer ───────────────────────────────────
+
+        private static IEnumerable<QuestJournalCase> QuestJournalCases() => UiCorpus.LoadQuestJournalCases();
+
+        [Test]
+        [TestCaseSource(nameof(QuestJournalCases))]
+        public void QuestJournalCase(QuestJournalCase c)
+        {
+            var model = new InsimulQuestJournalModel(c.MaxTracked);
+            var seeds = new List<QuestEntry>();
+            foreach (QuestSeed s in c.Quests) seeds.Add(ToEntry(s));
+            model.SetQuests(seeds);
+
+            foreach (QuestStep step in c.Steps)
+            {
+                bool ok = ApplyQuestStep(model, step);
+                if (step.HasExpectedOk)
+                    Assert.That(ok, Is.EqualTo(step.ExpectedOk), $"{c}/{step.Op}: ok");
+                if (step.ExpectedFilteredIds != null)
+                    Assert.That(model.FilteredIds(), Is.EqualTo(step.ExpectedFilteredIds), $"{c}/{step.Op}: filtered");
+                if (step.ExpectedTrackedIds != null)
+                    Assert.That(model.TrackedIds(), Is.EqualTo(step.ExpectedTrackedIds), $"{c}/{step.Op}: tracked");
+            }
+
+            var counts = model.Counts();
+            Assert.That(counts.All, Is.EqualTo(c.ExpectedCounts["all"]), $"{c}: all");
+            Assert.That(counts.Active, Is.EqualTo(c.ExpectedCounts["active"]), $"{c}: active");
+            Assert.That(counts.Completed, Is.EqualTo(c.ExpectedCounts["completed"]), $"{c}: completed");
+            Assert.That(counts.Available, Is.EqualTo(c.ExpectedCounts["available"]), $"{c}: available");
+        }
+
+        private static bool ApplyQuestStep(InsimulQuestJournalModel model, QuestStep step)
+        {
+            switch (step.Op)
+            {
+                case "set_filter": model.SetFilter(step.Arg); return true;
+                case "accept": return model.Accept(step.Arg);
+                case "decline": return model.Decline(step.Arg);
+                case "complete": return model.Complete(step.Arg);
+                case "track": return model.Track(step.Arg);
+                case "untrack": return model.Untrack(step.Arg);
+                case "upsert": model.Upsert(ToEntry(step.Entry)); return true;
+                default: throw new System.Exception($"unknown quest step op '{step.Op}'");
+            }
+        }
+
+        private static QuestEntry ToEntry(QuestSeed s) => new QuestEntry
+        {
+            Id = s.Id,
+            Title = s.Title,
+            Status = s.Status,
+            Difficulty = s.Difficulty,
+            IsRadiant = s.IsRadiant,
+        };
+
+        [Test]
+        public void QuestFeed_UpdatesOnRuntimeEvents_WithoutPolling()
+        {
+            var runtime = new InsimulQuestRuntime();
+            var feed = new InsimulQuestFeed();
+            int repaints = 0;
+            feed.Changed += () => repaints++;
+            feed.Attach(runtime);
+
+            runtime.RegisterQuest(
+                "quest(q_fetch, 'Fetch the Herbs', errand, easy, active).\n" +
+                "quest_objective(q_fetch, 0, talk_to(npc_marie, 1)).\n" +
+                "quest_objective(q_fetch, 1, visit_location(market)).\n" +
+                "quest_completion(q_fetch, all_objectives_complete).");
+            Assert.That(repaints, Is.GreaterThanOrEqualTo(1));
+            Assert.That(feed.Model.Get("q_fetch").Status, Is.EqualTo("active"));
+            Assert.That(feed.Model.Track("q_fetch"), Is.True);
+
+            runtime.AssertFact("talked_to", "player", "npc_marie");
+            runtime.EvaluateQuest("q_fetch");
+            Assert.That(feed.Model.ObjectiveProgress("q_fetch"), Is.EqualTo((1, 2)));
+
+            runtime.AssertFact("visited", "player", "market");
+            runtime.EvaluateQuest("q_fetch");
+            Assert.That(feed.Model.ObjectiveProgress("q_fetch"), Is.EqualTo((2, 2)));
+            Assert.That(feed.Model.Get("q_fetch").Status, Is.EqualTo("completed"));
+            Assert.That(feed.Model.TrackedIds(), Is.Empty, "auto-untracked on completion");
+
+            int before = repaints;
+            feed.Detach();
+            runtime.RegisterQuest("quest(q_other, 'Other', errand, easy, active).");
+            Assert.That(repaints, Is.EqualTo(before), "detached feed ignores events");
+            Assert.That(feed.Model.Get("q_other"), Is.Null);
         }
 
         // ── Theme tokens ──────────────────────────────────────────────────────

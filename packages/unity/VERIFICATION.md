@@ -261,3 +261,40 @@ not (Play mode only) — see the README ▸ Conversation Tester window mode cons
 - [ ] Let the token expire / revoke it and send: the reply surfaces as a
       **Conversation error: session expired (401)**, and the next World Browser refresh
       shows the **Session expired — re-authenticate** warning.
+
+## 8. Quest journal / tracker / offer panels (US-UU2, Unity editor + Play mode)
+
+The journal filtering + counts, the bounded tracker set + objective ticks, and the
+offer accept/decline transitions are UnityEngine-free and host-tested
+(`tools/verify-unity`, `RunQuestJournalTests` against the shared corpus
+`packages/core/conformance/ui/quest-journal-cases.json`, and `RunQuestFeedTests`
+which drives the real `InsimulQuestRuntime` end-to-end — accept, objective ticks,
+completion/auto-untrack, radiant arrival — proving the panels update on the runtime
+signals, **not** by per-frame polling). This is the **human pass** for the UGUI seam
+a real editor + Play mode exercises (the `InsimulQuestJournal` / `InsimulQuestTracker`
+/ `InsimulQuestOfferPanel` MonoBehaviours resolving through the `InsimulUIManager`
+registry). A world with at least one active quest and a radiant template pack is
+required.
+
+- [ ] Enter Play mode with a world loaded. Open the **Quest Journal** panel (via the
+      pause menu's Quests tab / the panel key `quest_journal`). The active quests are
+      listed, and the **All / Active / Completed / Available** tabs partition the set
+      with correct count badges.
+- [ ] Click a quest's **Track** toggle. It appears in the on-screen **Quest Tracker**
+      HUD immediately (no visible delay / no flicker) with a ★ marker in the journal.
+      Track past the cap (default 3) — the extra track is refused and the HUD stays
+      bounded.
+- [ ] Progress an objective in-world (e.g. talk to the target NPC / visit the target
+      location). The tracker's objective tick (**(1/2)** → **(2/2)**) advances the
+      moment the quest system fires, without opening/closing the panel to refresh.
+- [ ] Complete the final objective: the quest moves to the **Completed** tab, drops
+      out of the tracker HUD automatically, and a completion notification toast shows.
+- [ ] Talk to a quest giver (or wait for a radiant tick) so an offer appears. The
+      **Quest Offer** dialog shows the title + description with **Accept / Decline**.
+      **Accept** → the quest shows as **Active** in the journal (and is trackable);
+      **Decline** → the offer is dismissed and does not appear in any tab.
+- [ ] Confirm a **radiant** arrival shows under the **Available** tab flagged as
+      radiant, and accepting it behaves identically to a hand-authored quest.
+- [ ] **No-polling check:** with the panels open and idle (no quest transitions), the
+      Profiler shows the quest panels doing no per-frame list rebuilds — repaints
+      happen only on the `InsimulQuestFeed.Changed` signal.

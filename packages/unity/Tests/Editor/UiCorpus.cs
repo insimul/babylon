@@ -52,6 +52,38 @@ namespace Insimul.UI.TestSupport
         public override string ToString() => $"loading:{Name}";
     }
 
+    // ── Quest-journal cases ───────────────────────────────────────────────────
+
+    public sealed class QuestStep
+    {
+        public string Op;
+        public string Arg;
+        public QuestSeed Entry;                 // upsert only
+        public bool HasExpectedOk;
+        public bool ExpectedOk;
+        public List<string> ExpectedFilteredIds;   // null when absent
+        public List<string> ExpectedTrackedIds;     // null when absent
+    }
+
+    public sealed class QuestSeed
+    {
+        public string Id;
+        public string Title;
+        public string Status;
+        public string Difficulty;
+        public bool IsRadiant;
+    }
+
+    public sealed class QuestJournalCase
+    {
+        public string Name;
+        public int MaxTracked = 3;
+        public List<QuestSeed> Quests = new List<QuestSeed>();
+        public List<QuestStep> Steps = new List<QuestStep>();
+        public Dictionary<string, int> ExpectedCounts = new Dictionary<string, int>();
+        public override string ToString() => $"quest-journal:{Name}";
+    }
+
     // ── Corpus locator + parsers ──────────────────────────────────────────────
 
     public static class UiCorpus
@@ -162,6 +194,54 @@ namespace Insimul.UI.TestSupport
             return list;
         }
 
+        public static IReadOnlyList<QuestJournalCase> LoadQuestJournalCases()
+        {
+            var list = new List<QuestJournalCase>();
+            var root = ReadFile("quest-journal-cases.json");
+            if (root == null || !root.Value.TryGetProperty("cases", out JsonElement cases)) return list;
+            foreach (JsonElement el in cases.EnumerateArray())
+            {
+                var qc = new QuestJournalCase { Name = Str(el, "name") };
+                if (el.TryGetProperty("max_tracked", out JsonElement mt)) qc.MaxTracked = (int)mt.GetDouble();
+                if (el.TryGetProperty("quests", out JsonElement quests))
+                    foreach (JsonElement q in quests.EnumerateArray()) qc.Quests.Add(Seed(q));
+                if (el.TryGetProperty("steps", out JsonElement steps))
+                {
+                    foreach (JsonElement s in steps.EnumerateArray())
+                    {
+                        var step = new QuestStep
+                        {
+                            Op = Str(s, "op"),
+                            Arg = Str(s, "arg"),
+                            ExpectedFilteredIds = StrList(s, "expected_filtered_ids"),
+                            ExpectedTrackedIds = StrList(s, "expected_tracked_ids"),
+                        };
+                        if (s.TryGetProperty("expected_ok", out JsonElement ok))
+                        {
+                            step.HasExpectedOk = true;
+                            step.ExpectedOk = ok.GetBoolean();
+                        }
+                        if (s.TryGetProperty("entry", out JsonElement entry) && entry.ValueKind == JsonValueKind.Object)
+                            step.Entry = Seed(entry);
+                        qc.Steps.Add(step);
+                    }
+                }
+                if (el.TryGetProperty("expected_counts", out JsonElement counts) && counts.ValueKind == JsonValueKind.Object)
+                    foreach (JsonProperty p in counts.EnumerateObject()) qc.ExpectedCounts[p.Name] = (int)p.Value.GetDouble();
+                list.Add(qc);
+            }
+            return list;
+        }
+
+        private static QuestSeed Seed(JsonElement el) => new QuestSeed
+        {
+            Id = Str(el, "id"),
+            Title = Str(el, "title"),
+            Status = Str(el, "status"),
+            Difficulty = Str(el, "difficulty"),
+            IsRadiant = Bool(el, "isRadiant"),
+        };
+
         /// <summary>theme-tokens.json → colors (name → hex).</summary>
         public static Dictionary<string, string> LoadThemeColors() => LoadTokenStrings("colors");
 
@@ -191,6 +271,14 @@ namespace Insimul.UI.TestSupport
 
         private static bool Bool(JsonElement el, string prop) =>
             el.TryGetProperty(prop, out JsonElement v) && v.GetBoolean();
+
+        private static List<string> StrList(JsonElement el, string prop)
+        {
+            if (!el.TryGetProperty(prop, out JsonElement arr) || arr.ValueKind != JsonValueKind.Array) return null;
+            var list = new List<string>();
+            foreach (JsonElement e in arr.EnumerateArray()) list.Add(e.GetString());
+            return list;
+        }
 
         private static Dictionary<string, string> StrMap(JsonElement el, string prop)
         {

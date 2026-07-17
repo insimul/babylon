@@ -59,6 +59,8 @@ namespace Insimul.Verify
             RunLoadingScreenTests();
             RunNotificationTests();
             RunThemeTokenTests();
+            RunQuestJournalTests();
+            RunQuestFeedTests();
 
             if (skipNative)
             {
@@ -2207,6 +2209,152 @@ namespace Insimul.Verify
                 AssertTrue(actual.TryGetValue(kv.Key, out int mine), $"missing {group} token '{kv.Key}'");
                 AssertEqual(kv.Value, mine);
             }
+        }
+
+        private static void RunQuestJournalTests()
+        {
+            Section("Default UI — quest journal / tracker / offer view-model (US-UU2)");
+
+            var cases = UiCorpus.LoadQuestJournalCases();
+            AssertTrue(cases.Count > 0, "quest-journal-cases.json must load");
+            foreach (QuestJournalCase c in cases)
+            {
+                Case($"quest-journal: {c.Name}", () =>
+                {
+                    var model = new InsimulQuestJournalModel(c.MaxTracked);
+                    var seeds = new List<QuestEntry>();
+                    foreach (QuestSeed s in c.Quests) seeds.Add(ToEntry(s));
+                    model.SetQuests(seeds);
+
+                    foreach (QuestStep step in c.Steps)
+                    {
+                        bool ok = ApplyQuestStep(model, step);
+                        if (step.HasExpectedOk)
+                            AssertEqual(step.ExpectedOk, ok);
+                        if (step.ExpectedFilteredIds != null)
+                            AssertSequence(step.ExpectedFilteredIds, model.FilteredIds(),
+                                $"{c.Name}/{step.Op}: filtered ids");
+                        if (step.ExpectedTrackedIds != null)
+                            AssertSequence(step.ExpectedTrackedIds, model.TrackedIds(),
+                                $"{c.Name}/{step.Op}: tracked ids");
+                    }
+
+                    var counts = model.Counts();
+                    AssertEqual(c.ExpectedCounts["all"], counts.All);
+                    AssertEqual(c.ExpectedCounts["active"], counts.Active);
+                    AssertEqual(c.ExpectedCounts["completed"], counts.Completed);
+                    AssertEqual(c.ExpectedCounts["available"], counts.Available);
+                });
+            }
+        }
+
+        private static bool ApplyQuestStep(InsimulQuestJournalModel model, QuestStep step)
+        {
+            switch (step.Op)
+            {
+                case "set_filter": model.SetFilter(step.Arg); return true;
+                case "accept": return model.Accept(step.Arg);
+                case "decline": return model.Decline(step.Arg);
+                case "complete": return model.Complete(step.Arg);
+                case "track": return model.Track(step.Arg);
+                case "untrack": return model.Untrack(step.Arg);
+                case "upsert": model.Upsert(ToEntry(step.Entry)); return true;
+                default: throw new Exception($"unknown quest step op '{step.Op}'");
+            }
+        }
+
+        private static QuestEntry ToEntry(QuestSeed s) => new QuestEntry
+        {
+            Id = s.Id,
+            Title = s.Title,
+            Status = s.Status,
+            Difficulty = s.Difficulty,
+            IsRadiant = s.IsRadiant,
+        };
+
+        private static void AssertSequence(IReadOnlyList<string> expected, IReadOnlyList<string> actual, string what)
+        {
+            AssertEqual(expected.Count, actual.Count);
+            for (int i = 0; i < expected.Count; i++)
+                AssertTrue(expected[i] == actual[i], $"{what}: [{i}] expected '{expected[i]}', got '{actual[i]}'");
+        }
+
+        private static void RunQuestFeedTests()
+        {
+            Section("Default UI — quest feed: runtime-event subscription (US-UU2)");
+
+            Case("Tracker updates on quest-system events without polling (accept/complete)", () =>
+            {
+                var runtime = new InsimulQuestRuntime();
+                var feed = new InsimulQuestFeed();
+                int repaints = 0;
+                feed.Changed += () => repaints++;
+                feed.Attach(runtime);
+
+                // OnQuestAccepted fires from RegisterQuest — the feed folds it in with NO
+                // poll (nothing reads the model on a frame; only the event drives it).
+                runtime.RegisterQuest(
+                    "quest(q_fetch, 'Fetch the Herbs', errand, easy, active).\n" +
+                    "quest_objective(q_fetch, 0, talk_to(npc_marie, 1)).\n" +
+                    "quest_objective(q_fetch, 1, visit_location(market)).\n" +
+                    "quest_completion(q_fetch, all_objectives_complete).");
+                AssertTrue(repaints >= 1, "OnQuestAccepted repainted the model");
+                AssertEqual("active", feed.Model.Get("q_fetch").Status);
+                AssertEqual(2, feed.Model.Get("q_fetch").Objectives.Count);
+
+                // Track it for the HUD, then complete via the KB — the feed auto-untracks.
+                AssertTrue(feed.Model.Track("q_fetch"), "active quest is trackable");
+                AssertSequence(new[] { "q_fetch" }, feed.Model.TrackedIds(), "tracked before complete");
+
+                // Objective ticks arrive as OnObjectiveCompleted signals.
+                runtime.AssertFact("talked_to", "player", "npc_marie");
+                runtime.EvaluateQuest("q_fetch");
+                var (done1, total1) = feed.Model.ObjectiveProgress("q_fetch");
+                AssertEqual(1, done1);
+                AssertEqual(2, total1);
+
+                runtime.AssertFact("visited", "player", "market");
+                runtime.EvaluateQuest("q_fetch"); // 2nd objective + all-objectives completion
+                var (done2, total2) = feed.Model.ObjectiveProgress("q_fetch");
+                AssertEqual(2, done2);
+                AssertEqual(2, total2);
+                AssertEqual("completed", feed.Model.Get("q_fetch").Status);
+                AssertSequence(Array.Empty<string>(), feed.Model.TrackedIds(), "auto-untracked on completion");
+
+                // Detach stops the subscription (no leak / no further repaints).
+                int before = repaints;
+                feed.Detach();
+                runtime.RegisterQuest("quest(q_other, 'Other', errand, easy, active).");
+                AssertEqual(before, repaints);
+                AssertTrue(feed.Model.Get("q_other") == null, "detached feed ignores new events");
+            });
+
+            Case("Radiant arrival appears as an available, radiant-flagged quest", () =>
+            {
+                var runtime = new InsimulQuestRuntime();
+                var feed = new InsimulQuestFeed();
+                feed.Attach(runtime);
+
+                const string program =
+                    "radiant_template(rt_fetch, [category(fetch), title('Gather Herbs for {giver}'), quest_type(gathering), difficulty(2)]).\n" +
+                    "radiant_precondition(rt_fetch, giver, character_occupation(Giver, herbalist)).\n" +
+                    "radiant_precondition(rt_fetch, item, item_category(Item, herb)).\n" +
+                    "radiant_objective(rt_fetch, collect(Item, 5)).\n" +
+                    "radiant_reward(rt_fetch, experience, 25).\n" +
+                    "radiant_cooldown(rt_fetch, 3600).";
+                const string conj = "character_occupation(Giver, herbalist), item_category(Item, herb)";
+                var solver = new StubRadiantSolver().On(conj, "{\"Giver\":\"anne\",\"Item\":\"sage\"}");
+
+                runtime.RunRadiantTick(program, solver,
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 1000 });
+
+                var r = feed.Model.Get("radiant_rt_fetch_1000");
+                AssertTrue(r != null, "radiant quest folded into the model");
+                AssertEqual("available", r.Status);
+                AssertTrue(r.IsRadiant, "flagged as a radiant arrival");
+                feed.Model.SetFilter("available");
+                AssertSequence(new[] { "radiant_rt_fetch_1000" }, feed.Model.FilteredIds(), "shows under Available");
+            });
         }
 
         private static double Round3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);
