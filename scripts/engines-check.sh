@@ -107,6 +107,8 @@ if changed_matches "packages/unreal/"; then
 	bash tools/verify-unreal/run-ui-tests.sh
 	echo "== unreal: quest journal/tracker/offer + notifications host tests (US-XU2) =="
 	bash tools/verify-unreal/run-quest-ui-tests.sh
+	echo "== unreal: inventory/container/merchant trade host tests (US-XU3) =="
+	bash tools/verify-unreal/run-trade-ui-tests.sh
 else
 	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
 fi

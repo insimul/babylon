@@ -138,3 +138,41 @@ assertions): the full quest-journal corpus matrix, the event-driven surface
 (mutations push events; read-only/rejected ops are silent), the notifications core,
 and the quest-events-drive-toasts integration. Wired into `npm run engines:check`
 under the Unreal block.
+
+## Trade panels — inventory / container / merchant (US-XU3)
+
+`Portable/InsimulTradeModel.{h,cpp}` is the engine-neutral view-model the three
+trade panels share — the INVENTORY (`InsimulInventoryUI`: `PlayerGold` /
+`PlayerItems`), the CONTAINER transfer panel (`TakeFromContainer` / `TakeAll`), and
+the MERCHANT/shop panel (`InsimulShopPanel`: `Buy` / `Sell` against `MerchantItems`
+/ `MerchantGold`). It mirrors `packages/core/src/ui/trade-model.ts` and the Godot
+`trade_model.gd` operation-for-operation against the shared corpus
+`conformance/ui/trade-cases.json`.
+
+**Backed exclusively by save.currentState (the state-location invariant):** the
+model holds a POINTER to the caller's `FTradeState` (the live currentState slice:
+`player.gold`/`player.inventory`, `containers.containers[id].items`,
+`npcs.merchantStates[id].{goldReserve,items}`) and keeps NO private item store.
+Every read returns the live arrays and every mutation touches only the attached
+state, so a snapshot at any moment is the whole truth. Conservation is a hard
+invariant of every op: items MOVE between stacks (never created/destroyed) and a
+merchant trade conserves gold (`player.gold + merchant.goldReserve` constant across
+buy/sell). Failure reasons are machine-readable (`no_container` / `not_present` /
+`out_of_stock` / `insufficient_gold` / `insufficient_items` /
+`merchant_cannot_afford` / `bad_qty` / `no_merchant`).
+
+The UE seam `UInsimulTradePanel` (`Public/InsimulTradePanel.h`) wraps the portable
+model (pimpl over `FTradeState` + `FInsimulTradeModel`), marshalling
+`FString`/`FInsimulTradeItem`/`FInsimulTradeResult` at the Blueprint boundary. The
+save shell hydrates its `FTradeState` from `save.currentState`, so buy/sell/transfer
+land in the one place the save serializes.
+
+### Tests
+
+`npm run engines:unreal:trade` (`tools/verify-unreal/run-trade-ui-tests.sh`)
+grep-guards the core as UE-free, then compiles + runs `test_trade.cpp` (15
+assertions): the full trade corpus matrix (take / take_all / buy / sell, with final
+quantities + gold + failure reasons) and the state-location invariant (reads return
+the live currentState arrays, two models never share, every op conserves the item /
+gold census, a detached model fails safely). Wired into `npm run engines:check`
+under the Unreal block.

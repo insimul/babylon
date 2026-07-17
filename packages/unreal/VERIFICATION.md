@@ -620,3 +620,44 @@ shared `quest-journal-cases.json` case-for-case; only the UMG widget layer (dyna
 multicast delegate vs Godot signals) differs by design. Any lifecycle / filtering /
 tracking / notification divergence found in the human pass is a bug — file it
 against US-XU2.
+
+## US-XU3 — Inventory / container / merchant trade
+
+Host gate: `npm run engines:unreal:trade` (15 assertions — the shared
+`trade-cases.json` matrix + the state-location invariant). Human pass in a real
+editor build for the UMG layer (`UInsimulTradePanel` + `InsimulInventoryUI` /
+`InsimulShopPanel`):
+
+### 1. Inventory + container transfer
+
+- [ ] Open the inventory (WBP_Inventory) — the stacks and gold shown are exactly
+      `save.currentState.player` (no private copy). Open a container (WBP_Container),
+      Take a partial stack: the item moves into inventory, the container stack shrinks,
+      and the total item count is unchanged (conserved, not duplicated). Take-all
+      empties the container into inventory.
+- [ ] A take request larger than stock is clamped to what's available; taking from a
+      missing/absent container is a safe no-op (reason `no_container`).
+
+### 2. Merchant buy / sell
+
+- [ ] Open the merchant (WBP_ShopPanel). Buy an affordable item: it moves merchant→
+      player, `player.gold` drops by the cost and `merchant.goldReserve` rises by the
+      same (gold conserved). Sell an item back: it moves player→merchant, gold flows
+      the other way, still conserved.
+- [ ] Buy with insufficient gold → rejected (`insufficient_gold`), no state change.
+      Buy past stock → `out_of_stock`. Sell an item the player lacks →
+      `insufficient_items`. Sell when the merchant can't afford it →
+      `merchant_cannot_afford`. Every rejected op leaves currentState untouched.
+
+### 3. Save round-trip (state-location invariant)
+
+- [ ] After a buy/sell/transfer, save then reload: the post-trade quantities and gold
+      persist exactly, because the panels wrote only to `save.currentState` — there is
+      no side store to lose.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the trade contract.** The core mirrors the Godot `trade_model.gd`
+and the shared `trade-cases.json` case-for-case; only the UMG widget layer differs by
+design. Any buy/sell/transfer/conservation divergence found in the human pass is a
+bug — file it against US-XU3.
