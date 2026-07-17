@@ -103,6 +103,14 @@ if changed_matches "packages/unreal/"; then
 	bash tools/verify-unreal/run-generation-tests.sh
 	echo "== unreal: Conversation Tester view-model host tests (US-XE4) =="
 	bash tools/verify-unreal/run-conversation-tests.sh
+	echo "== unreal: default-UI registry/loading/theme host tests (US-XU1) =="
+	bash tools/verify-unreal/run-ui-tests.sh
+	echo "== unreal: quest journal/tracker/offer + notifications host tests (US-XU2) =="
+	bash tools/verify-unreal/run-quest-ui-tests.sh
+	echo "== unreal: inventory/container/merchant trade host tests (US-XU3) =="
+	bash tools/verify-unreal/run-trade-ui-tests.sh
+	echo "== unreal: dialogue/pause-menu/save-load view-model host tests (US-XU4) =="
+	bash tools/verify-unreal/run-dialogue-ui-tests.sh
 else
 	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
 fi

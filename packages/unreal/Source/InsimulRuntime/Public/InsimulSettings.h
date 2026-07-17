@@ -134,6 +134,19 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Common")
 	FString LanguageCode = TEXT("en");
 
+	// ── Default-runtime UI (US-XU1) ──────────────────────────────────
+
+	/** Creator-overridable panel registry (panel key -> WBP widget class).
+	 *  Defaults to the generated DA_InsimulUIRegistry (built by
+	 *  GenerateInsimulContent.py). Point at a custom asset to replace any screen. */
+	UPROPERTY(Config, EditAnywhere, Category = "UI", meta = (AllowedClasses = "/Script/InsimulRuntime.InsimulUIRegistry"))
+	FSoftObjectPath UIRegistry = FSoftObjectPath(TEXT("/Game/UI/DA_InsimulUIRegistry.DA_InsimulUIRegistry"));
+
+	/** Shared UI theme tokens (colors/spacing/radius/fonts). Defaults to the
+	 *  generated DA_InsimulUITheme; edit or replace it to re-skin the whole UI. */
+	UPROPERTY(Config, EditAnywhere, Category = "UI", meta = (AllowedClasses = "/Script/InsimulRuntime.InsimulUITheme"))
+	FSoftObjectPath UITheme = FSoftObjectPath(TEXT("/Game/UI/DA_InsimulUITheme.DA_InsimulUITheme"));
+
 	// ── Convenience Accessors ────────────────────────────────────────
 
 	/** Whether chat is routed to a local LLM (equivalent to old bOfflineMode) */

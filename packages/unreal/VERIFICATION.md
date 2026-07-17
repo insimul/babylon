@@ -521,3 +521,196 @@ engine-specific streaming HTTP client (`FHttpModule` vs `UnityWebRequest` vs
 `HTTPRequest`) and the edit-mode audio-playback wall (shared across all three) differ,
 by design. Any load / send-guard / transcript / teardown difference found in the human
 pass is a bug — file it against US-XE4.
+
+## US-XU1 — Default-UI registry + theme + widget-generation preservation (Unreal editor required)
+
+**Automated cores are green before the human pass; the UMG/asset seam is
+editor-verified (autoMerge off).**
+
+### 0. Automated pre-checks
+
+- [ ] `npm run engines:unreal:ui` — the default-UI host gate is green (20 cases:
+      registry default/override/missing + the real WBP default map, the loading
+      view-model weighted-progress/monotonicity/label/completion/tips against
+      `conformance/ui/loading-phases.json`, and the theme-token table vs
+      `conformance/ui/theme-tokens.json`).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE seams
+      (`UInsimulUIRegistry`, `UInsimulUITheme`) and the grep-guard confirms the
+      cores stay UE-free.
+
+### 1. Generation preserves widgets + registry + fonts
+
+- [ ] Run the export pipeline (or `Scripts/GenerateInsimulContent.py` manually) on a
+      project with the InsimulExport module built. Confirm `/Game/UI/WBP_*` are
+      created as before (dialogue, game menu, quest tracker, quest offer, intro, …)
+      with their bound child widgets named to match the C++ `BindWidget` properties.
+- [ ] Confirm `/Game/UI/DA_InsimulUIRegistry` exists and its **Panels** array binds
+      `dialogue`, `game_menu`, `loading_screen`, `quest_offer`, `quest_tracker` to the
+      matching `WBP_*` generated classes. Confirm `/Game/UI/DA_InsimulUITheme` exists
+      with the shared token defaults.
+- [ ] With a `Content/Fonts/` folder present, confirm fonts still import and the
+      created text widgets use them (CJK/Arabic/Devanagari renders glyphs, not tofu) —
+      the i18n font path is unchanged by this story.
+
+### 2. Registry override + loading screen
+
+- [ ] Point **Project Settings ▸ Insimul ▸ UI ▸ UIRegistry** at a custom
+      `UInsimulUIRegistry` (or add a `Panels` entry overriding, e.g., `dialogue`).
+      Confirm `ResolvePanelClass("dialogue")` returns the override class, and an
+      unknown key logs the `No panel registered for key` warning.
+- [ ] Drive a boot from the main menu and confirm the loading screen advances through
+      the phases (Starting up → Loading world → … → Ready) with a monotonically
+      rising bar and a per-phase tip, reaching 100% at **Ready**.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the registry + loading + token contract.** The three cores mirror
+the Godot leg (`insimul_ui_registry.gd` / `loading_screen_model.gd` /
+`insimul_ui_tokens.gd`) and the shared corpus case-for-case; only the concrete
+default map (WBP asset paths vs Godot `.tscn`) and the native theme representation
+(Slate vs Godot `Theme`) differ by design. Any resolution / progress / token
+divergence found in the human pass is a bug — file it against US-XU1.
+
+## US-XU2 — Quest journal / tracker / offer + notifications (Unreal editor required)
+
+**Automated cores are green before the human pass; the UMG seam is
+editor-verified (autoMerge off).**
+
+### 0. Automated pre-checks
+
+- [ ] `npm run engines:unreal:quest-ui` — the quest-UI host gate is green (29
+      assertions): the full `conformance/ui/quest-journal-cases.json` matrix (tab
+      filtering + counts, accept/decline offers, bounded tracker HUD, radiant
+      arrival via upsert), the **event-driven** surface (every mutation pushes a
+      `FQuestJournalEvent`; read-only + rejected ops emit nothing — proving no
+      polling), the toast notifications core (push / tick-expiry / dismiss /
+      kind→color), and the quest-events-drive-toasts integration.
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE seam
+      (`UInsimulQuestJournal` + its `OnQuestJournalChanged` dynamic multicast
+      delegate) and the grep-guard confirms `InsimulQuestJournalModel` /
+      `InsimulNotifications` stay UE-free.
+
+### 1. Journal filtering + counts
+
+- [ ] Open the quest journal (WBP_QuestJournal). Confirm the tab row shows the
+      per-status counts and switching tabs (All / Active / Completed / Available)
+      partitions the list to exactly the matching quests, in stable order.
+
+### 2. Tracker HUD (bounded, event-driven)
+
+- [ ] Track an active quest — it appears on the HUD tracker immediately (the widget
+      rebuilds off the `QuestTracked` event, not a tick). Track past the configured
+      max: further tracks are rejected with no HUD change. Untrack frees a slot.
+- [ ] Complete a tracked active quest: it auto-untracks (drops off the HUD) and moves
+      to the Completed tab in one event round-trip.
+
+### 3. Offer dialog + radiant arrival + toasts
+
+- [ ] Trigger a quest offer (InsimulQuestOfferPanel). Accept → the quest moves to
+      Active and a success toast fires; Decline → the offer is removed entirely.
+- [ ] Let a radiant quest arrive (quest_offered): it appears under the Available tab
+      and raises an info toast, with no per-frame polling on the panels. Toasts age
+      out on their own timer.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the journal/tracker/offer + notifications contract.** The cores
+mirror the Godot leg (`quest_journal_model.gd` / `insimul_notifications.gd`) and the
+shared `quest-journal-cases.json` case-for-case; only the UMG widget layer (dynamic
+multicast delegate vs Godot signals) differs by design. Any lifecycle / filtering /
+tracking / notification divergence found in the human pass is a bug — file it
+against US-XU2.
+
+## US-XU3 — Inventory / container / merchant trade
+
+Host gate: `npm run engines:unreal:trade` (15 assertions — the shared
+`trade-cases.json` matrix + the state-location invariant). Human pass in a real
+editor build for the UMG layer (`UInsimulTradePanel` + `InsimulInventoryUI` /
+`InsimulShopPanel`):
+
+### 1. Inventory + container transfer
+
+- [ ] Open the inventory (WBP_Inventory) — the stacks and gold shown are exactly
+      `save.currentState.player` (no private copy). Open a container (WBP_Container),
+      Take a partial stack: the item moves into inventory, the container stack shrinks,
+      and the total item count is unchanged (conserved, not duplicated). Take-all
+      empties the container into inventory.
+- [ ] A take request larger than stock is clamped to what's available; taking from a
+      missing/absent container is a safe no-op (reason `no_container`).
+
+### 2. Merchant buy / sell
+
+- [ ] Open the merchant (WBP_ShopPanel). Buy an affordable item: it moves merchant→
+      player, `player.gold` drops by the cost and `merchant.goldReserve` rises by the
+      same (gold conserved). Sell an item back: it moves player→merchant, gold flows
+      the other way, still conserved.
+- [ ] Buy with insufficient gold → rejected (`insufficient_gold`), no state change.
+      Buy past stock → `out_of_stock`. Sell an item the player lacks →
+      `insufficient_items`. Sell when the merchant can't afford it →
+      `merchant_cannot_afford`. Every rejected op leaves currentState untouched.
+
+### 3. Save round-trip (state-location invariant)
+
+- [ ] After a buy/sell/transfer, save then reload: the post-trade quantities and gold
+      persist exactly, because the panels wrote only to `save.currentState` — there is
+      no side store to lose.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the trade contract.** The core mirrors the Godot `trade_model.gd`
+and the shared `trade-cases.json` case-for-case; only the UMG widget layer differs by
+design. Any buy/sell/transfer/conservation divergence found in the human pass is a
+bug — file it against US-XU3.
+
+## US-XU4 — Dialogue panel + pause/main menu + save/load
+
+Host gate: `npm run engines:unreal:dialogue-ui` (24 assertions — the shared
+`chat-cases.json` streaming/action/history matrix, `pause-menu-cases.json`
+tab-gating + reducer, and `save-slot-cases.json` row rendering incl. the
+corrupted-envelope messaging). Human pass in a real editor build for the UMG layer
+(`UInsimulChatPanel` + `InsimulChatPanel`, `UInsimulPauseMenu` +
+`InsimulGameMenuWidget`, `UInsimulSaveSlotPanel` + `InsimulSaveGame`):
+
+### 1. Dialogue / streaming conversation (full loop)
+
+- [ ] Start a conversation (WBP_Dialogue). The NPC greeting shows first. Send a line:
+      a player bubble appears immediately, then the NPC reply streams in chunk-by-chunk
+      into one bubble (typing indicator while `IsStreaming()`), and settles on
+      completion. TTS plays and the `InsimulFaceSync` lip-sync drives off the settled
+      `LastNpcText()`.
+- [ ] A reply that triggers an action (e.g. "take the sword") applies its
+      `FactToAssert` to the live KB — verify the world state changed (item now owned).
+- [ ] Force a stream error (kill the model connection): an `[Error: …]` bubble renders
+      and that turn does NOT persist. Send another line — it works; the errored turn is
+      absent from the saved history.
+- [ ] Send two turns, then save + reload: `save.conversations` holds exactly the
+      settled player/npc pairs (no in-flight or errored bubbles), `totalTurnCount`
+      matches the completed count.
+
+### 2. Pause / ESC menu tab-gating
+
+- [ ] Press ESC in a language-learning-bundle game: the menu shows every gated tab
+      (vocabulary / skills / analytics / assessment / character alongside the core
+      tabs). In an RPG bundle (no assessment module) the Assessment tab is absent; with
+      no modules only the six core tabs (resume/journal/inventory/map/settings/save)
+      show. Tabs match the enabled feature-modules from the IR.
+- [ ] Opening the menu selects the first visible tab; clicking a visible tab switches;
+      a hidden tab is never selectable. ESC toggles the menu open/closed and un-pauses.
+
+### 3. Main menu + save/load slots
+
+- [ ] Main menu Continue is enabled only when at least one slot is loadable
+      (`HasAnyLoadable()`). Open Save/Load: healthy slots show `Name · Lv N · Location`
+      + "Saved <when>"; empty slots show "Empty Slot".
+- [ ] Corrupt a save on disk (flip a byte): its slot renders as "Corrupted Save" with
+      the integrity message and cannot be loaded, but CAN be overwritten by a new save.
+      A missing/unrecognized payload shows its respective message. The messaging is
+      identical to the Unity/Godot legs.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the dialogue / menu / save contract.** The three cores mirror the
+Godot `chat_model.gd` / `pause_menu_model.gd` / `save_slot_model.gd` and the shared
+corpora case-for-case; only the UMG widget layer differs by design. Any streaming /
+gating / slot-rendering divergence found in the human pass is a bug — file it against
+US-XU4.

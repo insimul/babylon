@@ -19,6 +19,29 @@ but which cannot be expressed as plain C++ or JSON:
      script creates, so non-Latin target-language text (CJK / Arabic / Devanagari /
      ...) renders glyphs instead of tofu boxes.
 
+  3. The default UI panel REGISTRY + THEME (US-XU1):
+       - DA_InsimulUIRegistry (UInsimulUIRegistry) — after creating each WBP whose
+         spec carries a `panel_key`, this script registers the WBP's generated
+         class under that key. This is the *default* map the runtime resolves each
+         screen through; a creator overrides any panel by editing the asset or
+         pointing UInsimulSettings.UIRegistry at their own. The panel keys +
+         resolution semantics are pinned by
+         packages/core/conformance/ui/registry-cases.json.
+       - DA_InsimulUITheme (UInsimulUITheme) — the shared design tokens (mirroring
+         conformance/ui/theme-tokens.json). Created only if absent, so a creator's
+         re-skin survives re-runs.
+
+OUTPUT CONTRACT (what a consumer can rely on after this runs):
+  - /Game/UI/WBP_<Name>       : one WidgetBlueprint per WIDGET_SPECS entry, its
+                                bound child widgets named exactly as the C++
+                                BindWidget[Optional] properties require.
+  - /Game/UI/DA_InsimulUIRegistry : a UInsimulUIRegistry whose `Panels` array binds
+                                each generated `panel_key` -> its WBP generated
+                                class (a later entry for a key overrides earlier).
+  - /Game/UI/DA_InsimulUITheme     : a UInsimulUITheme carrying the shared tokens.
+  Re-running is idempotent (WBPs + registry are rebuilt in place; the theme asset
+  is preserved once present).
+
 Run order: this runs AFTER the C++ modules are built (so the InsimulExport classes
 are loaded) and AFTER ImportInsimulAssets.py. setup.sh handles the ordering.
 
@@ -112,6 +135,7 @@ TEXT_TYPES = ("UTextBlock", "UEditableTextBox")
 WIDGET_SPECS = {
     "WBP_Dialogue": {
         "parent": "DialogueWidget",
+        "panel_key": "dialogue",
         "children": [
             ("UVerticalBox", "DialogueRoot"),
             ("UTextBlock", "NPCNameText"),
@@ -159,6 +183,7 @@ WIDGET_SPECS = {
     },
     "WBP_GameMenu": {
         "parent": "InsimulGameMenuWidget",
+        "panel_key": "game_menu",
         "children": [
             ("UWidgetSwitcher", "TabContentSwitcher"),
             ("UButton", "ResumeButton"),
@@ -174,6 +199,7 @@ WIDGET_SPECS = {
     },
     "WBP_IntroSequence": {
         "parent": "InsimulIntroSequence",
+        "panel_key": "loading_screen",
         "children": [
             ("UImage", "PortraitImage"),
             ("UTextBlock", "CharacterNameText"),
@@ -198,6 +224,7 @@ WIDGET_SPECS = {
     },
     "WBP_QuestOfferPanel": {
         "parent": "InsimulQuestOfferPanel",
+        "panel_key": "quest_offer",
         "children": [
             ("UTextBlock", "TitleText"),
             ("UTextBlock", "DescriptionText"),
@@ -209,6 +236,7 @@ WIDGET_SPECS = {
     },
     "WBP_QuestTracker": {
         "parent": "InsimulQuestTrackerWidget",
+        "panel_key": "quest_tracker",
         "children": [
             ("UTextBlock", "TrackerHeaderText"),
             ("UVerticalBox", "ObjectiveListBox"),
@@ -306,7 +334,7 @@ def build_widget_blueprint(asset_name, spec, font_info):
     editor_asset.save_loaded_asset(wbp)
     log("Created {0} (parent {1}) with bound widgets: {2}".format(
         asset_name, spec["parent"], ", ".join(bound)))
-    return True
+    return wbp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -378,6 +406,86 @@ def import_fonts():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# UI registry + theme (US-XU1)
+#
+# The default-runtime UI resolves each screen through a panel REGISTRY keyed by a
+# stable panel key ("dialogue", "quest_tracker", ...). This script is the source
+# of the *default* registry: after creating each WBP it registers the WBP's
+# generated class under the spec's `panel_key` into DA_InsimulUIRegistry (a
+# UInsimulUIRegistry DataAsset). A creator overrides any screen by editing that
+# asset or pointing UInsimulSettings.UIRegistry at their own. The panel keys +
+# resolution semantics are pinned by packages/core/conformance/ui/registry-cases
+# .json and proved UE-free by FInsimulUIRegistryModel. It also emits
+# DA_InsimulUITheme (UInsimulUITheme) so every screen reads one theme; the shared
+# token defaults live in the asset (mirroring conformance/ui/theme-tokens.json).
+# ─────────────────────────────────────────────────────────────────────────────
+
+REGISTRY_ASSET = "DA_InsimulUIRegistry"
+THEME_ASSET = "DA_InsimulUITheme"
+
+
+def build_ui_registry(bindings):
+    """Create/overwrite DA_InsimulUIRegistry mapping panel_key -> WBP class.
+
+    `bindings` is a list of (panel_key, generated_class). Returns True on success.
+    """
+    if not hasattr(unreal, "InsimulUIRegistry"):
+        warn("InsimulUIRegistry class not loaded (is InsimulRuntime built?) — "
+             "skipping registry asset.")
+        return False
+
+    asset_path = "{0}/{1}".format(UI_PACKAGE, REGISTRY_ASSET)
+    if editor_asset.does_asset_exist(asset_path):
+        editor_asset.delete_asset(asset_path)
+
+    factory = unreal.DataAssetFactory()
+    factory.set_editor_property("data_asset_class", unreal.InsimulUIRegistry)
+    registry = asset_tools.create_asset(REGISTRY_ASSET, UI_PACKAGE,
+                                        unreal.InsimulUIRegistry, factory)
+    if registry is None:
+        err("Failed to create {0}".format(REGISTRY_ASSET))
+        return False
+
+    panels = []
+    for panel_key, generated_class in bindings:
+        binding = unreal.InsimulPanelBinding()
+        binding.set_editor_property("panel_key", panel_key)
+        binding.set_editor_property("widget_class", generated_class)
+        panels.append(binding)
+    registry.set_editor_property("panels", panels)
+
+    editor_asset.save_loaded_asset(registry)
+    log("Registered {0} panel(s) into {1}: {2}".format(
+        len(panels), REGISTRY_ASSET, ", ".join(k for k, _ in bindings)))
+    return True
+
+
+def build_ui_theme():
+    """Create DA_InsimulUITheme (default shared tokens) if it does not exist.
+
+    Left in place if already present so a creator's re-skin survives re-runs.
+    """
+    if not hasattr(unreal, "InsimulUITheme"):
+        warn("InsimulUITheme class not loaded — skipping theme asset.")
+        return False
+
+    asset_path = "{0}/{1}".format(UI_PACKAGE, THEME_ASSET)
+    if editor_asset.does_asset_exist(asset_path):
+        log("{0} already exists — leaving creator theme in place.".format(THEME_ASSET))
+        return True
+
+    factory = unreal.DataAssetFactory()
+    factory.set_editor_property("data_asset_class", unreal.InsimulUITheme)
+    theme = asset_tools.create_asset(THEME_ASSET, UI_PACKAGE, unreal.InsimulUITheme, factory)
+    if theme is None:
+        err("Failed to create {0}".format(THEME_ASSET))
+        return False
+    editor_asset.save_loaded_asset(theme)
+    log("Created {0} with the shared default tokens.".format(THEME_ASSET))
+    return True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -390,16 +498,27 @@ def main():
     font_info = import_fonts()
 
     ok = 0
+    bindings = []
     for asset_name, spec in WIDGET_SPECS.items():
         try:
-            if build_widget_blueprint(asset_name, spec, font_info):
+            wbp = build_widget_blueprint(asset_name, spec, font_info)
+            if wbp:
                 ok += 1
+                panel_key = spec.get("panel_key")
+                if panel_key:
+                    generated = wbp.generated_class()
+                    if generated is not None:
+                        bindings.append((panel_key, generated))
         except Exception as e:
             err("Exception building {0}: {1}".format(asset_name, e))
 
-    log("===== Done — {0}/{1} widget blueprints created. =====".format(ok, len(WIDGET_SPECS)))
+    log("===== {0}/{1} widget blueprints created. =====".format(ok, len(WIDGET_SPECS)))
     log("These WBPs render the generated C++ UI. Re-skin them in UMG as desired;")
     log("the bound widget *names* must be preserved for the C++ bindings to resolve.")
+
+    build_ui_registry(bindings)
+    build_ui_theme()
+    log("===== Done. =====")
 
 
 main()
