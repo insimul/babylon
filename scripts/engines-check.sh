@@ -39,6 +39,27 @@ changed_matches() { # $1 = path prefix
 
 ran_any=0
 
+# ---- Unity ------------------------------------------------------------------
+# Always run the C# structural syntax gate (no SDK needed). When a .NET SDK IS
+# present, also run the pure host harness (tools/verify-unity), which exercises
+# the UnityEngine-free cores — the Prolog wrapper AND the US-UC1 world source —
+# against the golden fixtures on a bare SDK (no editor, no libinsimul). When
+# dotnet is absent we SKIP cleanly so this gate never fails for want of the
+# toolchain (autoMerge is off; a human/CI box runs the full suite before merge).
+if changed_matches "packages/unity/"; then
+	ran_any=1
+	echo "== unity: C# structural syntax gate (US-EP3) =="
+	node tools/verify-unity/check.mjs
+	if command -v dotnet >/dev/null 2>&1; then
+		echo "== unity: pure host tests — Prolog wrapper + world source (US-UC1) =="
+		bash tools/verify-unity/run.sh --pure
+	else
+		echo "unity: dotnet not found — SKIP host dotnet tests (structural gate only)"
+	fi
+else
+	echo "engines:check: no packages/unity/ changes — skipping unity gates"
+fi
+
 # ---- Godot GDExtension -----------------------------------------------------
 if changed_matches "packages/godot/"; then
 	ran_any=1

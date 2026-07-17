@@ -56,6 +56,56 @@ The migration order (later stories in this and the per-engine runtime PRDs):
    the generated DTOs. Those `.cs` are the *last* to go because a shipped game
    vendors them directly.
 
+## World loading via generated DTOs (US-UC1)
+
+`Runtime/World/InsimulWorldSource.cs` is the new engine-agnostic world-loading
+core. It reads world data — either a **SaveFile's embedded `worldSnapshot`** or a
+**WorldIR export** — through the generated `Insimul.Generated` DTOs and
+**`System.Text.Json`**, and exposes typed accessors (`Characters`, `Settlements`,
+`Lots`, `Items`, `Quests`, plus `QuestPrologContent()` for the authored Prolog
+`content` strings). It ports the world-snapshot version-compatibility semantics
+from `packages/core/src/world-snapshot-version.ts` (`WorldSnapshotVersion`): a save
+whose snapshot is ahead of, or more than `MAX_COMPATIBLE_VERSION_GAP` (50) behind,
+the current world is **rejected** with the documented message.
+
+`Runtime/World/StreamingAssetsWorldSource.cs` is the thin Unity adapter — it only
+reads the JSON bytes off `Application.streamingAssetsPath` (with a `UnityWebRequest`
+coroutine variant for Android) and hands the text to the core. No parsing logic
+lives there, so the two runtimes can't diverge.
+
+### Why System.Text.Json, not JsonUtility (the Unity compatibility choice)
+
+Unity's built-in `JsonUtility` cannot deserialize the schema-faithful DTO shapes:
+it has no support for `Dictionary<string, object>` (the WorldIR sections and
+`CurrentState` maps) or `object[]` (the weakly-typed snapshot entity arrays), and
+it silently drops such fields. The generated DTOs are therefore consumed with
+`System.Text.Json` (the same serializer used by the `Runtime/Prolog` conformance
+stack). In a Unity build this requires the `System.Text.Json` assembly to be
+present under `Runtime/Plugins/` (see `Runtime/Plugins/README.md`), exactly as the
+Prolog wrapper already needs it. **New world/save/World-IR code MUST use
+`System.Text.Json` + `Insimul.Generated`, never `JsonUtility`.**
+
+### Incremental retirement mapping (template `data/*.cs`)
+
+These hand-written template `data/*.cs` classes duplicate world shapes that
+`InsimulWorldSource` now covers. They are **not deleted yet** (a shipped game still
+vendors them for the export pipeline / `JsonUtility` scene load); this table is the
+retirement map as each consumer moves onto the generated path:
+
+| Template `data/*.cs`                         | Superseded by                                   |
+| -------------------------------------------- | ----------------------------------------------- |
+| `InsimulWorldIR.cs`                          | `Insimul.Generated.WorldIr` + `InsimulWorldSource` |
+| `InsimulCharacterData.cs`, `InsimulNPCData.cs` | `InsimulWorldSource.Characters` (`WorldEntity`) |
+| `InsimulSettlementData.cs`                   | `InsimulWorldSource.Settlements`                |
+| `InsimulLotData.cs`, `InsimulBuildingData.cs` | `InsimulWorldSource.Lots`                        |
+| `InsimulQuestData.cs`                        | `InsimulWorldSource.Quests` / `QuestPrologContent()` |
+| `InsimulRuleData.cs`, `InsimulActionData.cs` | `worldSnapshot.rules` / `.actions` (quest-as-Prolog path, US-UC3) |
+
+Not superseded (kept hand-written, out of scope for world loading):
+`InsimulAIConfig.cs`, `InsimulAnimationData.cs`, `InsimulAssetManifest.cs`,
+`InsimulBiomeZoneData.cs`, `InsimulWaterFeatureData.cs`, `InsimulDialogueContext.cs`
+— these are presentation/asset/dialogue-context concerns, not schema world data.
+
 ## Regenerating
 
 ```

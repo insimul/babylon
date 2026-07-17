@@ -13,6 +13,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
+using Insimul.World;
+using Insimul.World.TestSupport;
 
 namespace Insimul.Verify
 {
@@ -29,6 +31,7 @@ namespace Insimul.Verify
             RunParseBindingSetTests();
             RunVersionHandshakeTests();
             RunAdapterPureTests();
+            RunWorldSourceTests();
 
             if (skipNative)
             {
@@ -348,6 +351,154 @@ namespace Insimul.Verify
             });
         }
 
+        // ---- World source (US-UC1) ------------------------------------------
+
+        // Pure: InsimulWorldSource parses through the generated DTOs + System.Text.Json
+        // with NO native library and NO Unity editor, so the whole world-loading +
+        // version-compatibility surface is host-tested here against the golden saves.
+        private static void RunWorldSourceTests()
+        {
+            Section("World source (US-UC1)");
+
+            string typical = WorldSourceCorpus.ReadGoldenSave("v2-typical.json");
+            if (typical == null)
+            {
+                _failed++;
+                Console.WriteLine("  FAIL  golden save corpus not found " +
+                                  "(set INSIMUL_CONFORMANCE_DIR to the conformance root)");
+            }
+            else
+            {
+                Case("FromSaveJson: golden v2-typical -> expected entity counts", () =>
+                {
+                    var w = InsimulWorldSource.FromSaveJson(typical);
+                    AssertEqual("fixture-world", w.WorldId);
+                    AssertEqual("Fixture Village", w.WorldName);
+                    AssertEqual(1, w.Characters.Count);
+                    AssertEqual(1, w.Settlements.Count);
+                    AssertEqual(1, w.Lots.Count);
+                    AssertEqual(1, w.Quests.Count);
+                    AssertEqual(0, w.Items.Count); // no items array in this snapshot
+                });
+
+                Case("FromSaveJson: typed accessors read ids / names / prolog content", () =>
+                {
+                    var w = InsimulWorldSource.FromSaveJson(typical);
+                    AssertEqual("npc-shopkeeper", w.Characters[0].Id);
+                    AssertEqual("Marie", w.Characters[0].Name); // firstName fallback
+                    AssertEqual("settlement-1", w.Settlements[0].Id);
+                    AssertEqual("lot-shop", w.Lots[0].Id);
+                    AssertEqual("quest-welcome", w.Quests[0].Id);
+
+                    var content = w.QuestPrologContent();
+                    AssertEqual(1, content.Count);
+                    AssertTrue(content[0].Contains("quest(quest_welcome"),
+                        "quest prolog content should be surfaced verbatim");
+                });
+
+                Case("FromSaveJson: unversioned snapshot skips the check (treated current)", () =>
+                {
+                    // v2-typical carries no worldSnapshot.worldVersion, so even a
+                    // current-version argument leaves Compatibility null (no throw).
+                    var w = InsimulWorldSource.FromSaveJson(typical, currentWorldVersion: 99);
+                    AssertTrue(w.Compatibility == null, "unversioned save should skip the check");
+                });
+            }
+
+            string versioned = WorldSourceCorpus.ReadWorldFixture("versioned-snapshot.json");
+            if (versioned == null)
+            {
+                _failed++;
+                Console.WriteLine("  FAIL  versioned-snapshot.json fixture not found");
+            }
+            else
+            {
+                Case("FromSaveJson: versioned snapshot reads items + entity counts", () =>
+                {
+                    var w = InsimulWorldSource.FromSaveJson(versioned);
+                    AssertEqual(2, w.Characters.Count);
+                    AssertEqual(1, w.Items.Count);
+                    AssertEqual("item-lantern", w.Items[0].Id);
+                    AssertEqual("Lantern", w.Items[0].Name);
+                });
+
+                Case("FromSaveJson: snapshot behind but within gap -> loads, status Behind", () =>
+                {
+                    // worldVersion 5, current 8 -> 3 behind (< MAX gap) -> compatible.
+                    var w = InsimulWorldSource.FromSaveJson(versioned, currentWorldVersion: 8);
+                    AssertTrue(w.Compatibility != null, "versioned save should produce a verdict");
+                    AssertTrue(w.Compatibility.Compatible, "3 behind should be compatible");
+                    AssertEqual(WorldSnapshotVersion.Status.Behind, w.Compatibility.Status);
+                });
+
+                Case("FromSaveJson: snapshot ahead of world -> rejected with documented error", () =>
+                {
+                    // worldVersion 5, current 2 -> snapshot ahead -> incompatible.
+                    var ex = AssertThrowsReturning<InsimulWorldException>(
+                        () => InsimulWorldSource.FromSaveJson(versioned, currentWorldVersion: 2));
+                    AssertTrue(ex.Message.Contains("ahead of the world version"),
+                        "rejection message should match the documented 'ahead' text");
+                });
+
+                Case("FromSaveJson: snapshot too far behind (>50) -> rejected", () =>
+                {
+                    // worldVersion 5, current 60 -> 55 behind (> MAX 50) -> incompatible.
+                    var ex = AssertThrowsReturning<InsimulWorldException>(
+                        () => InsimulWorldSource.FromSaveJson(versioned, currentWorldVersion: 60));
+                    AssertTrue(ex.Message.Contains("versions behind"),
+                        "rejection message should cite the version gap");
+                });
+            }
+
+            // Pure parity with packages/core/src/world-snapshot-version.ts.
+            Case("CheckSnapshotCompatibility: equal versions => current", () =>
+            {
+                var r = WorldSnapshotVersion.CheckSnapshotCompatibility(3, 3);
+                AssertTrue(r.Compatible, "equal versions compatible");
+                AssertEqual(WorldSnapshotVersion.Status.Current, r.Status);
+                AssertEqual(0, r.VersionsBehind);
+            });
+
+            Case("CheckSnapshotCompatibility: one behind => singular message", () =>
+            {
+                var r = WorldSnapshotVersion.CheckSnapshotCompatibility(4, 3);
+                AssertTrue(r.Compatible, "one behind compatible");
+                AssertEqual(WorldSnapshotVersion.Status.Behind, r.Status);
+                AssertTrue(r.Message.Contains("1 version behind"),
+                    "singular 'version' for a gap of one");
+            });
+
+            Case("CheckSnapshotCompatibility: ahead => incompatible", () =>
+            {
+                var r = WorldSnapshotVersion.CheckSnapshotCompatibility(3, 5);
+                AssertTrue(!r.Compatible, "ahead is incompatible");
+                AssertEqual(WorldSnapshotVersion.Status.Incompatible, r.Status);
+                AssertEqual(-2, r.VersionsBehind);
+            });
+
+            Case("CheckSnapshotCompatibility: gap beyond MAX => incompatible", () =>
+            {
+                var r = WorldSnapshotVersion.CheckSnapshotCompatibility(
+                    WorldSnapshotVersion.MaxCompatibleVersionGap + 6, 5);
+                AssertTrue(!r.Compatible, "51 behind is incompatible");
+                AssertEqual(WorldSnapshotVersion.Status.Incompatible, r.Status);
+            });
+
+            Case("ShouldBumpVersion / NextVersion parity", () =>
+            {
+                AssertTrue(WorldSnapshotVersion.ShouldBumpVersion("character"), "character bumps");
+                AssertTrue(!WorldSnapshotVersion.ShouldBumpVersion("weather"), "unlisted does not bump");
+                AssertEqual(6, WorldSnapshotVersion.NextVersion(5));
+            });
+
+            Case("FromSaveJson: empty / snapshot-less input throws InsimulWorldException", () =>
+            {
+                AssertThrows<InsimulWorldException>(() => InsimulWorldSource.FromSaveJson(""));
+                AssertThrows<InsimulWorldException>(
+                    () => InsimulWorldSource.FromSaveJson("{\"id\":\"x\",\"status\":\"active\"}"));
+            });
+        }
+
         // Native: real unification through libinsimul (the whole point of US-UP4).
         private static void RunAdapterNativeTests()
         {
@@ -548,6 +699,17 @@ namespace Insimul.Verify
         {
             try { body(); }
             catch (TException) { return; }
+            catch (Exception ex)
+            {
+                throw new Exception($"expected {typeof(TException).Name} but got {ex.GetType().Name}: {ex.Message}");
+            }
+            throw new Exception($"expected {typeof(TException).Name} but nothing was thrown");
+        }
+
+        private static TException AssertThrowsReturning<TException>(Action body) where TException : Exception
+        {
+            try { body(); }
+            catch (TException ex) { return ex; }
             catch (Exception ex)
             {
                 throw new Exception($"expected {typeof(TException).Name} but got {ex.GetType().Name}: {ex.Message}");

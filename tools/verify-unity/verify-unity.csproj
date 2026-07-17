@@ -32,6 +32,14 @@
          (ConformanceCorpusTests.cs) is deliberately NOT included here so this
          harness never needs nunit.framework. -->
     <Compile Include="../../packages/unity/Tests/Editor/ConformanceCorpus.cs" />
+    <!-- World loading core (US-UC1): engine-agnostic, UnityEngine-free. It parses
+         through the generated schema DTOs (InsimulGenerated.cs) via System.Text.Json,
+         so both are compiled here. Its shared fixture locator + the console tests in
+         Program.cs drive it against the golden saves. The StreamingAssets adapter is
+         UnityEngine-coupled and thus deliberately NOT included (structural gate only). -->
+    <Compile Include="../../packages/unity/Runtime/World/InsimulWorldSource.cs" />
+    <Compile Include="../../packages/unity/Runtime/Generated/InsimulGenerated.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/WorldSourceCorpus.cs" />
     <!-- The wrapper under test, referenced in place (no vendoring). -->
     <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
     <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />
