@@ -18,6 +18,7 @@ using Insimul.Quest;
 using Insimul.Quest.TestSupport;
 using Insimul.Radiant;
 using Insimul.Radiant.Conformance;
+using Insimul.Runtime;
 using Insimul.Save;
 using Insimul.Save.TestSupport;
 using Insimul.World;
@@ -42,6 +43,7 @@ namespace Insimul.Verify
             RunSaveSystemTests();
             RunQuestSystemTests();
             RunRadiantPureTests();
+            RunBootstrapTests();
 
             if (skipNative)
             {
@@ -816,6 +818,126 @@ namespace Insimul.Verify
                 foreach (var f in restored)
                     if (f.Predicate == "radiant_generated") provenance = true;
                 AssertTrue(provenance, "radiant provenance round-trips through the save");
+            });
+        }
+
+        // ---- Startup orchestrator (US-UC5) ----------------------------------
+
+        private static void RunBootstrapTests()
+        {
+            Section("Runtime context / bootstrap (US-UC5, pure)");
+
+            // A golden-shaped world: one character + one all-objectives quest.
+            const string worldSnapshot =
+                "{\"world\":{\"id\":\"w1\",\"name\":\"World\"}," +
+                "\"settlements\":[]," +
+                "\"characters\":[{\"id\":\"npc_anne\",\"name\":\"Anne\"}]," +
+                "\"quests\":[{\"id\":\"q_intro\",\"content\":\"" +
+                "quest(q_intro, 'Intro', errand, easy, active).\\n" +
+                "quest_objective(q_intro, 0, objective('Say hi')).\\n" +
+                "quest_reward(q_intro, experience, 50).\\n" +
+                "quest_completion(q_intro, all_objectives_complete).\"}]}";
+
+            NewGameOptions NewOpts() => new NewGameOptions { Id = "s1", WorldId = "w1", Name = "New Game" };
+
+            Case("Boot with no existing save -> new game, world + quests loaded", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                var boot = ctx.Boot(null, worldSnapshot, NewOpts());
+                AssertTrue(boot.Ok, "boot ok");
+                AssertTrue(!boot.ResumedSave, "new game (not resumed)");
+                AssertTrue(ctx.IsLoaded, "context loaded");
+                AssertEqual(1, ctx.World.Characters.Count);
+                AssertEqual(1, ctx.Quests.QuestCount);
+                AssertTrue(ctx.Quests.GetQuest("q_intro") != null, "world quest registered");
+            });
+
+            Case("Registering world quests fires OnQuestAccepted", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                var accepted = new List<string>();
+                ctx.Quests.OnQuestAccepted += id => accepted.Add(id);
+                AssertTrue(ctx.StartNewGame(worldSnapshot, NewOpts(), out _), "new game ok");
+                AssertTrue(accepted.Contains("q_intro"), "OnQuestAccepted fired for the world quest");
+            });
+
+            Case("Boot resumes a valid save (ResumedSave = true)", () =>
+            {
+                // Produce a save from a new game, complete the quest, commit.
+                var first = new InsimulRuntimeContext();
+                first.StartNewGame(worldSnapshot, NewOpts(), out _);
+                first.Quests.AssertFact("objective_satisfied", "q_intro", "obj_0");
+                first.EvaluateAllQuests();
+                AssertTrue(first.Quests.IsQuestComplete("q_intro"), "quest completed after objective satisfied");
+                first.CommitToSave();
+                string saveJson = first.SerializeCanonical();
+
+                // A fresh context resumes it.
+                var second = new InsimulRuntimeContext();
+                var boot = second.Boot(saveJson, worldSnapshot, NewOpts());
+                AssertTrue(boot.Ok, "resume ok");
+                AssertTrue(boot.ResumedSave, "resumed the save");
+                AssertTrue(second.Quests.IsQuestComplete("q_intro"),
+                    "completion round-trips through the save (KB-backed)");
+            });
+
+            Case("Boot falls back to a new game on a corrupt save (never bricks)", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                var boot = ctx.Boot("{not valid json", worldSnapshot, NewOpts());
+                AssertTrue(boot.Ok, "boot still ok");
+                AssertTrue(!boot.ResumedSave, "fell back to a new game");
+                AssertTrue(ctx.IsLoaded, "loaded from the fallback world");
+                AssertTrue(!ctx.Quests.IsQuestComplete("q_intro"), "fresh game has an incomplete quest");
+            });
+
+            Case("Boot fails cleanly when BOTH the save and the fallback world are bad", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                var boot = ctx.Boot("{not valid json", "{\"no\":\"world\"}", NewOpts());
+                AssertTrue(!boot.Ok, "boot fails");
+                AssertTrue(!ctx.IsLoaded, "not loaded");
+                AssertTrue(!string.IsNullOrEmpty(boot.Error), "surfaces an error");
+            });
+
+            Case("CommitToSave captures KB state; worldSnapshot hash byte-stable across commit", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                ctx.StartNewGame(worldSnapshot, NewOpts(), out _);
+                string worldHashBefore = ctx.WorldSnapshotIntegrity();
+
+                ctx.Quests.AssertFact("objective_satisfied", "q_intro", "obj_0");
+                ctx.EvaluateAllQuests();
+                ctx.CommitToSave();
+
+                string worldHashAfter = ctx.WorldSnapshotIntegrity();
+                AssertEqual(worldHashBefore, worldHashAfter);
+
+                // The completion fact persisted into currentState.prologFacts only.
+                var reloaded = new InsimulSaveSystem();
+                reloaded.Load(ctx.SerializeCanonical());
+                bool complete = false;
+                foreach (var f in reloaded.RestoreFacts())
+                    if (f.Predicate == "quest_complete") complete = true;
+                AssertTrue(complete, "quest_complete persisted through the save file");
+            });
+
+            Case("EvaluateAllQuests returns a transition per registered quest", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                ctx.StartNewGame(worldSnapshot, NewOpts(), out _);
+                var transitions = ctx.EvaluateAllQuests();
+                AssertEqual(ctx.Quests.QuestCount, transitions.Count);
+            });
+
+            Case("Envelope produced by the context validates + verifies integrity", () =>
+            {
+                var ctx = new InsimulRuntimeContext();
+                ctx.StartNewGame(worldSnapshot, NewOpts(), out _);
+                ctx.CommitToSave();
+                string envelope = ctx.BuildEnvelopeJson("test-version", "1970-01-01T00:00:00.000Z");
+                var validation = InsimulSaveSystem.ValidateEnvelope(envelope);
+                AssertTrue(validation.Ok, "context envelope validates: " + validation.Message);
             });
         }
 

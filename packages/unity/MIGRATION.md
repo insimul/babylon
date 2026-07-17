@@ -274,6 +274,76 @@ seam) rather than needing a `libinsimul` radiant entry point.
 None — radiant generation is a NEW capability (the template `QuestSystem.cs`
 prototype had no procedural/radiant quest generation).
 
+## US-UC5 — Template bootstrap integration + human checklist
+
+`Runtime/InsimulRuntimeContext.cs` is the new **startup orchestrator** — the
+UnityEngine-free, host-testable core (the Unity twin of the Unreal
+`FInsimulRuntimeContext`) that ties the four US-UC1..UC4 cores into the single full
+loop the game template drives:
+
+```
+world source  ->  save slot select / new-game  ->  KB up  ->  systems init
+```
+
+- **`Boot(existingSaveJson, fallbackWorldSnapshotJson, options)`** — resume a valid
+  save (integrity-checked, migrated up) or, if there is none / it is corrupt /
+  incompatible, start a **new game** from the golden world. A bad slot never bricks
+  the boot. `StartNewGame` / `LoadFromSave` are the explicit entry points.
+- **Rehydrate** builds `InsimulWorldSource` off the SaveFile's embedded
+  `worldSnapshot`, registers every world quest's Prolog `content` into the
+  `InsimulQuestRuntime`, and restores the KB from `currentState.prologFacts` (which
+  re-derives each quest's completion).
+- **`CommitToSave`** snapshots the live KB back into `currentState.prologFacts`;
+  **`EvaluateAllQuests`** applies the fact-asserting quest transitions;
+  **`RunRadiantTick`** drives the deterministic radiant generator. The read-only
+  `worldSnapshot` is never mutated, so **`WorldSnapshotIntegrity()`** stays
+  byte-stable across a commit + save/reload (§5.2 B2).
+
+`templates/scripts/core/InsimulRuntimeBootstrap.cs` is the thin Unity
+(MonoBehaviour) layer over it — structural-gate only (UnityEngine-coupled). It
+reads the StreamingAssets world, picks a save slot (`PersistentDataSaveStore`),
+stands up the native Prolog KB, and **bridges the existing template
+`Insimul.Systems.QuestSystem` MonoBehaviour to the runtime without rewriting it**:
+it subscribes to that MonoBehaviour's public gameplay events and feeds them into the
+runtime KB as trigger facts, then re-evaluates. The runtime's own events
+(`OnQuestAccepted` / `OnObjectiveCompleted` / `OnQuestCompleted`, US-UC3) keep the
+same signatures the template exposed, so shipped UI keeps working.
+
+### Verification
+
+- `tools/verify-unity/Program.cs` (`RunBootstrapTests`) is the authoritative host
+  gate: new-game boot, resume, corrupt-save fallback, both-bad clean failure,
+  commit round-trip + worldSnapshot hash stability, `EvaluateAllQuests`, and
+  envelope validation. `Tests/Editor/BootstrapTests.cs` mirrors it as an EditMode
+  NUnit fixture. On a box without the .NET SDK the host tests SKIP (autoMerge off;
+  CI runs the dotnet half).
+- The human pass is `packages/unity/VERIFICATION.md` (referenced from
+  `.chief/state/progress.txt`) — the editor-only full gameplay loop.
+- **Babylon behaviour-reference deltas: target zero, achieved.** See
+  `VERIFICATION.md` §3 for the (non-semantic, seam-level) differences and why none
+  changes observable save/quest/world semantics.
+
+### Retired template files (superseded by the new bootstrap)
+
+The new startup path supersedes the legacy per-file JSON bootstrap. These template
+files are **not deleted yet** — a shipped game still vendors them for the current
+export/scene path, and other template MonoBehaviours (UI/indicators) still
+reference them; they retire physically at the export-pipeline cutover (the separate
+per-engine packaging concern). US-UC5 makes good on the "retire once the bootstrap
+lands" note in the US-UC2/UC3 sections by providing the replacement:
+
+| Template file | Superseded by |
+| ------------- | ------------- |
+| `templates/scripts/core/InsimulGameManager.cs` (world/save/quest bootstrap via `JsonUtility` + `Resources.Load`) | `templates/scripts/core/InsimulRuntimeBootstrap.cs` → `Runtime/InsimulRuntimeContext.cs` |
+| `templates/scripts/systems/SaveSystem.cs` | `Runtime/Save/InsimulSaveSystem.cs` + `PersistentDataSaveStore.cs` (driven by the bootstrap) |
+| `templates/scripts/systems/QuestSystem.cs` (in-memory completion twin) | `Runtime/Quest/InsimulQuestRuntime.cs` (KB-backed; the template MonoBehaviour is retained only as the UI event source the bootstrap bridges) |
+| `templates/scripts/systems/QuestCompletionManager.cs` | `InsimulQuestSystem.EvaluateQuest` (KB-backed completion via the runtime) |
+
+The `InsimulGameManager` **scene-spawning** responsibilities (terrain / buildings /
+NPCs / props) are *presentation*, not world-data loading, and are **not** superseded
+— a game keeps them and simply feeds them from `InsimulRuntimeContext.World`
+instead of a `JsonUtility`-parsed `InsimulWorldIR`.
+
 ## Regenerating
 
 ```
