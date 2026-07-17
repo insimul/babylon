@@ -1,0 +1,152 @@
+# -----------------------------------------------------------------------------
+# VENDORED COPY — DO NOT EDIT BY HAND.
+#
+#   Source of truth:  insimul-platform/openapi/insimul-v1.yaml (api-v1-spec PRD).
+#   This file is a vendored mirror kept in @insimul/core so the runtime codegen
+#   pipeline (tools/codegen) can generate the C# REST client + operations.json
+#   WITHOUT a checkout of the platform repo.
+#
+#   Re-sync with:     npm run openapi:sync             (diff against the platform
+#                                                       spec when insimul-platform
+#                                                       is checked out)
+#                     npm run openapi:sync -- --write  (copy platform -> vendored)
+#
+#   The platform repo REMAINS the source of truth. When the platform submodule is
+#   not present (e.g. the runtime worktree in isolation), this vendored copy is
+#   authoritative and hand-maintained to track the shipped v1 surface.
+# -----------------------------------------------------------------------------
+openapi: 3.0.3
+info:
+  title: Insimul Platform API
+  version: 1.0.0
+  description: >-
+    Conversation runtime surface consumed by the native engine SDKs (Unity,
+    Unreal, Godot). Streaming endpoints return Server-Sent Events (text/event-stream);
+    the SDK transport layer parses the SSE frames.
+servers:
+  - url: /
+    description: Relative to the configured Insimul server base URL.
+paths:
+  /api/conversation/stream:
+    post:
+      operationId: streamConversation
+      summary: Send player text and stream the character response as SSE.
+      tags: [conversation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationTextRequest'
+      responses:
+        '200':
+          description: Server-Sent Events stream of conversation chunks.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Malformed request.
+  /api/conversation/stream-audio:
+    post:
+      operationId: streamConversationAudio
+      summary: Send player audio and stream the character response as SSE.
+      tags: [conversation]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConversationAudioRequest'
+      responses:
+        '200':
+          description: Server-Sent Events stream of conversation chunks.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Malformed request.
+  /api/conversation/end:
+    post:
+      operationId: endConversation
+      summary: End a conversation session and release server resources.
+      tags: [conversation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndSessionRequest'
+      responses:
+        '200':
+          description: Session ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndSessionResponse'
+  /api/conversation/health:
+    get:
+      operationId: healthCheck
+      summary: Liveness probe for the conversation service.
+      tags: [conversation]
+      responses:
+        '200':
+          description: Service healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    ConversationTextRequest:
+      type: object
+      required: [sessionId, characterId, worldId, text]
+      properties:
+        sessionId:
+          type: string
+        characterId:
+          type: string
+        worldId:
+          type: string
+        text:
+          type: string
+        languageCode:
+          type: string
+    ConversationAudioRequest:
+      type: object
+      required: [sessionId, characterId, worldId, audio]
+      properties:
+        sessionId:
+          type: string
+        characterId:
+          type: string
+        worldId:
+          type: string
+        languageCode:
+          type: string
+        audio:
+          type: string
+          format: binary
+    EndSessionRequest:
+      type: object
+      required: [sessionId]
+      properties:
+        sessionId:
+          type: string
+    EndSessionResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+        version:
+          type: string

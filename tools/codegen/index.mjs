@@ -18,6 +18,8 @@ import { dirname, join, resolve } from 'node:path';
 import { emitCSharp } from './emit-csharp.mjs';
 import { emitCpp } from './emit-cpp.mjs';
 import { emitGdscript } from './emit-gdscript.mjs';
+import { emitOperations } from './emit-operations.mjs';
+import { emitCSharpApi } from './emit-csharp-api.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -26,6 +28,10 @@ export const GENERATORS = [
   { name: 'csharp', emit: emitCSharp },
   { name: 'cpp', emit: emitCpp },
   { name: 'gdscript', emit: emitGdscript },
+  // US-CG4: OpenAPI-derived — the machine-readable operation table (all engines)
+  // and the C# REST client (Unity).
+  { name: 'operations', emit: emitOperations },
+  { name: 'csharp-api', emit: emitCSharpApi },
 ];
 
 /** Run every generator, writing under `baseDir`. Returns the flat list of paths. */

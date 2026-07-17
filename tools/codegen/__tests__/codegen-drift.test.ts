@@ -76,6 +76,46 @@ describe('codegen drift guard', () => {
     }
   });
 
+  it('committed operations.json covers every OpenAPI operation', () => {
+    const opsRel = written.find((p) => p.endsWith('operations.json'));
+    expect(opsRel, 'operations.json should be generated').toBeTruthy();
+    const table = JSON.parse(readFileSync(join(REPO_ROOT, opsRel!), 'utf8'));
+    const byId = new Map<string, any>(table.operations.map((o: any) => [o.operationId, o]));
+    for (const id of ['streamConversation', 'streamConversationAudio', 'endConversation', 'healthCheck']) {
+      expect(byId.has(id), `operations.json should list ${id}`).toBe(true);
+    }
+    // Each op carries the machine-readable contract the hand-written wrappers consume.
+    for (const op of table.operations) {
+      expect(op.method, `${op.operationId} needs an HTTP method`).toMatch(/^(GET|POST|PUT|DELETE|PATCH)$/);
+      expect(op.path, `${op.operationId} needs a path`).toMatch(/^\//);
+      expect(Array.isArray(op.parameters)).toBe(true);
+    }
+    expect(byId.get('healthCheck').method).toBe('GET');
+    expect(byId.get('endConversation').responseSchema).toBe('EndSessionResponse');
+  });
+
+  it('committed C# REST client covers the operations against System.Net.Http', () => {
+    const apiRel = written.find((p) => p.replace(/\\/g, '/').endsWith('Generated/Api/InsimulApiClient.cs'));
+    expect(apiRel, 'the C# API client should be generated').toBeTruthy();
+    const committed = readFileSync(join(REPO_ROOT, apiRel!), 'utf8');
+    expect(committed).toContain('namespace Insimul.Generated.Api');
+    expect(committed).toContain('using System.Net.Http;');
+    for (const m of [
+      'StreamConversationAsync',
+      'StreamConversationAudioAsync',
+      'EndConversationAsync',
+      'HealthCheckAsync',
+    ]) {
+      expect(committed, `client should expose ${m}`).toContain(m);
+    }
+    // JSON ops deserialize a model; streaming ops hand back the raw response.
+    expect(committed).toContain('Task<EndSessionResponse> EndConversationAsync');
+    expect(committed).toContain('Task<HttpResponseMessage> StreamConversationAsync');
+    // Transport-agnostic — no Unity engine dependency in the generated client
+    // (the doc comment references UnityWebRequest, but nothing uses UnityEngine).
+    expect(committed).not.toContain('UnityEngine');
+  });
+
   it('committed generated output is byte-identical to a fresh regeneration', () => {
     const drifted: string[] = [];
     for (const rel of written) {

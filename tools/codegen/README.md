@@ -21,6 +21,37 @@ replacing the hand-mirrored, drift-prone type re-declarations.
 | C#       | `packages/unity/Runtime/Generated/InsimulGenerated.cs` | US-CG1 |
 | C++      | `packages/unreal/Source/InsimulRuntime/Generated/`  | US-CG2 |
 | GDScript | `packages/godot/addons/insimul/generated/`          | US-CG3 |
+| C# REST client | `packages/unity/Runtime/Generated/Api/InsimulApiClient.cs` | US-CG4 |
+| Operation table | `packages/core/openapi/operations.json`        | US-CG4 |
+
+## OpenAPI → REST client + operation table (US-CG4)
+
+The REST surface is generated from a **vendored** copy of the platform's OpenAPI
+spec at `packages/core/openapi/insimul-v1.yaml` (mirror of
+`insimul-platform/openapi/insimul-v1.yaml`; the platform repo stays the source of
+truth). Keep it in step with:
+
+- `npm run openapi:sync` — diff the vendored copy against the platform spec (when
+  `insimul-platform` is checked out beside/inside the runtime); exit 1 on drift.
+- `npm run openapi:sync -- --write` — copy the platform spec into the vendored
+  path, preserving the vendored provenance header. Then `npm run codegen`.
+
+From that spec the pipeline emits, deterministically:
+
+- **`InsimulApiClient.cs`** — a `System.Net.Http` REST client (namespace
+  `Insimul.Generated.Api`). Transport-agnostic: the Unity plugin adapts it to
+  `UnityWebRequest` at the boundary (see the generated `Api/README.md` and
+  `InsimulHttpClient.cs`). JSON ops return the deserialized model; streaming
+  (`text/event-stream`) ops return the raw `HttpResponseMessage`.
+- **`operations.json`** — a machine-readable operation table (`operationId` /
+  `method` / `path` / params) the hand-written C++ (Unreal) and GDScript (Godot)
+  HTTP wrappers consume and check themselves against, so all three engines pin to
+  one operation set.
+
+> A **custom emitter** (`emit-csharp-api.mjs`), not NSwag / openapi-generator —
+> for the same reason the GDScript emitter is hand-rolled: the drift guard needs
+> byte-identical, offline, deterministic output, which the version-stamped,
+> toolchain-heavy generators fight.
 
 ## Files
 
@@ -38,6 +69,13 @@ replacing the hand-mirrored, drift-prone type re-declarations.
 - `emit-gdscript.mjs` — Godot 4 GDScript emitter (US-CG3); hand-rolled, since
   quicktype has no GDScript target. One `class_name Insimul*` script per top-level
   schema, with `from_dict`/`to_dict` and per-field validation.
+- `openapi-spec.mjs` — loads/parses the vendored OpenAPI spec and flattens it into
+  the deterministic operation list (`collectOperations`) shared by both OpenAPI
+  emitters and the drift guard.
+- `emit-operations.mjs` — emits `packages/core/openapi/operations.json` (US-CG4).
+- `emit-csharp-api.mjs` — emits the `System.Net.Http` C# REST client (US-CG4).
+- `openapi-sync.mjs` — `npm run openapi:sync`; diff/copy the vendored spec vs the
+  platform source of truth.
 - `gdscript-verify.mjs` — the structural self-test (`structuralCheck`,
   `collectSchemaKeys`) shared by the verify runner and the emitter unit test.
 - `verify-cs/` — a net8.0, Unity-free console project + `run.mjs` that compiles the

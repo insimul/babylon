@@ -5,8 +5,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Text.Json;
 using Insimul.Generated;
+using Insimul.Generated.Api;
 
 internal static class Program
 {
@@ -79,9 +81,29 @@ internal static class Program
         SaveFileEnvelope envBack =
             JsonSerializer.Deserialize<SaveFileEnvelope>(envelopeJson, Converter.Settings)!;
 
+        // US-CG4: prove the generated REST client (Insimul.Generated.Api) compiles —
+        // construct it over System.Net.Http and reference each operation + model.
+        using var http = new HttpClient();
+        var api = new InsimulApiClient(http, "https://example.invalid/");
+        Action check = () =>
+        {
+            _ = api.StreamConversationAsync(new ConversationTextRequest
+            {
+                SessionId = "s", CharacterId = "c", WorldId = "w", Text = "hi",
+            });
+            _ = api.StreamConversationAudioAsync(new ConversationAudioRequest
+            {
+                SessionId = "s", CharacterId = "c", WorldId = "w", Audio = new byte[] { 1 },
+            });
+            _ = api.EndConversationAsync(new EndSessionRequest { SessionId = "s" });
+            _ = api.HealthCheckAsync();
+        };
+        _ = check; // referenced but not invoked (no live server in this check).
+
         Console.WriteLine(
             $"OK: envelope={envBack.Format} save={back.SaveFileEnvelope.SaveFile.Id} "
-            + $"world={back.WorldIr.Meta.WorldName} bundleBytes={bundleJson.Length}");
+            + $"world={back.WorldIr.Meta.WorldName} bundleBytes={bundleJson.Length} "
+            + $"apiBase set={(api != null)}");
         return 0;
     }
 }
