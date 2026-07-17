@@ -27,6 +27,7 @@
     "engines:templates": "node scripts/engines/validate-templates.mjs",
     "engines:check": "bash scripts/engines-check.sh",
     "engines:unreal:host": "bash tools/verify-unreal/run-host-tests.sh",
+    "engines:unreal:binding": "bash tools/verify-unreal/run-binding-tests.sh",
     "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
     "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell",

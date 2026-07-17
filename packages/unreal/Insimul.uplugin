@@ -18,6 +18,11 @@
       "Name": "InsimulRuntime",
       "Type": "Runtime",
       "LoadingPhase": "Default"
+    },
+    {
+      "Name": "InsimulEditor",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit"
     }
   ]
 }
