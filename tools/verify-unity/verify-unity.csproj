@@ -77,6 +77,13 @@
     <!-- The game adapter (US-UP4): the real-engine backing the template shell
          delegates to. UnityEngine-free, so it compiles + runs here. -->
     <Compile Include="../../packages/unity/Runtime/Prolog/PrologGameAdapter.cs" />
+    <!-- Asset binding layer (US-UB1): the pure, UnityEngine-free archetype-key
+         matcher + resolution core. The InsimulBindingTable ScriptableObject that
+         authors it is UnityEngine-coupled and thus NOT included (structural gate
+         only) — RunBindingResolverTests in Program.cs proves this core. -->
+    <Compile Include="../../packages/unity/Runtime/Binding/ArchetypeKey.cs" />
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingResolver.cs" />
   </ItemGroup>
 
 </Project>

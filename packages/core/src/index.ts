@@ -24,6 +24,11 @@ export * from './playthrough-overview';
 export * from './insimul-version';
 export * from './validation-failures';
 export * from './asset-types';
+// ── Archetype taxonomy (US-UB1) ────────────────────────────────────────────
+// The hierarchical dot-path archetype key grammar + matcher the asset binding
+// layer resolves against (see docs/archetype-taxonomy.md; C# port in
+// packages/unity Runtime/Binding/ArchetypeKey.cs).
+export * from './archetypes/taxonomy';
 export * from './prolog';
 
 // ── Radiant quest generation (US-RQ2) ──────────────────────────────────────

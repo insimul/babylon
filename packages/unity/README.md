@@ -180,6 +180,30 @@ Player Input → InsimulNPC.SendText()
         → OnFacialData → InsimulLipSync → SkinnedMeshRenderer
 ```
 
+## Asset binding layer
+
+The "use your own assets with Insimul worlds" path (plan §4.2). Every placeable
+entity in a world's IR carries an **archetype key** — a hierarchical dot-path
+like `building.commercial.bakery.medium` or `npc.merchant.baker`. An
+`InsimulBindingTable` ScriptableObject
+([`Runtime/Binding/InsimulBindingTable.cs`](Runtime/Binding/InsimulBindingTable.cs))
+maps those keys (with `a.b.*` wildcard / descendant matching) to your prefabs plus
+transform fixups (pivot offset, scale, footprint alignment) and socket metadata.
+
+- The archetype-key grammar + matching semantics are engine-agnostic and
+  documented in
+  [`packages/core/docs/archetype-taxonomy.md`](../core/docs/archetype-taxonomy.md);
+  the executable authority is `packages/core/src/archetypes/taxonomy.ts`, ported to
+  C# in [`Runtime/Binding/ArchetypeKey.cs`](Runtime/Binding/ArchetypeKey.cs).
+- Resolution order is **project table → imported binding packs → placeholder pack**
+  ([`Runtime/Binding/BindingResolver.cs`](Runtime/Binding/BindingResolver.cs)); the
+  most specific matching rule in the first layer that binds wins (exact ≻ wildcard ≻
+  ancestor). Keys that bind nowhere are reported (`CollectUnbound`) so a creator
+  sees exactly what art is still missing before generating a scene.
+- The resolver, matcher, and unbound reporting are UnityEngine-free and host-tested
+  on a bare .NET SDK (`tools/verify-unity`, `RunBindingResolverTests`); the
+  ScriptableObject is verified by the C# structural gate.
+
 ## Export pipeline: what gets copied and substituted
 
 Everything under [`templates/`](templates/) is a **game-template tree** the Insimul

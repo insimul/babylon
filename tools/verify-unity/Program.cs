@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using Insimul.Binding;
 using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
 using Insimul.Quest;
@@ -44,6 +45,7 @@ namespace Insimul.Verify
             RunQuestSystemTests();
             RunRadiantPureTests();
             RunBootstrapTests();
+            RunBindingResolverTests();
 
             if (skipNative)
             {
@@ -1378,6 +1380,149 @@ namespace Insimul.Verify
             }
             sb.Append(')');
             return sb.ToString();
+        }
+
+        // ---- Binding resolver (US-UB1) --------------------------------------
+
+        private static BindingLayer Layer(string name, BindingSourceKind kind, params BindingRule[] rules)
+            => new BindingLayer(name, kind, new List<BindingRule>(rules));
+
+        private static void RunBindingResolverTests()
+        {
+            Case("ArchetypeKey.Matches: exact / wildcard / ancestor", () =>
+            {
+                const string key = "building.commercial.bakery.medium";
+                AssertEqual(true, ArchetypeKey.Matches(key, key));
+                AssertEqual(false, ArchetypeKey.Matches("building.commercial.bakery.small", key));
+                AssertEqual(true, ArchetypeKey.Matches("building.commercial.*", key));
+                AssertEqual(true, ArchetypeKey.Matches("building.commercial.*", "building.commercial"));
+                AssertEqual(true, ArchetypeKey.Matches("building", key));           // ancestor
+                AssertEqual(false, ArchetypeKey.Matches("building.residential.*", key));
+                AssertEqual(false, ArchetypeKey.Matches("building.*", "building.*")); // query can't be wildcard
+            });
+
+            Case("ArchetypeKey.Specificity: exact > deep wildcard > shallow wildcard", () =>
+            {
+                const string key = "building.commercial.bakery.medium";
+                int exact = ArchetypeKey.Specificity(key, key);
+                int deep = ArchetypeKey.Specificity("building.commercial.bakery.*", key);
+                int shallow = ArchetypeKey.Specificity("building.commercial.*", key);
+                AssertEqual(true, exact > deep);
+                AssertEqual(true, deep > shallow);
+                AssertEqual(-1, ArchetypeKey.Specificity("building.residential.*", key));
+            });
+
+            Case("Resolver: exact match beats wildcard in the same layer", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.commercial.*", "wild"),
+                        new BindingRule("building.commercial.bakery.medium", "exact")),
+                });
+                var r = resolver.Resolve("building.commercial.bakery.medium");
+                AssertEqual("exact", r.Rule.AssetRef);
+            });
+
+            Case("Resolver: descendant binding via an ancestor rule", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("npc", "npc-generic")),
+                });
+                var r = resolver.Resolve("npc.merchant.baker");
+                AssertEqual("npc-generic", r.Rule.AssetRef);
+            });
+
+            Case("Resolver: fallback chain project > pack > placeholder", () =>
+            {
+                var placeholderOnly = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project),
+                    Layer("pack", BindingSourceKind.Pack),
+                    Layer("placeholder", BindingSourceKind.Placeholder,
+                        new BindingRule("item.*", "ph-item")),
+                });
+                var r1 = placeholderOnly.Resolve("item.tool.fishing_rod");
+                AssertEqual("ph-item", r1.Rule.AssetRef);
+                AssertEqual(BindingSourceKind.Placeholder, r1.Source);
+                AssertEqual(true, r1.IsPlaceholder);
+
+                // A project rule overrides even a MORE specific placeholder rule.
+                var projectWins = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("item.*", "proj-item")),
+                    Layer("placeholder", BindingSourceKind.Placeholder,
+                        new BindingRule("item.tool.fishing_rod", "ph-exact")),
+                });
+                var r2 = projectWins.Resolve("item.tool.fishing_rod");
+                AssertEqual("proj-item", r2.Rule.AssetRef);
+                AssertEqual(BindingSourceKind.Project, r2.Source);
+            });
+
+            Case("Resolver: unbound report lists missing keys, sorted + deduped", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("placeholder", BindingSourceKind.Placeholder,
+                        new BindingRule("building.*", "ph-building")),
+                });
+                var report = resolver.CollectUnbound(new[]
+                {
+                    "building.commercial.bakery",   // bound
+                    "npc.merchant.baker",           // unbound
+                    "item.food.bread",              // unbound
+                    "npc.merchant.baker",           // dup — collapses
+                });
+                AssertEqual(3, report.RequestedCount);
+                AssertEqual(1, report.BoundCount);
+                AssertEqual(2, report.MissingCount);
+                AssertEqual("item.food.bread", report.MissingKeys[0]);
+                AssertEqual("npc.merchant.baker", report.MissingKeys[1]);
+                AssertEqual(false, report.AllBound);
+            });
+
+            Case("Resolver: unmatched key resolves to null", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.*", "b")),
+                });
+                AssertEqual(true, resolver.Resolve("terrain.texture.grass") == null);
+            });
+
+            Case("SortRules: ordinal by key, stable for equal keys", () =>
+            {
+                var rules = new List<BindingRule>
+                {
+                    new BindingRule("prop.tree", "a"),
+                    new BindingRule("building.house", "b"),
+                    new BindingRule("building.house", "c"), // equal key, keeps order after b
+                    new BindingRule("item.sword", "d"),
+                };
+                BindingResolver.SortRules(rules);
+                AssertEqual("building.house", rules[0].Key);
+                AssertEqual("b", rules[0].AssetRef);
+                AssertEqual("c", rules[1].AssetRef); // stable
+                AssertEqual("item.sword", rules[2].Key);
+                AssertEqual("prop.tree", rules[3].Key);
+            });
+
+            Case("Empty-AssetRef rule counts as bound (deliberate gap)", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("prop.street.market-stall", "")),
+                });
+                var report = resolver.CollectUnbound(new[] { "prop.street.market-stall" });
+                AssertEqual(0, report.MissingCount);
+                var r = resolver.Resolve("prop.street.market-stall");
+                AssertEqual(false, r.Rule.HasAsset);
+            });
         }
 
         // ---- Mini test framework --------------------------------------------
