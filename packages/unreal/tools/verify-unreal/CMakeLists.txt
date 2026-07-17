@@ -25,10 +25,12 @@ set(PORTABLE_SOURCES
     "${RUNTIME_DIR}/Portable/InsimulSha256.cpp"
     "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
     "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
 )
 
 # Golden fixtures shipped by packages/core (semantics authority).
 set(FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/saves")
+set(QUESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/conformance/quests")
 # Committed cross-check artifacts (C++-produced envelope pinned to the TS check).
 set(CROSSCHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cross-check")
 
@@ -70,3 +72,16 @@ target_compile_definitions(insimul_verify_save PRIVATE
 )
 target_compile_options(insimul_verify_save PRIVATE ${WARN_FLAGS})
 add_test(NAME save_system COMMAND insimul_verify_save)
+
+# ── Quest system host tests (US-XC3) ──
+add_executable(insimul_verify_quest
+    test_quest_system.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_quest PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_quest PRIVATE
+    INSIMUL_FIXTURE_DIR="${FIXTURE_DIR}"
+    INSIMUL_QUESTS_DIR="${QUESTS_DIR}"
+)
+target_compile_options(insimul_verify_quest PRIVATE ${WARN_FLAGS})
+add_test(NAME quest_system COMMAND insimul_verify_quest)

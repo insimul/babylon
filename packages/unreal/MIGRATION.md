@@ -145,3 +145,75 @@ existing on-disk saves and its server-sync plumbing keep working until the
 bootstrap integration (US-XC4) re-points the startup path at the new core. No
 template call sites are changed in US-XC2 — this is an additive, host-tested core
 with a documented migration target.
+
+## US-XC3 — Quest system + radiant tick on the real KB
+
+### What changed
+
+- **New:** `FInsimulQuestSystem`
+  (`Source/InsimulRuntime/Portable/InsimulQuestSystem.{h,cpp}`) — the portable,
+  host-testable quest core. Ports three things from the semantics authority:
+  - **Hydration** per `packages/core/src/prolog/quest-hydrator.ts`: parses a
+    quest's Prolog `content` (the single source of truth) into structured fields
+    — `quest/5` main fact (title/type/difficulty/status + the availability
+    promotion rule), `quest_objective/3` goals (talk_to / collect / deliver /
+    visit_location / count-goals / `objective('…')`), scalars (assigned_to/by,
+    language), rewards (experience), prerequisites, tags, and completion criteria.
+  - **Query-driven completion + fact-asserting transitions** on the real KB
+    (`FInsimulKB`, the same `currentState.prologFacts` store the save system
+    snapshots): an objective is complete when the KB holds its trigger fact
+    (`talk_to_npc`→`talked_to`, `visit_location`→`visited`,
+    `deliver_item`→`delivered`, or an explicit `objective_satisfied/2`). When all
+    objectives are satisfied the transition **asserts `quest_complete(questId)`**
+    and flips status `active`→`completed`.
+  - **The radiant tick**: a deterministic distributor of side quests tagged
+    `radiant` (runtime twin of `GameQuestManager.distributeRadiantQuests`) —
+    each tick offers up to `MaxOffering` still-available radiant quests in
+    ascending-id order, asserting `quest_offered(questId, tick)` facts.
+- **New:** UE shell `FInsimulQuestSystemShell`
+  (`Public/InsimulQuestSystemShell.h`, `Private/InsimulQuestSystemShell.cpp`) —
+  keeps the template QuestSystem's **delegate/event surface for UMG**
+  (`OnObjectiveCompleted`, `OnQuestCompleted`, plus `OnRadiantOffered`) but
+  drives them from the portable core's transitions. **Syntax-gated** behind
+  `#if WITH_ENGINE`, verified by a human build; it reimplements no quest
+  semantics.
+
+### Golden quest / radiant corpus (cross-runtime parity)
+
+`packages/core/conformance/quests/` is the language-neutral parity gate:
+
+- `hydration-cases.json` — quest seed (`input`) + the committed `expected`
+  present-only projection of `hydrateQuestFromProlog(input)`.
+- `radiant-cases.json` — `quests`/`maxOffering`/`ticks` + the committed
+  `expected` `quest_offered` facts (compared as an order-independent multiset).
+
+Both the TS drift guard
+(`packages/core/src/conformance/__tests__/quest-goldens-crosscheck.test.ts`,
+run in `npm test`) and the C++ host harness
+(`tools/verify-unreal/test_quest_system.cpp`, the `insimul_verify_quest` /
+`quest_system` ctest) independently reproduce `expected` byte-for-byte — so the
+runtimes can never silently disagree. After changing the hydrator, the radiant
+algorithm, or a case, run `npm run quest-goldens` (in `packages/core`) and
+commit the regenerated JSON, then rebuild the C++ harness. A save round-trip
+host test also proves quest + radiant facts survive save/reload while the
+`worldSnapshot` hash stays stable (a `currentState`-only KB mutation must not
+perturb the world hash).
+
+### QuestSystem deprecation (`templates/source/systems/QuestSystem`)
+
+The template `QuestSystem` prototype (ad-hoc KB, hand-rolled objective
+matching) is superseded by the portable core + UE shell. Consumers should
+prefer:
+
+| Old (template QuestSystem)            | New (portable core / shell)                        |
+| ------------------------------------- | -------------------------------------------------- |
+| Ad-hoc quest-field population         | `FInsimulQuestSystem::HydrateFromContent()`        |
+| Hand-coded objective completion       | `FInsimulQuestSystem::EvaluateQuest()` (KB query)  |
+| Manual `quest_complete` bookkeeping   | fact-asserting transition (`quest_complete/1`)     |
+| Ad-hoc radiant distribution           | `FInsimulQuestSystem::RadiantTick()` (deterministic) |
+| `OnObjectiveCompleted` / `OnQuestCompleted` delegates | preserved on `FInsimulQuestSystemShell` |
+
+**Compatibility path retained.** The template `QuestSystem` is *not* removed; it
+keeps working until the bootstrap integration (US-XC4) re-points the startup
+path at the new core. No template call sites are changed in US-XC3 — this is an
+additive, host-tested core with a documented migration target.

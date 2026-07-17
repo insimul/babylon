@@ -30,7 +30,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "schemas": "vite-node scripts/emit-schemas.ts"
+    "schemas": "vite-node scripts/emit-schemas.ts",
+    "quest-goldens": "vite-node scripts/emit-quest-goldens.ts"
   },
   "keywords": [
     "insimul",
