@@ -171,6 +171,64 @@ Not deleted yet — a shipped game still vendors `SaveSystem.cs` for the current
 export/scene path; it retires once the template bootstrap (US-UC5) consumes the
 new core.
 
+## US-UC3 — Quest system on real Prolog
+
+`Runtime/Quest/` rebuilds the template quest layer on the real KB, porting the
+semantics (not the code) of `packages/core/src/prolog/quest-hydrator.ts` and the
+`QuestCompletionEngine` completion pattern, matching the Unreal twin
+(`packages/unreal/Source/InsimulRuntime/Portable/InsimulQuestSystem.*`):
+
+- **`Runtime/Quest/InsimulQuestSystem.cs`** — the UnityEngine-free portable core.
+  `HydrateFromContent(content, status)` parses the quest's Prolog `content` (the
+  single source of truth) into a `HydratedQuest` — title/type/difficulty/status,
+  objectives (the same three goal-mapping tables as the hydrator), rewards
+  (`quest_reward/3`, experience promoted), prerequisites, tags, completion
+  criteria. `ToProjection()` emits the present-only projection, serialized by
+  `CanonicalJson` **byte-identical to `hydrateQuestFromProlog`**. Completion is
+  **query-driven** over an `InsimulKB` (the `currentState.prologFacts` fact store):
+  `IsObjectiveSatisfied` reads trigger facts (`objective_satisfied/2`, or
+  `talked_to`/`visited`/`delivered(player, target)`); `EvaluateQuest` asserts
+  `quest_objective_complete/2` per satisfied objective and, when all are satisfied
+  under an all-objectives criterion, asserts `quest_complete/1` and flips the
+  status to `completed` (the fact-asserting transition).
+- **`Runtime/Quest/InsimulQuestRuntime.cs`** — the stateful shell (UnityEngine-free)
+  that owns the KB + registered quests and **preserves the template QuestSystem
+  events** (`OnQuestAccepted`, `OnObjectiveCompleted`, `OnQuestCompleted`) so UI
+  code keeps working. `AssertFact` records a trigger fact, `EvaluateQuest`
+  re-checks + broadcasts new transitions, `GetExperienceReward` reads the reward
+  from Prolog. Save/load is KB-backed: `Facts` → `InsimulSaveSystem.SnapshotFacts`;
+  `LoadFacts(RestoreFacts())` restores + re-derives each quest's status from the
+  restored `quest_complete` facts.
+
+### The quest parity contract
+
+- `tools/verify-unity/Program.cs` (`RunQuestSystemTests`, host-side gate) asserts
+  `HydrateCanonical` reproduces every committed `expected` projection in
+  `packages/core/conformance/quests/hydration-cases.json` — the SAME golden JSON
+  the TS drift guard (`quest-goldens-crosscheck.test.ts`) and the Unreal host
+  harness (`test_quest_system.cpp`) read, so a semantics change surfaces in every
+  gate. It also exercises fact-driven completion (status flip + asserted facts +
+  fired events), rewards-read-from-Prolog, and save/load round-trip; the native
+  section (`RunQuestKbRoundTripNative`) mirrors the asserted facts into a real
+  `InsimulProlog` KB and confirms `quest_complete`/`quest_objective_complete` are
+  queryable.
+- A grep-guard in `scripts/engines-check.sh` fails if the quest core hardcodes a
+  denormalized `ExperienceReward = <number>` — rewards come from `quest_reward/3`.
+- On a box without the .NET SDK the host tests SKIP (autoMerge is off; CI runs the
+  dotnet half). The C# hydration logic is proven against the goldens via a JS
+  transliteration during development (see progress.txt).
+
+### Retired template file
+
+| Template file (retirement pending export-pipeline cutover) | Superseded by |
+| ---------------------------------------------------------- | ------------- |
+| `templates/scripts/systems/QuestSystem.cs` (in-memory completion twin) | `Runtime/Quest/InsimulQuestSystem.cs` + `InsimulQuestRuntime.cs` |
+| `templates/scripts/systems/QuestCompletionManager.cs`      | `InsimulQuestSystem.EvaluateQuest` (KB-backed completion) |
+
+Not deleted yet — a shipped game still vendors these for the current export/scene
+path; they retire once the template bootstrap (US-UC5) forwards its MonoBehaviour
+events to `InsimulQuestRuntime`.
+
 ## Regenerating
 
 ```

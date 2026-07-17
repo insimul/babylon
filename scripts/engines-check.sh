@@ -61,6 +61,15 @@ if changed_matches "packages/unity/"; then
 	# + validate a C#-produced envelope if the dotnet run wrote one. Needs vite-node.
 	echo "== unity: save-system portability cross-check (US-UC2) =="
 	npx vite-node tools/verify-unity/cross-check.mjs
+	# Quest reward grep-guard (US-UC3): rewards must be READ FROM PROLOG
+	# (quest_reward/3), never a denormalized C# default. Fail if the quest core
+	# hardcodes a numeric reward assignment (ExperienceReward = <number>).
+	echo "== unity: quest reward grep-guard (US-UC3) =="
+	if grep -REn 'ExperienceReward[[:space:]]*=[[:space:]]*[0-9]' packages/unity/Runtime/Quest/; then
+		echo "unity: FAIL — denormalized reward literal in quest core (read from Prolog instead)"
+		exit 1
+	fi
+	echo "unity: quest reward grep-guard OK (no denormalized reward literals)"
 else
 	echo "engines:check: no packages/unity/ changes — skipping unity gates"
 fi

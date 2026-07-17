@@ -14,6 +14,8 @@ using System.Threading.Tasks;
 using System.IO;
 using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
+using Insimul.Quest;
+using Insimul.Quest.TestSupport;
 using Insimul.Save;
 using Insimul.Save.TestSupport;
 using Insimul.World;
@@ -36,6 +38,7 @@ namespace Insimul.Verify
             RunAdapterPureTests();
             RunWorldSourceTests();
             RunSaveSystemTests();
+            RunQuestSystemTests();
 
             if (skipNative)
             {
@@ -50,6 +53,7 @@ namespace Insimul.Verify
                 RunAdapterNativeTests();
                 RunConformanceCorpus();
                 RunSaveKbRoundTripNative();
+                RunQuestKbRoundTripNative();
             }
             catch (DllNotFoundException ex)
             {
@@ -828,6 +832,148 @@ namespace Insimul.Verify
             EmitCrossCheckEnvelope();
         }
 
+        // ---- Quest system (US-UC3, pure) ------------------------------------
+
+        private static void RunQuestSystemTests()
+        {
+            Section("Quest system (US-UC3, pure)");
+
+            // ── Hydration parity vs the golden corpus (the SAME JSON the TS drift
+            //    guard + the Unreal host harness read) ──
+            string corpus = QuestSystemCorpus.ReadQuestCorpus("hydration-cases.json");
+            if (corpus == null)
+            {
+                Console.WriteLine("  SKIP  quest hydration corpus not reachable (set INSIMUL_CONFORMANCE_DIR)");
+            }
+            else
+            {
+                using var doc = JsonDocument.Parse(corpus);
+                var cases = doc.RootElement.GetProperty("cases");
+                foreach (var c in cases.EnumerateArray())
+                {
+                    string name = c.GetProperty("name").GetString();
+                    var input = c.GetProperty("input");
+                    string content = input.TryGetProperty("content", out var cv) ? cv.GetString() : string.Empty;
+                    string status = input.TryGetProperty("status", out var sv) ? sv.GetString() : null;
+                    // Re-canonicalize the committed `expected` through the SAME serializer
+                    // so the comparison is byte-for-byte on the projection contract.
+                    string golden = CanonicalJson.Stringify(JsonVal.Parse(c.GetProperty("expected").GetRawText()));
+                    Case($"hydration '{name}' matches golden projection (TS parity)", () =>
+                    {
+                        AssertEqual(golden, InsimulQuestSystem.HydrateCanonical(content, status));
+                    });
+                }
+            }
+
+            // ── Fact-driven completion flips quest state + fires template events ──
+            const string errandContent =
+                "quest(q_market, 'Market Errand', errand, easy, active).\n" +
+                "quest_objective(q_market, 0, talk_to(npc_marie)).\n" +
+                "quest_objective(q_market, 1, visit_location('Town Square')).\n" +
+                "quest_objective(q_market, 2, deliver(bread, npc_paul)).\n" +
+                "quest_reward(q_market, experience, 250).\n" +
+                "quest_completion(q_market, all_objectives_complete).";
+
+            Case("Completion: asserting trigger facts flips quest active -> completed", () =>
+            {
+                var rt = new InsimulQuestRuntime();
+                var completedObjs = new List<string>();
+                string completedQuest = null;
+                rt.OnObjectiveCompleted += (q, o) => completedObjs.Add(o);
+                rt.OnQuestCompleted += q => completedQuest = q;
+
+                rt.RegisterQuest(errandContent);
+                AssertTrue(!rt.IsQuestComplete("q_market"), "not complete before any facts");
+
+                // Partial: only first objective satisfied.
+                rt.AssertFact("talked_to", "player", "npc_marie");
+                var t1 = rt.EvaluateQuest("q_market");
+                AssertTrue(!t1.Completed, "not complete with one objective");
+                AssertEqual(1, completedObjs.Count);
+
+                // Remaining objectives satisfied -> quest completes.
+                rt.AssertFact("visited", "player", "Town Square");
+                rt.AssertFact("delivered", "player", "npc_paul");
+                var t2 = rt.EvaluateQuest("q_market");
+                AssertTrue(t2.Completed, "all objectives satisfied -> completed");
+                AssertTrue(rt.IsQuestComplete("q_market"), "status flipped to completed");
+                AssertEqual("q_market", completedQuest);
+                // The fact-asserting transition recorded the completion facts.
+                AssertTrue(rt.Kb.Has("quest_complete", new[] { PrologArg.Atom("q_market") }),
+                    "quest_complete fact asserted");
+                AssertTrue(rt.Kb.Has("quest_objective_complete",
+                    new[] { PrologArg.Atom("q_market"), PrologArg.Atom("obj_2") }),
+                    "quest_objective_complete asserted for obj_2");
+            });
+
+            Case("Completion: re-evaluating a completed quest fires OnQuestCompleted once", () =>
+            {
+                var rt = new InsimulQuestRuntime();
+                int completions = 0;
+                rt.OnQuestCompleted += q => completions++;
+                rt.RegisterQuest(errandContent);
+                rt.AssertFact("talked_to", "player", "npc_marie");
+                rt.AssertFact("visited", "player", "Town Square");
+                rt.AssertFact("delivered", "player", "npc_paul");
+                rt.EvaluateQuest("q_market");
+                rt.EvaluateQuest("q_market"); // idempotent — already completed
+                AssertEqual(1, completions);
+            });
+
+            // ── Rewards are READ FROM PROLOG (quest_reward/3), not a denormalized
+            //    default — a quest with no quest_reward exposes no reward ──
+            Case("Reward: experience read from Prolog content (quest_reward/3)", () =>
+            {
+                var rt = new InsimulQuestRuntime();
+                rt.RegisterQuest(errandContent);
+                AssertEqual(250.0, rt.GetExperienceReward("q_market"));
+            });
+
+            Case("Reward: no quest_reward fact => no denormalized default (0)", () =>
+            {
+                var rt = new InsimulQuestRuntime();
+                rt.RegisterQuest(
+                    "quest(q_bare, 'Bare', errand, easy, active).\n" +
+                    "quest_objective(q_bare, 0, talk_to(npc_x)).");
+                AssertTrue(!rt.GetQuest("q_bare").HasExperience, "no experience reward present");
+                AssertEqual(0.0, rt.GetExperienceReward("q_bare"));
+            });
+
+            // ── Save/load preserves quest state (KB-backed, through the save file) ──
+            Case("Persistence: quest state round-trips through the save file (KB-backed)", () =>
+            {
+                const string worldSnapshot =
+                    "{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}";
+
+                var rt = new InsimulQuestRuntime();
+                rt.RegisterQuest(errandContent);
+                rt.AssertFact("talked_to", "player", "npc_marie");
+                rt.AssertFact("visited", "player", "Town Square");
+                rt.AssertFact("delivered", "player", "npc_paul");
+                rt.EvaluateQuest("q_market");
+                AssertTrue(rt.IsQuestComplete("q_market"), "completed before save");
+
+                // Persist the KB facts into currentState.prologFacts and serialize.
+                var sys = new InsimulSaveSystem();
+                sys.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                sys.SnapshotFacts(rt.Facts);
+                string json = sys.SerializeCanonical();
+
+                // Fresh load -> fresh runtime -> re-register quest (from world content)
+                // -> restore KB facts -> quest status re-derives to completed.
+                var loaded = new InsimulSaveSystem();
+                loaded.Load(json);
+                var rt2 = new InsimulQuestRuntime();
+                var q2 = rt2.RegisterQuest(errandContent);
+                AssertTrue(q2.Status == "active", "freshly registered quest starts active");
+                rt2.LoadFacts(loaded.RestoreFacts());
+                AssertTrue(rt2.IsQuestComplete("q_market"), "quest state restored to completed");
+                AssertTrue(rt2.Kb.Has("quest_objective_complete",
+                    new[] { PrologArg.Atom("q_market"), PrologArg.Atom("obj_0") }),
+                    "objective-complete facts preserved");
+            });
+        }
+
         /// <summary>Read the integrity field out of a canonical envelope JSON.</summary>
         private static string ExtractIntegrity(string envelopeJson)
         {
@@ -900,6 +1046,38 @@ namespace Insimul.Verify
                 AssertTrue(kbB.Holds("gold(player, 42)"), "gold fact re-hydrated");
                 AssertTrue(kbB.Holds("in_settlement(player, s1)"), "settlement fact re-hydrated");
                 AssertTrue(!kbB.Holds("gold(player, 43)"), "no phantom facts");
+            });
+        }
+
+        // ---- Quest system KB round-trip (US-UC3, native) --------------------
+
+        private static void RunQuestKbRoundTripNative()
+        {
+            Section("Quest system KB round-trip (US-UC3, native)");
+
+            const string questContent =
+                "quest(q_native, 'Native Quest', errand, easy, active).\n" +
+                "quest_objective(q_native, 0, talk_to(npc_ned)).\n" +
+                "quest_objective(q_native, 1, deliver(parcel, npc_ida)).\n" +
+                "quest_completion(q_native, all_objectives_complete).";
+
+            Case("complete a quest -> mirror facts into a real KB: completion queryable", () =>
+            {
+                var rt = new InsimulQuestRuntime();
+                rt.RegisterQuest(questContent);
+                rt.AssertFact("talked_to", "player", "npc_ned");
+                rt.AssertFact("delivered", "player", "npc_ida");
+                var t = rt.EvaluateQuest("q_native");
+                AssertTrue(t.Completed, "quest completed in the portable core");
+
+                // The asserted transition facts hydrate a real Prolog KB and answer
+                // the same completion queries the quest layer reads.
+                using var kb = new InsimulProlog();
+                foreach (var f in rt.Facts) kb.Assert(FactToClause(f));
+                AssertTrue(kb.Holds("quest_complete(q_native)"), "quest_complete queryable in native KB");
+                AssertTrue(kb.Holds("quest_objective_complete(q_native, obj_0)"),
+                    "objective completion queryable in native KB");
+                AssertTrue(!kb.Holds("quest_complete(q_other)"), "no phantom completion");
             });
         }
 

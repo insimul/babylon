@@ -48,6 +48,14 @@
     <Compile Include="../../packages/unity/Runtime/Save/JsonVal.cs" />
     <Compile Include="../../packages/unity/Runtime/Save/InsimulSaveSystem.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/SaveSystemCorpus.cs" />
+    <!-- Quest system (US-UC3): engine-agnostic, UnityEngine-free. The portable
+         hydration + query-driven completion core over currentState.prologFacts,
+         plus the stateful shell preserving the template QuestSystem events. The
+         golden hydration corpus (packages/core/conformance/quests) + the console
+         tests in Program.cs drive it against the TS quest-hydrator output. -->
+    <Compile Include="../../packages/unity/Runtime/Quest/InsimulQuestSystem.cs" />
+    <Compile Include="../../packages/unity/Runtime/Quest/InsimulQuestRuntime.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/QuestSystemCorpus.cs" />
     <!-- The wrapper under test, referenced in place (no vendoring). -->
     <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
     <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />
