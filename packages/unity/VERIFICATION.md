@@ -152,3 +152,37 @@ only a real editor can exercise.
       `building.*` descendant with no more-specific entry now resolves to that
       prefab (descendant matching in the resolver), while a more specific
       `building.commercial.bakery.medium` entry still wins for that key.
+
+## 5. World Browser — connect + browse + import (US-UE2, Unity editor + backend required)
+
+The World Browser's parsing, selection, compatibility-badge, and import
+orchestration all live in the UnityEngine-free `InsimulWorldBrowserModel`, unit-
+tested headless over a RoutingTransport + fake registry/pipeline
+(`WorldBrowserTests`, EditMode). This is the **human pass** for the two
+UnityEditor-coupled seams that only a real editor + backend can exercise: the
+`UnityWebRequestEditorTransport` HTTP path and the `UnitySceneImportPipeline`
+bridge into the US-UB3/US-UB4 scene generation + re-import diff. A running backend
+(`InsimulConnectionSettings.ServerUrl`) with at least one world on the account is
+required.
+
+- [ ] In **Project Settings ▸ Insimul**, set the server URL and authenticate
+      (world API key or user login). Open **Insimul ▸ World Browser** and click
+      **Refresh worlds**. The account's worlds list, each showing name, genre
+      bundle, `snapshot vN`, and NPC / Settlement / Quest counts.
+- [ ] Every never-imported world shows the **Not imported** badge. Expand one and
+      confirm the counts match the world's detail on the web.
+- [ ] Click **Open in web** — the browser opens `…/worlds/<id>` for that world.
+- [ ] Click **Preview Sync (dry run)**. A report line appears
+      (`+A / ~U / -D (… unchanged, … hand-edited)`) and the scene is **NOT**
+      mutated (no `GeneratedWorld` changes, no new objects).
+- [ ] Click **Sync IR now…**, confirm the dialog. The scene's `GeneratedWorld`
+      tree updates per the re-import policy (generated nodes added/updated,
+      hand-edited nodes untouched, dropped nodes moved to the **Deprecated** group,
+      never deleted — the US-UB4 behaviour). The badge flips to **Up to date
+      (vN)**.
+- [ ] Regenerate/advance the world on the backend so its snapshot version bumps,
+      **Refresh worlds** again, and confirm the badge now reads **Update available
+      (imported vN → vM)** — the stale-version detection.
+- [ ] Let the token expire (or revoke it) and Refresh: the window shows the
+      **Session expired — re-authenticate** warning (the `NeedsReauth` state), and
+      re-authenticating in Project Settings restores the list on the next Refresh.
