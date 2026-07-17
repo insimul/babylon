@@ -19,6 +19,15 @@ never as code.**
 - `radiant/*.json` — the radiant quest-generation corpus (see "Radiant case
   format" below). Pins `generateRadiantQuests` — the contract the future native
   `insimul_radiant_tick()` must match.
+- `ui/*.json` — the default-UI view-model corpus (US-GU1). `theme-tokens.json` is
+  the single-source-of-truth design token set every engine's theme maps;
+  `registry-cases.json` pins the panel-registry behavior (default lookup, creator
+  override precedence, missing-panel diagnostics); `loading-phases.json` pins the
+  loading-screen view-model (weighted-cumulative monotonic progress, phase label,
+  deterministic tip). Run by the TS view-models (`src/ui/__tests__/ui-corpus.test.ts`)
+  and the Godot headless leg (`packages/godot/addons/insimul/tests/ui_registry_test.gd`)
+  — the two can never disagree on the contract. Scene refs are opaque strings so
+  every engine runs the same cases.
 
 ## Prolog case format
 

@@ -108,3 +108,12 @@ export * from './editor/job-poller';
 // (reducer accumulator) collides with the proto/conversation `ConversationState` enum
 // re-exported above, so it is intentionally left out of the flat barrel — same pattern
 // as the collision-avoiding modules noted in CLAUDE.md (core-extraction).
+
+// ── Default-UI view-models (US-GU1) ────────────────────────────────────────
+// The engine-agnostic panel registry, loading-screen model, and notification
+// queue the native default-UI mirrors (Godot insimul_ui_registry.gd /
+// loading_screen_model.gd / insimul_notifications.gd) implement. Shared cases:
+// packages/core/conformance/ui/.
+export * from './ui/ui-registry';
+export * from './ui/loading-screen-model';
+export * from './ui/notifications';
