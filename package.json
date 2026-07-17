@@ -29,7 +29,12 @@
     "engines:unreal:host": "bash tools/verify-unreal/run-host-tests.sh",
     "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
-    "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell"
+    "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell",
+    "codegen": "node tools/codegen/index.mjs",
+    "codegen:verify-cs": "node tools/codegen/verify-cs/run.mjs",
+    "codegen:verify-cpp": "node tools/codegen/verify-cpp/run.mjs",
+    "codegen:verify-gdscript": "node tools/codegen/verify-gdscript/run.mjs",
+    "openapi:sync": "node tools/codegen/openapi-sync.mjs"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",
@@ -42,8 +47,10 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.0",
+    "quicktype": "25.0.0",
     "typescript": "^5.6.0",
     "vite": "^5.4.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "yaml": "^2.9.0"
   }
 }

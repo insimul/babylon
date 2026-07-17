@@ -1,0 +1,72 @@
+{
+  "$generatedBy": "tools/codegen/emit-operations.mjs (npm run codegen)",
+  "$doNotEdit": "Regenerate with `npm run codegen`; source: packages/core/openapi/insimul-v1.yaml",
+  "specTitle": "Insimul Platform API",
+  "specVersion": "1.0.0",
+  "operations": [
+    {
+      "operationId": "streamConversation",
+      "method": "POST",
+      "path": "/api/conversation/stream",
+      "summary": "Send player text and stream the character response as SSE.",
+      "tags": [
+        "conversation"
+      ],
+      "parameters": [],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "schema": "ConversationTextRequest"
+      },
+      "responseContentType": "text/event-stream",
+      "responseSchema": "string"
+    },
+    {
+      "operationId": "streamConversationAudio",
+      "method": "POST",
+      "path": "/api/conversation/stream-audio",
+      "summary": "Send player audio and stream the character response as SSE.",
+      "tags": [
+        "conversation"
+      ],
+      "parameters": [],
+      "requestBody": {
+        "required": true,
+        "contentType": "multipart/form-data",
+        "schema": "ConversationAudioRequest"
+      },
+      "responseContentType": "text/event-stream",
+      "responseSchema": "string"
+    },
+    {
+      "operationId": "endConversation",
+      "method": "POST",
+      "path": "/api/conversation/end",
+      "summary": "End a conversation session and release server resources.",
+      "tags": [
+        "conversation"
+      ],
+      "parameters": [],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "schema": "EndSessionRequest"
+      },
+      "responseContentType": "application/json",
+      "responseSchema": "EndSessionResponse"
+    },
+    {
+      "operationId": "healthCheck",
+      "method": "GET",
+      "path": "/api/conversation/health",
+      "summary": "Liveness probe for the conversation service.",
+      "tags": [
+        "conversation"
+      ],
+      "parameters": [],
+      "requestBody": null,
+      "responseContentType": "application/json",
+      "responseSchema": "HealthResponse"
+    }
+  ]
+}
