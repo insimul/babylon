@@ -98,6 +98,9 @@ export const V1_OPERATIONS: Readonly<Record<string, V1Operation>> = {
  * pipeline (`importWorld`), and the console starts jobs (`startGenerationJob`),
  * tracks progress via SSE (`streamGenerationJob`) with a polling fallback
  * (`getGenerationJob`), then applies the diff (`syncGenerationJob`).
+ *
+ * US-GE3 adds the in-editor Conversation Tester operations: it streams a character
+ * response (`streamConversation`) and closes the session (`endConversation`).
  */
 export const USED_OPERATION_IDS: readonly string[] = [
   'healthCheck',
@@ -108,6 +111,8 @@ export const USED_OPERATION_IDS: readonly string[] = [
   'getGenerationJob',
   'streamGenerationJob',
   'syncGenerationJob',
+  'streamConversation',
+  'endConversation',
 ];
 
 /**

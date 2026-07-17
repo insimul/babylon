@@ -117,6 +117,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/addons/insimul/editor/browser/run_browser_headless.sh
 	echo "== godot: Generation Console dock headless test (US-GE2, skips without a godot binary) =="
 	bash packages/godot/addons/insimul/editor/generation/run_generation_headless.sh
+	echo "== godot: Conversation Tester dock headless test (US-GE3, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/conversation/run_conversation_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi

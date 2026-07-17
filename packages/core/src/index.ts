@@ -97,3 +97,9 @@ export * from './editor/editor-session';
 export * from './editor/world-browser';
 export * from './editor/generation-console';
 export * from './editor/job-poller';
+// US-GE3 — the in-editor NPC Conversation Tester view-model (character picker,
+// streaming transcript reducer, recorded-reasoning fallback, teardown-safe controller).
+// Deep-import-only (`@insimul/core/editor/conversation-tester`): its `ConversationState`
+// (reducer accumulator) collides with the proto/conversation `ConversationState` enum
+// re-exported above, so it is intentionally left out of the flat barrel — same pattern
+// as the collision-avoiding modules noted in CLAUDE.md (core-extraction).
