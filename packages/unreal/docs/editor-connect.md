@@ -1,4 +1,4 @@
-# Editor Connect — backend session, transport, and secret storage (US-XE1)
+# Editor Connect — backend session, transport, and secret storage (US-XE1/US-XE2)
 
 The in-editor panels (World Browser, Generation Console, Conversation Tester)
 talk to the Insimul backend v1 API through **one shared session**. This document
@@ -75,3 +75,52 @@ The enforcement point is the seam: `FEditorSession` never persists the token
 itself — it hands it to the injected `IEditorSecretStore`. Host tests exercise the
 lifecycle through `FInMemorySecretStore`; production swaps in the
 `GEditorPerProjectIni`-backed store with no change to the pure logic.
+
+## World Browser (US-XE2)
+
+The first panel on top of the session is the **World Browser** — worlds
+list/detail/stats, a snapshot-version compatibility badge, an Import/Sync action
+(into the unreal-scene-pcg pipeline, with the dry-run report), and an open-in-web
+link. Same split as the session:
+
+```
+InsimulEditor/
+  Portable/                              UE-FREE, host-tested
+    InsimulWorldBrowserModel.{h,cpp}     FWorldBrowserModel: parse listWorlds /
+                                         getWorldDetail, list+detail+selection
+                                         reducer, compatibility badge, open-in-web
+                                         URL, Import/Sync orchestration over the two
+                                         injected seams (ISceneImportPipeline +
+                                         IImportedWorldRegistry)
+  Private/Connect/                       UE-COUPLED, syntax-gated only
+    InsimulImportedWorldRegistry.*       IImportedWorldRegistry over GEditorPerProjectIni
+    InsimulSceneImportPipeline.*         ISceneImportPipeline -> UInsimulReimport
+                                         (US-XG2 placement + US-XG4 re-import diff)
+  Tests/test_world_browser.cpp           host gate (27 cases): parsing, list load
+                                         (incl. 401 re-auth), detail merge, selection
+                                         reducer, badge, open-in-web, import wiring
+```
+
+Run it with `npm run engines:unreal:world-browser` (also part of
+`npm run engines:check`). It is the case-for-case mirror of the Unity leg
+(`WorldBrowserTests`) and the core `world-browser.test.ts`.
+
+**Compatibility badge = imported snapshot version vs the world's current snapshot
+version.** The per-project record of "which snapshot of world X is imported here"
+is per-USER state, so it lives in `GEditorPerProjectIni` exactly like the token
+(section `[Insimul.Editor.ImportedWorlds]`, keys scoped by a hash of the project
+directory) — **never** an asset and never `UInsimulSettings`. Two editor users on
+the same checkout track their own imports. `NotImported → UpToDate →
+UpdateAvailable (stale) → Ahead` is derived purely from that record vs the world's
+`snapshotVersion`; a successful **Sync/Apply** writes the world's snapshot version
+back so the badge flips to **Up to date**.
+
+**Import/Sync is the local scene pipeline, not a server mutation.** The model
+fetches the world IR export (`importWorld`), then hands it to
+`FInsimulSceneImportPipeline`, which delegates to `UInsimulReimport::DryRun/Apply`
+(the US-XG2 placement + US-XG4 conservative re-import diff). A dry run only
+previews the `+added / ~updated / -deprecated (… unchanged, … hand-edited)`
+counts; an apply mutates the scene under one Undo group (hand edits preserved,
+dropped generated nodes reparented under **Deprecated**, never deleted). When no
+level is open the pipeline reports **unavailable** and the Import action is
+disabled — no backend call is made.

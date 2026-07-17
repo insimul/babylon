@@ -319,3 +319,72 @@ decisions are all pinned byte-for-byte against the shared cross-engine fixtures
 asset-ref strings (`placeholder:building` vs a real `/Game/...` path) differ, by
 design. Any classification / placement / coverage difference discovered in the
 human pass is a bug — file it against US-XG4.
+
+---
+
+## US-XE2 — World Browser: connect ▸ browse ▸ import (Unreal editor + backend required)
+
+The World Browser tab's parsing, list/detail/selection reducer, compatibility
+badge (imported snapshot version vs the world's current snapshot), open-in-web
+link, and Import/Sync orchestration all live in the Unreal-Engine-free
+`insimul::FWorldBrowserModel`, host-tested headless over a routing transport + a
+fake registry/pipeline (`test_world_browser.cpp`, `npm run
+engines:unreal:world-browser`). This is the **human pass** for the two UE-coupled
+seams only a real editor + backend can exercise: the `FInsimulEditorHttpTransport`
+HTTP path (US-XE1) and the `FInsimulSceneImportPipeline` bridge into the
+US-XG2/US-XG4 scene generation + re-import diff, with the imported-version record
+persisted per-user in `FInsimulImportedWorldRegistry` (GEditorPerProjectIni —
+never a committed asset). A running backend (`UInsimulSettings::ServerURL`) with at
+least one world on the account is required.
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:unreal:world-browser` — the view-model host gate is green
+      (parsing, list load incl. 401 re-auth, detail merge, selection reducer,
+      compatibility badge, open-in-web, import wiring, report summary).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE-coupled
+      seams (`FWorldBrowserModel` bridge, imported-world registry, scene-import
+      pipeline).
+
+### 1. Connect + browse
+
+- [ ] In **Project Settings ▸ Insimul**, set the server URL and authenticate
+      (world API key or user login — US-XE1). Open **Insimul ▸ World Browser** and
+      click **Refresh worlds**. The account's worlds list, each showing name, genre
+      bundle, `snapshot vN`, and NPC / Settlement / Quest counts.
+- [ ] Every never-imported world shows the **Not imported** badge. Select one and
+      confirm its detail counts match the world on the web.
+- [ ] Click **Open in web** — the browser opens `…/worlds/<id>` for that world.
+
+### 2. Import / Sync through the scene pipeline
+
+- [ ] With a level open, click **Preview Sync (dry run)**. A report line appears
+      (`+A / ~U / -D (… unchanged, … hand-edited)`) and the scene is **NOT**
+      mutated (no generated actors added/moved).
+- [ ] Click **Sync IR now…**, confirm the dialog. The scene's generated actors
+      update per the US-XG4 re-import policy (generated nodes added/updated,
+      hand-edited nodes untouched, dropped nodes reparented under the **Deprecated**
+      group — never deleted), all in one **Undo** group. The badge flips to **Up to
+      date (vN)**.
+- [ ] With **no level open**, the Import action is disabled and the tab shows
+      *"Open a level to import a world into the scene."* (the pipeline's unavailable
+      reason).
+
+### 3. Stale-version detection + re-auth
+
+- [ ] Regenerate/advance the world on the backend so its snapshot version bumps,
+      **Refresh worlds** again, and confirm the badge now reads **Update available
+      (imported vN → vM)** — the stale-version detection driven off the per-user
+      imported-version record.
+- [ ] Let the token expire (or revoke it) and Refresh: the tab shows the **Session
+      expired — re-authenticate** warning (the `NeedsReauth` state), and
+      re-authenticating in Project Settings restores the list on the next Refresh.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the parsing + reducer + badge + import-orchestration contract.**
+`FWorldBrowserModel` mirrors `InsimulWorldBrowserModel.cs` and
+`world-browser.ts` case-for-case (same `WorldBrowserTests` set). Only the
+engine-specific scene mutations (UE actors + `UInsimulEntityIdComponent` vs Unity
+GameObjects) differ, by design. Any parsing / selection / badge / count difference
+found in the human pass is a bug — file it against US-XE2.
