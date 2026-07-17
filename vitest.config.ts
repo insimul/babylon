@@ -33,6 +33,8 @@ export default defineConfig({
       'packages/core/src/**/*.test.ts',
       // Native-tree static syntax gate regression tests (US-EP3).
       'tools/**/*.test.mjs',
+      // Cross-language codegen drift guard (codegen-pipeline US-CG1+).
+      'tools/codegen/__tests__/**/*.test.ts',
     ],
     // These *.test.ts files are legacy tsx harnesses (run via `npx tsx <file>`, no
     // describe/it), NOT vitest suites — excluding them keeps `vitest run` green.
