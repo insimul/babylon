@@ -117,3 +117,11 @@ export * from './editor/job-poller';
 export * from './ui/ui-registry';
 export * from './ui/loading-screen-model';
 export * from './ui/notifications';
+
+// ── Default-UI quest + trade view-models (US-GU2) ──────────────────────────
+// The quest journal/tracker/offer model and the currentState-backed trade model
+// (inventory/container/merchant) the native mirrors (Godot quest_journal_model.gd
+// / trade_model.gd) implement. Shared matrices:
+// packages/core/conformance/ui/{quest-journal-cases,trade-cases}.json.
+export * from './ui/quest-journal-model';
+export * from './ui/trade-model';

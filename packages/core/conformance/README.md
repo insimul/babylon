@@ -28,6 +28,14 @@ never as code.**
   and the Godot headless leg (`packages/godot/addons/insimul/tests/ui_registry_test.gd`)
   — the two can never disagree on the contract. Scene refs are opaque strings so
   every engine runs the same cases.
+  US-GU2 adds `quest-journal-cases.json` (journal tab filtering + counts, tracker
+  HUD `max_tracked`, offer accept/decline, radiant `upsert` arrivals — lifecycle
+  mirrors the real quest-system signals) and `trade-cases.json` (inventory /
+  container transfer / merchant buy+sell, backed exclusively by `save.currentState`;
+  each case is an initial currentState slice + one op + expected result/quantities/
+  gold, with item + gold conservation as the invariant). Run by
+  `src/ui/__tests__/quest-trade-corpus.test.ts` and the Godot headless leg
+  (`packages/godot/addons/insimul/tests/quest_trade_test.gd`).
 
 ## Prolog case format
 

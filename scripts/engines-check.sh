@@ -105,6 +105,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/addons/insimul/tests/run_runtime_bootstrap_headless.sh
 	echo "== godot: default-UI registry/loading/notifications headless test (US-GU1, skips without a godot binary) =="
 	bash packages/godot/addons/insimul/tests/run_ui_registry_headless.sh
+	echo "== godot: default-UI quest+trade headless test (US-GU2, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/tests/run_quest_trade_headless.sh
 	echo "== godot: binding-resolver headless test (US-GB1, skips without a godot binary) =="
 	bash packages/godot/addons/insimul/editor/binding/run_binding_resolver_headless.sh
 	echo "== godot: scene-generator headless test (US-GB2, skips without a godot binary) =="
