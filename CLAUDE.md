@@ -443,3 +443,37 @@ of its own. When you add a dependency to a `packages/*/package.json`, run `npm
 install` at the parent worktree root to pick it up. Declare the dep in the
 package's `package.json` (committed to insimul-runtime); do NOT commit the
 parent's regenerated `package-lock.json` (workspace-parent, runner-owned).
+
+## Unreal native-Prolog wrapper (`unreal-native-prolog`, US-XP*)
+
+The Unreal plugin's real-Prolog stack consumes `libinsimul` (the shared native
+core, a **sibling checkout** at `../insimul-native`, header `include/insimul.h`,
+prebuilt `build/libinsimul.a`). Layout + conventions established in US-XP1:
+
+- **ThirdParty module** `packages/unreal/Source/ThirdParty/InsimulLibrary/`
+  (name per `insimul-native/docs/consuming.md`, NOT the PRD's shorter "Insimul"):
+  `InsimulLibrary.Build.cs` is `Type = ModuleType.External`, publishes
+  `include/` and adds the per-`Target.Platform` lib to `PublicAdditionalLibraries`
+  + `RuntimeDependencies` (Win64 uses `PublicDelayLoadDLLs` + import lib). The
+  binaries under `lib/{Mac,Linux,Win64}/` are **gitignored** (staged from
+  `insimul-native/dist/<platform>/` at package time); the header IS committed.
+  `InsimulRuntime.Build.cs` lists `"InsimulLibrary"` in `PrivateDependencyModuleNames`.
+- **Core wrapper** `Source/InsimulRuntime/Private/Prolog/InsimulKB.{h,cpp}` is
+  **plain, UE-free C++** (namespace `insimul`): only the std lib + forward-declared
+  opaque C handles in the header; only the .cpp `#include`s `insimul.h`. Error
+  model is **non-throwing** (UE builds often disable exceptions) — status returns
+  + `LastError()`. It carries its own binding-set JSON parser (the format is spec'd
+  on `insimul_query_next` in insimul.h). Keep all Prolog logic HERE; the
+  `UInsimulPrologSubsystem` (US-XP3) is a thin UStruct-wrapping shim.
+- **Host tests** live in `tools/verify-unreal/host-test/` (CMake target compiling
+  `InsimulKB.cpp` + a plain test harness against a locally built `libinsimul.a` —
+  link the STATIC archive + `-lm -lpthread`, no rpath). Run via
+  `npm run engines:unreal:host` (= `tools/verify-unreal/run-host-tests.sh`), which
+  also runs a **grep-guard** asserting no UE headers/types in the core (it strips
+  `//` comments first, since the docs name those tokens). Point at the native repo
+  with `INSIMUL_NATIVE_ROOT`, else common locations are probed.
+- **Snapshot/restore contract gotcha**: `insimul_kb_snapshot` serializes clauses
+  only, not `:- op/3` directives — a KB using a custom operator can't restore into
+  a fresh KB. Round-trip plain clauses.
+- **`npm install`** needs `--legacy-peer-deps` here (pre-existing react `@types`
+  peer conflict); never commit the generated `package-lock.json`.

@@ -5,6 +5,11 @@
 #include "EventBus.h"
 #include "PrologEngine.generated.h"
 
+// The real logic engine lives in the InsimulRuntime plugin. UPrologEngine is now
+// a thin game-facing ADAPTER over it (US-XP4) — forward-declared here so this
+// header stays free of the plugin's public surface.
+class UInsimulPrologSubsystem;
+
 /**
  * Dynamic game state for Prolog knowledge base updates.
  * Mirrors GamePrologEngine.GameState from the Babylon.js source.
@@ -126,18 +131,20 @@ struct FInsimulPrologActionResult
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPrologObjectiveCompleted, const FString&, QuestId, int32, ObjectiveIndex);
 
 /**
- * Prolog engine stub for Unreal Engine exports.
+ * Game-facing Prolog adapter for Unreal Engine exports (US-XP4).
  *
- * Since Unreal has no native Prolog runtime, this subsystem stores the
- * Prolog knowledge base as text and provides stub implementations that:
- *   - Parse the KB string to extract basic facts
- *   - Support simple fact assertion/retraction via string matching
- *   - Log when Prolog queries are attempted
- *   - Return sensible defaults (allow actions, quests available, etc.)
+ * HISTORY: this used to be a self-contained SUBSTRING-MATCHING STUB — it stored
+ * the KB as text and answered queries with string prefix/equality matching (no
+ * unification, no rule derivation). That stub is retired. UPrologEngine is now a
+ * THIN ADAPTER that delegates every knowledge-base operation to the real logic
+ * engine (UInsimulPrologSubsystem in the InsimulRuntime plugin, backed by
+ * libinsimul). The game-facing method surface is preserved so existing Blueprint
+ * / gameplay callers keep binding; only the semantics change (substring match ->
+ * real SLD unification). See templates/MIGRATION.md for the behavior deltas.
  *
- * Ported from Insimul's Babylon.js GamePrologEngine to Unreal subsystem.
- * A full Prolog interpreter (e.g., SWI-Prolog C++ bindings) can replace
- * the stub logic for production use.
+ * The adapter still owns engine-agnostic gameplay BOOKKEEPING that is not Prolog
+ * (item quantities, active/completed quest tracking, the player-asserted fact log
+ * used for save files). All actual reasoning happens in the delegate subsystem.
  */
 UCLASS()
 class INSIMULEXPORT_API UPrologEngine : public UGameInstanceSubsystem
@@ -248,6 +255,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Insimul|PrologEngine")
     void RestoreFromSaveState(const FString& SaveStateJson);
 
+    /** Serialize the dynamic KB to a single canonical Prolog-text image, for
+     *  GameSaveState.prologFacts. Delegates to UInsimulPrologSubsystem::SnapshotToString.
+     *  This is the whole-KB image; GetPlayerFacts() returns the narrower
+     *  gameplay-fact list. Both round-trip; snapshot is preferred for full state. */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|PrologEngine")
+    FString SnapshotToString();
+
+    /** Replace the dynamic KB from an image produced by SnapshotToString().
+     *  Delegates to UInsimulPrologSubsystem::RestoreFromString. Call after LoadFromIR(). */
+    UFUNCTION(BlueprintCallable, Category = "Insimul|PrologEngine")
+    bool RestoreFromString(const FString& Image);
+
     // ── NPC Intelligence Queries ─────────────────────────────────────────
 
     /** Determine who an NPC should talk to */
@@ -355,14 +374,9 @@ public:
     int32 RuleCount = 0;
 
 private:
-    /** The raw Prolog knowledge base text */
-    FString KnowledgeBase;
-
-    /** Parsed facts extracted from the knowledge base (e.g., "person(alice)") */
-    TArray<FString> Facts;
-
-    /** Parsed rules/clauses (lines containing ":-") */
-    TArray<FString> Rules;
+    /** Cached handle to the real logic engine (InsimulRuntime plugin). Resolved
+     *  lazily from the GameInstance so subsystem init order does not matter. */
+    TWeakObjectPtr<UInsimulPrologSubsystem> CachedEngine;
 
     /** Current game state */
     FInsimulGameState CurrentGameState;
@@ -413,8 +427,10 @@ private:
     /** Retract a fact and remove it from player-gameplay tracking. */
     void RetractPlayerFact(const FString& Fact);
 
-    /** Retract player facts by pattern and clean up tracking. */
-    void RetractPlayerFactByPattern(const FString& Predicate, const FString& FirstArg, const FString& SecondArg = TEXT(""));
+    /** Retract player facts by pattern and clean up tracking. FirstArg/SecondArg
+     *  are the ground leading args; ExtraArity is the count of trailing wildcard
+     *  columns (`_`) needed to match the clause's real arity in the engine. */
+    void RetractPlayerFactByPattern(const FString& Predicate, const FString& FirstArg, const FString& SecondArg = TEXT(""), int32 ExtraArity = 1);
 
     /** Update item quantity with player fact tracking (used in HandleGameEvent). */
     void UpdateItemQuantityTracked(const FString& ItemName, int32 Delta);
@@ -422,20 +438,24 @@ private:
     /** Assert item taxonomy facts with player tracking (used in HandleGameEvent). */
     void AssertItemTaxonomyTracked(const FString& ItemName, const FString& Category, const FString& Material, const FString& BaseType, const FString& Rarity, const FString& ItemType);
 
-    /** Parse the knowledge base string into Facts and Rules arrays */
-    void ParseKnowledgeBase();
+    // ── Real-engine delegation helpers (replace the retired substring matcher) ──
 
-    /** Check if a fact pattern exists in the KB (simple string prefix match) */
-    bool HasFact(const FString& Pattern) const;
+    /** Resolve (and cache) the InsimulRuntime logic engine, or nullptr if absent. */
+    UInsimulPrologSubsystem* ResolveEngine();
 
-    /** Find all facts matching a prefix pattern */
-    TArray<FString> FindFacts(const FString& Prefix) const;
+    /** True iff Goal (ground or not, no trailing '.') has at least one solution. */
+    bool QueryHas(const FString& Goal);
 
-    /** Retract all facts matching a predicate/first-arg pattern */
-    void RetractPattern(const FString& Predicate, const FString& FirstArg, const FString& SecondArg = TEXT(""));
+    /** Collect the value bound to VarName across every solution of Goal (rendered,
+     *  de-duplicated, in solution order). Empty when the engine is unavailable. */
+    TArray<FString> QueryColumn(const FString& Goal, const FString& VarName);
 
-    /** Retract all facts matching a predicate name (no args needed) */
-    void RetractByPredicate(const FString& Predicate);
+    /** Retract every clause unifying with Goal (loops the engine's single-clause
+     *  retract until it stops removing). Goal carries `_` for wildcard columns. */
+    void RetractAllMatching(const FString& Goal);
+
+    /** Drop tracked player facts whose text starts with GroundPrefix (post-retract cleanup). */
+    void PurgeTrackedByPrefix(const FString& GroundPrefix);
 
     /** Sanitize a string to a valid Prolog atom */
     static FString Sanitize(const FString& Str);

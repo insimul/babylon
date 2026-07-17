@@ -1,13 +1,24 @@
 #include "PrologEngine.h"
 #include "EventBus.h"
+#include "InsimulPrologSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// US-XP4: UPrologEngine is now a THIN ADAPTER over the real logic engine
+// (UInsimulPrologSubsystem, InsimulRuntime plugin, backed by libinsimul). The
+// retired substring stub is gone — every KB read/write here delegates to the
+// subsystem, so queries use real SLD unification and rule derivation instead of
+// string matching. The game-facing method surface is unchanged; only semantics
+// change. See templates/MIGRATION.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
 void UPrologEngine::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
-    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine initialized (stub — no native Prolog runtime)"));
+    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine adapter initialized (delegates to UInsimulPrologSubsystem)"));
 }
 
 void UPrologEngine::Deinitialize()
@@ -21,9 +32,7 @@ void UPrologEngine::Deinitialize()
     SubscribedEventBus = nullptr;
     EventBusRef = nullptr;
 
-    KnowledgeBase.Empty();
-    Facts.Empty();
-    Rules.Empty();
+    CachedEngine = nullptr;
     ActiveQuestIds.Empty();
     ItemQuantities.Empty();
     PlayerFacts.Empty();
@@ -35,23 +44,173 @@ void UPrologEngine::Deinitialize()
     Super::Deinitialize();
 }
 
+// ── Real-engine delegation helpers ───────────────────────────────────────────
+
+UInsimulPrologSubsystem* UPrologEngine::ResolveEngine()
+{
+    if (CachedEngine.IsValid())
+    {
+        return CachedEngine.Get();
+    }
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        UInsimulPrologSubsystem* Engine = GI->GetSubsystem<UInsimulPrologSubsystem>();
+        CachedEngine = Engine;
+        return Engine;
+    }
+    return nullptr;
+}
+
+bool UPrologEngine::QueryHas(const FString& Goal)
+{
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return false;
+
+    FString CleanGoal = Goal.TrimStartAndEnd();
+    CleanGoal.RemoveFromEnd(TEXT("."));
+    FInsimulPrologBinding Binding;
+    return Engine->QueryFirst(CleanGoal, Binding);
+}
+
+TArray<FString> UPrologEngine::QueryColumn(const FString& Goal, const FString& VarName)
+{
+    TArray<FString> Results;
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return Results;
+
+    FString CleanGoal = Goal.TrimStartAndEnd();
+    CleanGoal.RemoveFromEnd(TEXT("."));
+    TArray<FInsimulPrologBinding> Solutions;
+    if (!Engine->QueryAll(CleanGoal, Solutions)) return Results;
+
+    for (const FInsimulPrologBinding& Solution : Solutions)
+    {
+        FInsimulPrologValue Value;
+        if (UInsimulPrologSubsystem::GetBoundValue(Solution, VarName, Value))
+        {
+            Results.AddUnique(Value.DisplayString);
+        }
+    }
+    return Results;
+}
+
+void UPrologEngine::RetractAllMatching(const FString& Goal)
+{
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return;
+
+    FString CleanGoal = Goal.TrimStartAndEnd();
+    CleanGoal.RemoveFromEnd(TEXT("."));
+
+    // The subsystem retracts one unifying clause per call; loop until it stops
+    // removing. Cap the iterations so a pathological KB can never spin forever.
+    for (int32 Guard = 0; Guard < 4096; ++Guard)
+    {
+        if (!Engine->RetractFact(CleanGoal))
+        {
+            break;
+        }
+    }
+}
+
+void UPrologEngine::PurgeTrackedByPrefix(const FString& GroundPrefix)
+{
+    TArray<FString> ToRemove;
+    for (const FString& PF : PlayerFacts)
+    {
+        FString WithoutDot = PF;
+        WithoutDot.RemoveFromEnd(TEXT("."));
+        if (WithoutDot.StartsWith(GroundPrefix))
+        {
+            ToRemove.Add(PF);
+        }
+    }
+    for (const FString& Key : ToRemove)
+    {
+        PlayerFacts.Remove(Key);
+    }
+    FactCount = PlayerFacts.Num();
+}
+
+// ── Data / KB loading ────────────────────────────────────────────────────────
+
 void UPrologEngine::LoadFromIR(const FString& JsonString)
 {
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[Insimul] PrologEngine::LoadFromIR — UInsimulPrologSubsystem unavailable; KB not loaded"));
+        return;
+    }
+
     TSharedPtr<FJsonObject> Root;
     TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
     if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid()) return;
 
-    // Load pre-generated Prolog content if available
-    FString PrologContent;
-    const TSharedPtr<FJsonObject>* SystemsObj;
+    // Accumulate all clause/rule text (prologContent + rules/actions/quests) and
+    // consult it in one pass — real Prolog source, not a substring buffer.
+    FString ConsultBuffer;
+
+    const TSharedPtr<FJsonObject>* SystemsObj = nullptr;
     if (Root->TryGetObjectField(TEXT("systems"), SystemsObj))
     {
-        (*SystemsObj)->TryGetStringField(TEXT("prologContent"), PrologContent);
+        FString PrologContent;
+        if ((*SystemsObj)->TryGetStringField(TEXT("prologContent"), PrologContent) && !PrologContent.IsEmpty())
+        {
+            ConsultBuffer += PrologContent;
+            ConsultBuffer += TEXT("\n");
+        }
     }
 
-    if (!PrologContent.IsEmpty())
+    if (SystemsObj)
     {
-        KnowledgeBase = PrologContent;
+        auto AppendContentArray = [&ConsultBuffer](const TSharedPtr<FJsonObject>& Obj, const FString& FieldName)
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Arr;
+            if (Obj->TryGetArrayField(FieldName, Arr))
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *Arr)
+                {
+                    const TSharedPtr<FJsonObject>* ItemObj;
+                    if (!Val->TryGetObject(ItemObj)) continue;
+                    FString Content;
+                    if ((*ItemObj)->TryGetStringField(TEXT("content"), Content) && !Content.IsEmpty())
+                    {
+                        ConsultBuffer += Content;
+                        ConsultBuffer += TEXT("\n");
+                    }
+                }
+            }
+        };
+
+        AppendContentArray(*SystemsObj, TEXT("rules"));
+        AppendContentArray(*SystemsObj, TEXT("baseRules"));
+        AppendContentArray(*SystemsObj, TEXT("actions"));
+        AppendContentArray(*SystemsObj, TEXT("quests"));
+
+        // Track active quest IDs
+        const TArray<TSharedPtr<FJsonValue>>* QuestsArr;
+        if ((*SystemsObj)->TryGetArrayField(TEXT("quests"), QuestsArr))
+        {
+            for (const TSharedPtr<FJsonValue>& QVal : *QuestsArr)
+            {
+                const TSharedPtr<FJsonObject>* QObj;
+                if (!QVal->TryGetObject(QObj)) continue;
+                FString QId;
+                if ((*QObj)->TryGetStringField(TEXT("id"), QId))
+                {
+                    ActiveQuestIds.Add(QId);
+                }
+            }
+        }
+    }
+
+    if (!ConsultBuffer.IsEmpty())
+    {
+        if (!Engine->ConsultWorldData(ConsultBuffer))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Insimul] PrologEngine::LoadFromIR — ConsultWorldData reported: %s"), *Engine->GetLastError());
+        }
     }
 
     // Assert character facts from IR
@@ -119,54 +278,8 @@ void UPrologEngine::LoadFromIR(const FString& JsonString)
         }
     }
 
-    // Load Prolog content from rules, actions, quests
-    if (SystemsObj)
-    {
-        auto LoadContentArray = [this](const TSharedPtr<FJsonObject>& Obj, const FString& FieldName)
-        {
-            const TArray<TSharedPtr<FJsonValue>>* Arr;
-            if (Obj->TryGetArrayField(FieldName, Arr))
-            {
-                for (const TSharedPtr<FJsonValue>& Val : *Arr)
-                {
-                    const TSharedPtr<FJsonObject>* ItemObj;
-                    if (!Val->TryGetObject(ItemObj)) continue;
-                    FString Content;
-                    if ((*ItemObj)->TryGetStringField(TEXT("content"), Content) && !Content.IsEmpty())
-                    {
-                        KnowledgeBase += TEXT("\n") + Content;
-                    }
-                }
-            }
-        };
-
-        LoadContentArray(*SystemsObj, TEXT("rules"));
-        LoadContentArray(*SystemsObj, TEXT("baseRules"));
-        LoadContentArray(*SystemsObj, TEXT("actions"));
-        LoadContentArray(*SystemsObj, TEXT("quests"));
-
-        // Track active quest IDs
-        const TArray<TSharedPtr<FJsonValue>>* QuestsArr;
-        if ((*SystemsObj)->TryGetArrayField(TEXT("quests"), QuestsArr))
-        {
-            for (const TSharedPtr<FJsonValue>& QVal : *QuestsArr)
-            {
-                const TSharedPtr<FJsonObject>* QObj;
-                if (!QVal->TryGetObject(QObj)) continue;
-                FString QId;
-                if ((*QObj)->TryGetStringField(TEXT("id"), QId))
-                {
-                    ActiveQuestIds.Add(QId);
-                }
-            }
-        }
-    }
-
-    // Parse the accumulated KB into facts and rules
-    ParseKnowledgeBase();
-
     bInitialized = true;
-    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine loaded: %d facts, %d rules"), FactCount, RuleCount);
+    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine loaded via real engine (%d active quests tracked)"), ActiveQuestIds.Num());
 }
 
 void UPrologEngine::InitializeInventory(const TArray<FInsimulPrologItem>& Items)
@@ -221,15 +334,16 @@ void UPrologEngine::InitializeWorldItems(const TArray<FInsimulWorldItemDef>& Ite
         AssertItemTaxonomy(Name, Item.Category, Item.Material, Item.BaseType, Item.Rarity, Item.ItemType);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine initialized %d world item definitions as facts"), Items.Num());
+    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine initialized %d world item definitions"), Items.Num());
 }
 
 void UPrologEngine::LoadItemReasoningRules()
 {
     if (!bInitialized) return;
 
-    // Assert IS-A reasoning rules as facts/rules in the KB text.
-    // These mirror the rules from GamePrologEngine.loadItemReasoningRules().
+    // IS-A reasoning rules — mirrors GamePrologEngine.loadItemReasoningRules().
+    // Consulted as real Prolog rules (previously appended to a text buffer and
+    // re-parsed by the stub).
     const FString ItemRules = TEXT(
         "item_is_a(Item, Category) :- item_category(Item, Category).\n"
         "item_is_a(Item, BaseType) :- item_base_type(Item, BaseType).\n"
@@ -238,8 +352,13 @@ void UPrologEngine::LoadItemReasoningRules()
         "has_at_least(Player, Item, N) :- has_item(Player, Item, Qty), Qty >= N.\n"
     );
 
-    KnowledgeBase += TEXT("\n") + ItemRules;
-    ParseKnowledgeBase(); // Re-parse to pick up new rules
+    if (UInsimulPrologSubsystem* Engine = ResolveEngine())
+    {
+        if (!Engine->ConsultWorldData(ItemRules))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Insimul] PrologEngine::LoadItemReasoningRules — %s"), *Engine->GetLastError());
+        }
+    }
 
     UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine loaded item IS-A reasoning rules"));
 }
@@ -249,8 +368,8 @@ void UPrologEngine::LoadHelperPredicates()
     if (!bInitialized) return;
 
     // Gameplay helper predicates — mirrors HELPER_PREDICATES_PROLOG from
-    // shared/prolog/helper-predicates.ts (CEFR comparison, weapon/tool
-    // type classification, skill tier names, skill level comparison).
+    // shared/prolog/helper-predicates.ts (CEFR comparison, weapon/tool type
+    // classification, skill tier names, skill level comparison).
     const FString HelperRules = TEXT(
         "% CEFR level ranks\n"
         "cefr_level_rank(a1, 1).\n"
@@ -290,8 +409,13 @@ void UPrologEngine::LoadHelperPredicates()
         "skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= MinLevel.\n"
     );
 
-    KnowledgeBase += TEXT("\n") + HelperRules;
-    ParseKnowledgeBase();
+    if (UInsimulPrologSubsystem* Engine = ResolveEngine())
+    {
+        if (!Engine->ConsultWorldData(HelperRules))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Insimul] PrologEngine::LoadHelperPredicates — %s"), *Engine->GetLastError());
+        }
+    }
 
     UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine loaded gameplay helper predicates"));
 }
@@ -302,12 +426,11 @@ void UPrologEngine::UpdateGameState(const FInsimulGameState& State)
 
     FString PlayerId = Sanitize(State.PlayerCharacterId);
 
-    // Retract old dynamic state
-    RetractPattern(TEXT("energy"), PlayerId);
-    RetractPattern(TEXT("at_location"), PlayerId);
-    RetractPattern(TEXT("nearby_npc"), PlayerId);
+    // Retract old dynamic state (arity-aware; nearby_npc has many values).
+    RetractAllMatching(FString::Printf(TEXT("energy(%s, _)"), *PlayerId));
+    RetractAllMatching(FString::Printf(TEXT("at_location(%s, _)"), *PlayerId));
+    RetractAllMatching(FString::Printf(TEXT("nearby_npc(%s, _)"), *PlayerId));
 
-    // Assert current state
     AssertFact(FString::Printf(TEXT("energy(%s, %d)"), *PlayerId, FMath::RoundToInt(State.PlayerEnergy)));
 
     if (!State.CurrentSettlement.IsEmpty())
@@ -320,7 +443,6 @@ void UPrologEngine::UpdateGameState(const FInsimulGameState& State)
         AssertFact(FString::Printf(TEXT("nearby_npc(%s, %s)"), *PlayerId, *Sanitize(NPCId)));
     }
 
-    // Assert environment facts if provided
     if (State.GameHour >= 0 || !State.Weather.IsEmpty())
     {
         UpdateEnvironment(State.GameHour, State.Weather, State.Season, State.QuestsCompleted, State.Reputation, State.bIsNewToTown);
@@ -333,14 +455,15 @@ void UPrologEngine::UpdateEnvironment(int32 GameHour, const FString& Weather, co
 {
     if (!bInitialized) return;
 
-    RetractByPredicate(TEXT("game_hour"));
-    RetractByPredicate(TEXT("time_period"));
-    RetractByPredicate(TEXT("time_of_day"));
-    RetractByPredicate(TEXT("weather"));
-    RetractByPredicate(TEXT("season"));
-    RetractByPredicate(TEXT("player_quests_completed"));
-    RetractByPredicate(TEXT("player_reputation"));
-    RetractByPredicate(TEXT("player_is_new"));
+    // Clear all clauses of each environment predicate (arity known per predicate).
+    RetractAllMatching(TEXT("game_hour(_)"));
+    RetractAllMatching(TEXT("time_period(_)"));
+    RetractAllMatching(TEXT("time_of_day(_)"));
+    RetractAllMatching(TEXT("weather(_)"));
+    RetractAllMatching(TEXT("season(_)"));
+    RetractAllMatching(TEXT("player_quests_completed(_)"));
+    RetractAllMatching(TEXT("player_reputation(_)"));
+    RetractAllMatching(TEXT("player_is_new"));
 
     int32 Hour = GameHour >= 0 ? GameHour : 12;
     AssertFact(FString::Printf(TEXT("game_hour(%d)"), Hour));
@@ -383,17 +506,17 @@ void UPrologEngine::UpdateEnvironment(int32 GameHour, const FString& Weather, co
 bool UPrologEngine::ShouldMentionWeather(const FString& NPCId)
 {
     if (!bInitialized) return false;
-    return HasFact(FString::Printf(TEXT("weather_complaint_likely(%s)"), *Sanitize(NPCId)));
+    return QueryHas(FString::Printf(TEXT("weather_complaint_likely(%s)"), *Sanitize(NPCId)));
 }
 
 FString UPrologEngine::GetPlayerAttitude(const FString& NPCId)
 {
     if (!bInitialized) return TEXT("neutral");
     FString Id = Sanitize(NPCId);
-    if (HasFact(FString::Printf(TEXT("impressed_by_player(%s)"), *Id))) return TEXT("impressed");
-    if (HasFact(FString::Printf(TEXT("respects_player(%s)"), *Id))) return TEXT("respectful");
-    if (HasFact(FString::Printf(TEXT("wary_of_newcomer(%s)"), *Id))) return TEXT("wary");
-    if (HasFact(FString::Printf(TEXT("welcoming_to_newcomer(%s)"), *Id))) return TEXT("welcoming");
+    if (QueryHas(FString::Printf(TEXT("impressed_by_player(%s)"), *Id))) return TEXT("impressed");
+    if (QueryHas(FString::Printf(TEXT("respects_player(%s)"), *Id))) return TEXT("respectful");
+    if (QueryHas(FString::Printf(TEXT("wary_of_newcomer(%s)"), *Id))) return TEXT("wary");
+    if (QueryHas(FString::Printf(TEXT("welcoming_to_newcomer(%s)"), *Id))) return TEXT("welcoming");
     return TEXT("neutral");
 }
 
@@ -412,29 +535,25 @@ FInsimulPrologActionResult UPrologEngine::CanPerformAction(const FString& Action
     FString ActionAtom = Sanitize(ActionId);
     FString ActorAtom = Sanitize(ActorId);
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::CanPerformAction(%s, %s, %s) — stub query"),
-        *ActionId, *ActorId, *TargetId);
-
-    // Stub: check if there's a can_perform fact in the KB
-    FString Query2 = FString::Printf(TEXT("can_perform(%s, %s)"), *ActorAtom, *ActionAtom);
-    FString Query3 = TargetId.IsEmpty() ? TEXT("")
-        : FString::Printf(TEXT("can_perform(%s, %s, %s)"), *ActorAtom, *ActionAtom, *Sanitize(TargetId));
-
-    // Check for explicit blocks first
+    // Explicit blocks first.
     FString BlockQuery = FString::Printf(TEXT("cannot_perform(%s, %s)"), *ActorAtom, *ActionAtom);
-    if (HasFact(BlockQuery))
+    if (QueryHas(BlockQuery))
     {
         Result.bAllowed = false;
         Result.Reason = FString::Printf(TEXT("Prerequisites not met for action: %s"), *ActionId);
         return Result;
     }
 
-    // If KB has can_perform rules, check for a matching fact
-    // Otherwise, allow by default (graceful degradation like the TypeScript source)
-    bool bHasCanPerformRules = FindFacts(TEXT("can_perform(")).Num() > 0;
+    // If the KB defines can_perform rules/facts (arity 2 or 3), require a match;
+    // otherwise allow by default (graceful degradation, as in the TS source).
+    bool bHasCanPerformRules = QueryHas(TEXT("can_perform(_A, _B)")) || QueryHas(TEXT("can_perform(_A, _B, _C)"));
     if (bHasCanPerformRules)
     {
-        bool bFound = HasFact(Query2) || (!Query3.IsEmpty() && HasFact(Query3));
+        FString Query2 = FString::Printf(TEXT("can_perform(%s, %s)"), *ActorAtom, *ActionAtom);
+        FString Query3 = TargetId.IsEmpty() ? TEXT("")
+            : FString::Printf(TEXT("can_perform(%s, %s, %s)"), *ActorAtom, *ActionAtom, *Sanitize(TargetId));
+
+        bool bFound = QueryHas(Query2) || (!Query3.IsEmpty() && QueryHas(Query3));
         if (!bFound)
         {
             Result.bAllowed = false;
@@ -451,15 +570,11 @@ bool UPrologEngine::IsQuestAvailable(const FString& QuestId, const FString& Play
 {
     if (!bInitialized) return true;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::IsQuestAvailable(%s, %s) — stub query"),
-        *QuestId, *PlayerId);
-
-    // Check for quest_available fact
     FString Pattern = FString::Printf(TEXT("quest_available(%s, %s)"), *Sanitize(PlayerId), *Sanitize(QuestId));
-    if (HasFact(Pattern)) return true;
+    if (QueryHas(Pattern)) return true;
 
-    // If no quest_available rules exist, default to available
-    bool bHasQuestAvailableRules = FindFacts(TEXT("quest_available(")).Num() > 0;
+    // If no quest_available rules exist, default to available.
+    bool bHasQuestAvailableRules = QueryHas(TEXT("quest_available(_A, _B)"));
     return !bHasQuestAvailableRules;
 }
 
@@ -467,86 +582,55 @@ bool UPrologEngine::IsQuestComplete(const FString& QuestId, const FString& Playe
 {
     if (!bInitialized) return false;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::IsQuestComplete(%s, %s) — stub query"),
-        *QuestId, *PlayerId);
-
     FString Pattern = FString::Printf(TEXT("quest_complete(%s, %s)"), *Sanitize(PlayerId), *Sanitize(QuestId));
-    return HasFact(Pattern);
+    return QueryHas(Pattern);
 }
 
 bool UPrologEngine::IsStageComplete(const FString& QuestId, const FString& StageId, const FString& PlayerId)
 {
     if (!bInitialized) return false;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::IsStageComplete(%s, %s, %s) — stub query"),
-        *QuestId, *StageId, *PlayerId);
-
     FString Pattern = FString::Printf(TEXT("stage_complete(%s, %s, %s)"),
         *Sanitize(PlayerId), *Sanitize(QuestId), *Sanitize(StageId));
-    return HasFact(Pattern);
+    return QueryHas(Pattern);
 }
 
 TArray<FString> UPrologEngine::GetApplicableRules(const FString& ActorId)
 {
     if (!bInitialized) return {};
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::GetApplicableRules(%s) — stub query"), *ActorId);
-
-    // Look for rule_applies(RuleName, ActorId, _) facts
-    FString Prefix = FString::Printf(TEXT("rule_applies("), *Sanitize(ActorId));
-    TArray<FString> MatchingFacts = FindFacts(TEXT("rule_applies("));
-
-    TArray<FString> RuleNames;
-    FString ActorAtom = Sanitize(ActorId);
-
-    for (const FString& Fact : MatchingFacts)
-    {
-        // Parse rule_applies(RuleName, ActorId, ...) — extract RuleName if ActorId matches
-        if (Fact.Contains(ActorAtom))
-        {
-            // Extract first argument: everything between first ( and first ,
-            int32 OpenParen = INDEX_NONE;
-            int32 FirstComma = INDEX_NONE;
-            Fact.FindChar(TEXT('('), OpenParen);
-            Fact.FindChar(TEXT(','), FirstComma);
-            if (OpenParen != INDEX_NONE && FirstComma != INDEX_NONE && FirstComma > OpenParen + 1)
-            {
-                FString RuleName = Fact.Mid(OpenParen + 1, FirstComma - OpenParen - 1).TrimStartAndEnd();
-                RuleNames.AddUnique(RuleName);
-            }
-        }
-    }
-
-    return RuleNames;
+    // rule_applies(RuleName, ActorId, _) — collect the rule names bound to R.
+    FString Goal = FString::Printf(TEXT("rule_applies(R, %s, _)"), *Sanitize(ActorId));
+    return QueryColumn(Goal, TEXT("R"));
 }
 
 bool UPrologEngine::EvaluateCondition(const FString& PrologGoal)
 {
     if (!bInitialized) return true;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::EvaluateCondition(%s) — stub query"), *PrologGoal);
-
-    // Simple stub: check if the goal matches an asserted fact
+    // Real goal evaluation (unification + rule derivation), not a fact lookup.
     FString CleanGoal = PrologGoal.TrimStartAndEnd();
     CleanGoal.RemoveFromEnd(TEXT("."));
-    return HasFact(CleanGoal);
+    return QueryHas(CleanGoal);
 }
 
 // ── Fact Management ─────────────────────────────────────────────────────────
 
 void UPrologEngine::AssertFact(const FString& Fact, const FString& Source)
 {
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return;
+
     FString CleanFact = Fact.TrimStartAndEnd();
     CleanFact.RemoveFromEnd(TEXT("."));
+    if (CleanFact.IsEmpty()) return;
 
-    // Don't add duplicates
-    if (!Facts.Contains(CleanFact))
+    // Skip clauses already provable so repeated asserts stay idempotent (mirrors
+    // the retired stub's de-dup; avoids duplicate clauses the single-clause
+    // retract could not fully clear).
+    if (!QueryHas(CleanFact))
     {
-        Facts.Add(CleanFact);
-        FactCount = Facts.Num();
-
-        // Also append to raw KB for export
-        KnowledgeBase += FString::Printf(TEXT("\n%s."), *CleanFact);
+        Engine->AssertFact(CleanFact);
     }
 
     if (bDebugLoggingEnabled)
@@ -558,17 +642,13 @@ void UPrologEngine::AssertFact(const FString& Fact, const FString& Source)
 
 void UPrologEngine::RetractFact(const FString& Fact, const FString& Reason)
 {
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return;
+
     FString CleanFact = Fact.TrimStartAndEnd();
     CleanFact.RemoveFromEnd(TEXT("."));
 
-    int32 Removed = Facts.RemoveAll([&CleanFact](const FString& F) {
-        return F == CleanFact;
-    });
-
-    if (Removed > 0)
-    {
-        FactCount = Facts.Num();
-    }
+    Engine->RetractFact(CleanFact);
 
     if (bDebugLoggingEnabled)
     {
@@ -579,28 +659,36 @@ void UPrologEngine::RetractFact(const FString& Fact, const FString& Reason)
 
 TArray<FString> UPrologEngine::Query(const FString& Goal)
 {
-    UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine::Query(%s) — stub, no native Prolog runtime. "
-        "Integrate SWI-Prolog C++ bindings for full query support."), *Goal);
+    TArray<FString> Results;
 
-    // Return matching facts as a basic stub
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return Results;
+
     FString CleanGoal = Goal.TrimStartAndEnd();
     CleanGoal.RemoveFromEnd(TEXT("."));
 
-    TArray<FString> Results;
+    TArray<FInsimulPrologBinding> Solutions;
+    if (!Engine->QueryAll(CleanGoal, Solutions)) return Results;
 
-    // Extract predicate name for prefix matching
-    int32 ParenIdx = INDEX_NONE;
-    CleanGoal.FindChar(TEXT('('), ParenIdx);
-    if (ParenIdx != INDEX_NONE)
+    for (const FInsimulPrologBinding& Solution : Solutions)
     {
-        FString Prefix = CleanGoal.Left(ParenIdx + 1);
-        Results = FindFacts(Prefix);
+        if (Solution.Vars.Num() == 0)
+        {
+            // Ground success — surface the goal itself.
+            Results.Add(CleanGoal);
+            continue;
+        }
+        TArray<FString> Parts;
+        for (const FInsimulPrologVar& Var : Solution.Vars)
+        {
+            Parts.Add(FString::Printf(TEXT("%s=%s"), *Var.Name, *Var.Value.DisplayString));
+        }
+        Results.Add(FString::Join(Parts, TEXT(", ")));
     }
 
     if (bDebugLoggingEnabled)
     {
-        UE_LOG(LogTemp, Log, TEXT("[PrologDebug] query: %s -> %s (%d results)"),
-            *CleanGoal, Results.Num() > 0 ? TEXT("true") : TEXT("false"), Results.Num());
+        UE_LOG(LogTemp, Log, TEXT("[PrologDebug] query: %s -> %d solution(s)"), *CleanGoal, Results.Num());
     }
 
     return Results;
@@ -608,7 +696,10 @@ TArray<FString> UPrologEngine::Query(const FString& Goal)
 
 FString UPrologEngine::ExportKnowledgeBase() const
 {
-    return KnowledgeBase;
+    // Deprecated: returns the tracked gameplay-fact log (not the whole world KB).
+    // Prefer GetPlayerFacts() or SnapshotToString().
+    TArray<FString> FactArray = PlayerFacts.Array();
+    return FString::Join(FactArray, TEXT("\n"));
 }
 
 // ── NPC Intelligence Queries ────────────────────────────────────────────────
@@ -616,163 +707,64 @@ FString UPrologEngine::ExportKnowledgeBase() const
 TArray<FString> UPrologEngine::WhoShouldTalkTo(const FString& NPCId)
 {
     if (!bInitialized) return {};
-
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::WhoShouldTalkTo(%s) — stub query"), *NPCId);
-
-    // Look for should_talk_to(NPCId, Y) facts
-    FString Prefix = FString::Printf(TEXT("should_talk_to(%s,"), *Sanitize(NPCId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
-
-    TArray<FString> Targets;
-    for (const FString& Fact : MatchingFacts)
-    {
-        // Extract second argument
-        int32 CommaIdx = INDEX_NONE;
-        int32 CloseParenIdx = INDEX_NONE;
-        Fact.FindChar(TEXT(','), CommaIdx);
-        Fact.FindLastChar(TEXT(')'), CloseParenIdx);
-        if (CommaIdx != INDEX_NONE && CloseParenIdx != INDEX_NONE && CloseParenIdx > CommaIdx + 1)
-        {
-            FString Target = Fact.Mid(CommaIdx + 1, CloseParenIdx - CommaIdx - 1).TrimStartAndEnd();
-            if (!Target.IsEmpty())
-            {
-                Targets.AddUnique(Target);
-            }
-        }
-    }
-
-    return Targets;
+    FString Goal = FString::Printf(TEXT("should_talk_to(%s, Y)"), *Sanitize(NPCId));
+    return QueryColumn(Goal, TEXT("Y"));
 }
 
 TArray<FString> UPrologEngine::GetPreferredTopics(const FString& NPCId)
 {
     if (!bInitialized) return {};
-
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::GetPreferredTopics(%s) — stub query"), *NPCId);
-
-    FString Prefix = FString::Printf(TEXT("prefers_topic(%s,"), *Sanitize(NPCId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
-
-    TArray<FString> Topics;
-    for (const FString& Fact : MatchingFacts)
-    {
-        int32 CommaIdx = INDEX_NONE;
-        int32 CloseParenIdx = INDEX_NONE;
-        Fact.FindChar(TEXT(','), CommaIdx);
-        Fact.FindLastChar(TEXT(')'), CloseParenIdx);
-        if (CommaIdx != INDEX_NONE && CloseParenIdx != INDEX_NONE && CloseParenIdx > CommaIdx + 1)
-        {
-            FString Topic = Fact.Mid(CommaIdx + 1, CloseParenIdx - CommaIdx - 1).TrimStartAndEnd();
-            if (!Topic.IsEmpty())
-            {
-                Topics.AddUnique(Topic);
-            }
-        }
-    }
-
-    return Topics;
+    FString Goal = FString::Printf(TEXT("prefers_topic(%s, Y)"), *Sanitize(NPCId));
+    return QueryColumn(Goal, TEXT("Y"));
 }
 
 bool UPrologEngine::WantsToSocialize(const FString& NPCId)
 {
     if (!bInitialized) return false;
-
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::WantsToSocialize(%s) — stub query"), *NPCId);
-
-    FString Pattern = FString::Printf(TEXT("wants_to_socialize(%s)"), *Sanitize(NPCId));
-    return HasFact(Pattern);
+    return QueryHas(FString::Printf(TEXT("wants_to_socialize(%s)"), *Sanitize(NPCId)));
 }
 
 bool UPrologEngine::IsFirstMeeting(const FString& NPCId, const FString& PlayerId)
 {
     if (!bInitialized) return true;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::IsFirstMeeting(%s, %s) — stub query"),
-        *NPCId, *PlayerId);
-
-    // First meeting if no has_mental_model fact exists (negation-as-absence)
+    // First meeting if no mental model exists (negation-as-absence).
     FString Pattern = FString::Printf(TEXT("has_mental_model(%s, %s)"), *Sanitize(NPCId), *Sanitize(PlayerId));
-    return !HasFact(Pattern);
+    return !QueryHas(Pattern);
 }
 
 TArray<FString> UPrologEngine::WhoToAvoid(const FString& NPCId)
 {
     if (!bInitialized) return {};
-
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::WhoToAvoid(%s) — stub query"), *NPCId);
-
-    FString Prefix = FString::Printf(TEXT("should_avoid(%s,"), *Sanitize(NPCId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
-
-    TArray<FString> Targets;
-    for (const FString& Fact : MatchingFacts)
-    {
-        int32 CommaIdx = INDEX_NONE;
-        int32 CloseParenIdx = INDEX_NONE;
-        Fact.FindChar(TEXT(','), CommaIdx);
-        Fact.FindLastChar(TEXT(')'), CloseParenIdx);
-        if (CommaIdx != INDEX_NONE && CloseParenIdx != INDEX_NONE && CloseParenIdx > CommaIdx + 1)
-        {
-            FString Target = Fact.Mid(CommaIdx + 1, CloseParenIdx - CommaIdx - 1).TrimStartAndEnd();
-            if (!Target.IsEmpty())
-            {
-                Targets.AddUnique(Target);
-            }
-        }
-    }
-
-    return Targets;
+    FString Goal = FString::Printf(TEXT("should_avoid(%s, Y)"), *Sanitize(NPCId));
+    return QueryColumn(Goal, TEXT("Y"));
 }
 
 bool UPrologEngine::IsWillingToShare(const FString& NPCId, const FString& TargetId)
 {
     if (!bInitialized) return true;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::IsWillingToShare(%s, %s) — stub query"),
-        *NPCId, *TargetId);
-
-    // If no willing_to_share facts exist, default to true (graceful degradation)
-    FString Pattern = FString::Printf(TEXT("willing_to_share(%s, %s)"), *Sanitize(NPCId), *Sanitize(TargetId));
-    bool bHasWillingRules = FindFacts(TEXT("willing_to_share(")).Num() > 0;
+    // If no willing_to_share rules exist, default to true (graceful degradation).
+    bool bHasWillingRules = QueryHas(TEXT("willing_to_share(_A, _B)"));
     if (!bHasWillingRules) return true;
-    return HasFact(Pattern);
-}
 
-// ── NPC Intelligence Queries (additional) ───────────────────────────────────
+    FString Pattern = FString::Printf(TEXT("willing_to_share(%s, %s)"), *Sanitize(NPCId), *Sanitize(TargetId));
+    return QueryHas(Pattern);
+}
 
 FString UPrologEngine::GetConflictStyle(const FString& NPCId)
 {
     if (!bInitialized) return FString();
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::GetConflictStyle(%s) — stub query"), *NPCId);
-
-    FString Prefix = FString::Printf(TEXT("conflict_style(%s,"), *Sanitize(NPCId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
-
-    if (MatchingFacts.Num() > 0)
-    {
-        // Extract second argument
-        int32 CommaIdx = INDEX_NONE;
-        int32 CloseParenIdx = INDEX_NONE;
-        MatchingFacts[0].FindChar(TEXT(','), CommaIdx);
-        MatchingFacts[0].FindLastChar(TEXT(')'), CloseParenIdx);
-        if (CommaIdx != INDEX_NONE && CloseParenIdx != INDEX_NONE && CloseParenIdx > CommaIdx + 1)
-        {
-            return MatchingFacts[0].Mid(CommaIdx + 1, CloseParenIdx - CommaIdx - 1).TrimStartAndEnd();
-        }
-    }
-
-    return FString();
+    FString Goal = FString::Printf(TEXT("conflict_style(%s, S)"), *Sanitize(NPCId));
+    TArray<FString> Styles = QueryColumn(Goal, TEXT("S"));
+    return Styles.Num() > 0 ? Styles[0] : FString();
 }
 
 bool UPrologEngine::IsGrieving(const FString& NPCId)
 {
     if (!bInitialized) return false;
-
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::IsGrieving(%s) — stub query"), *NPCId);
-
-    FString Pattern = FString::Printf(TEXT("is_grieving(%s)"), *Sanitize(NPCId));
-    return HasFact(Pattern);
+    return QueryHas(FString::Printf(TEXT("is_grieving(%s)"), *Sanitize(NPCId)));
 }
 
 // ── NPC State Updates ───────────────────────────────────────────────────────
@@ -782,7 +774,7 @@ void UPrologEngine::UpdateNPCPersonality(const FString& NPCId, const FInsimulNPC
     if (!bInitialized) return;
 
     FString Id = Sanitize(NPCId);
-    RetractPattern(TEXT("personality"), Id);
+    RetractAllMatching(FString::Printf(TEXT("personality(%s, _, _)"), *Id));
 
     if (Personality.Openness >= 0.f)
         AssertFact(FString::Printf(TEXT("personality(%s, openness, %d)"), *Id, FMath::RoundToInt(Personality.Openness * 100)));
@@ -801,9 +793,9 @@ void UPrologEngine::UpdateNPCEmotionalState(const FString& NPCId, const FInsimul
     if (!bInitialized) return;
 
     FString Id = Sanitize(NPCId);
-    RetractPattern(TEXT("mood"), Id);
-    RetractPattern(TEXT("stress_level"), Id);
-    RetractPattern(TEXT("social_desire"), Id);
+    RetractAllMatching(FString::Printf(TEXT("mood(%s, _)"), *Id));
+    RetractAllMatching(FString::Printf(TEXT("stress_level(%s, _)"), *Id));
+    RetractAllMatching(FString::Printf(TEXT("social_desire(%s, _)"), *Id));
 
     if (!State.Mood.IsEmpty())
         AssertFact(FString::Printf(TEXT("mood(%s, %s)"), *Id, *Sanitize(State.Mood)));
@@ -822,11 +814,11 @@ void UPrologEngine::UpdateNPCRelationship(const FString& NPC1Id, const FString& 
     FString Id1 = Sanitize(NPC1Id);
     FString Id2 = Sanitize(NPC2Id);
 
-    RetractPattern(TEXT("relationship_charge"), Id1, Id2);
-    RetractPattern(TEXT("relationship_trust"), Id1, Id2);
-    RetractPattern(TEXT("conversation_count"), Id1, Id2);
-    RetractPattern(TEXT("friends"), Id1, Id2);
-    RetractPattern(TEXT("enemies"), Id1, Id2);
+    RetractAllMatching(FString::Printf(TEXT("relationship_charge(%s, %s, _)"), *Id1, *Id2));
+    RetractAllMatching(FString::Printf(TEXT("relationship_trust(%s, %s, _)"), *Id1, *Id2));
+    RetractAllMatching(FString::Printf(TEXT("conversation_count(%s, %s, _)"), *Id1, *Id2));
+    RetractAllMatching(FString::Printf(TEXT("friends(%s, %s)"), *Id1, *Id2));
+    RetractAllMatching(FString::Printf(TEXT("enemies(%s, %s)"), *Id1, *Id2));
 
     AssertFact(FString::Printf(TEXT("relationship_charge(%s, %s, %d)"), *Id1, *Id2, FMath::RoundToInt(Relationship.Charge * 100)));
     AssertFact(FString::Printf(TEXT("relationship_trust(%s, %s, %d)"), *Id1, *Id2, FMath::RoundToInt(Relationship.Trust * 100)));
@@ -853,7 +845,6 @@ void UPrologEngine::SubscribeToEventBus(UEventBus* EventBus)
 {
     if (!EventBus) return;
 
-    // Unsubscribe from previous
     if (SubscribedEventBus.IsValid() && EventBusSubscriptionHandle >= 0)
     {
         SubscribedEventBus->Unsubscribe(EventBusSubscriptionHandle);
@@ -862,7 +853,6 @@ void UPrologEngine::SubscribeToEventBus(UEventBus* EventBus)
     SubscribedEventBus = EventBus;
     EventBusRef = EventBus;
 
-    // Subscribe to all events via the global delegate
     EventBus->OnAnyEvent.AddDynamic(this, &UPrologEngine::HandleGameEvent);
 
     UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine subscribed to EventBus"));
@@ -991,7 +981,6 @@ void UPrologEngine::HandleGameEvent(const FInsimulGameEvent& Event)
             FString Status = Event.bAccepted ? TEXT("accepted") : TEXT("rejected");
             AssertPlayerFact(FString::Printf(TEXT("romance_action(player, %s, %s, %s)"),
                 *Sanitize(Event.NPCId), *Sanitize(Event.ActionType), *Status));
-            // Emit create_truth event for accepted actions
             if (Event.bAccepted && EventBusRef.IsValid())
             {
                 FInsimulGameEvent TruthEvent;
@@ -1011,7 +1000,6 @@ void UPrologEngine::HandleGameEvent(const FInsimulGameEvent& Event)
                 *Sanitize(Event.NPCId), *Sanitize(Event.ToStage)));
             AssertPlayerFact(FString::Printf(TEXT("romance_history(player, %s, %s, %s)"),
                 *Sanitize(Event.NPCId), *Sanitize(Event.FromStage), *Sanitize(Event.ToStage)));
-            // Emit create_truth event
             if (EventBusRef.IsValid())
             {
                 FInsimulGameEvent TruthEvent;
@@ -1037,7 +1025,7 @@ void UPrologEngine::HandleGameEvent(const FInsimulGameEvent& Event)
                 *Sanitize(Event.CharacterId), *Sanitize(Event.StateType)));
             break;
         case EInsimulEventType::StateExpiredTruth:
-            RetractPlayerFactByPattern(TEXT("has_state"), Sanitize(Event.CharacterId), Sanitize(Event.StateType));
+            RetractPlayerFactByPattern(TEXT("has_state"), Sanitize(Event.CharacterId), Sanitize(Event.StateType), 0);
             break;
         case EInsimulEventType::PuzzleFailed:
             AssertPlayerFact(FString::Printf(TEXT("puzzle_failed(player, %s, %d)"),
@@ -1056,7 +1044,7 @@ void UPrologEngine::HandleGameEvent(const FInsimulGameEvent& Event)
             {
                 AssertPlayerFact(FString::Printf(TEXT("quest_outcome(%s, player, abandoned)"), *Sanitize(Event.QuestId)));
             }
-            RetractPlayerFactByPattern(TEXT("quest_active"), TEXT("player"), Sanitize(Event.QuestId));
+            RetractPlayerFactByPattern(TEXT("quest_active"), TEXT("player"), Sanitize(Event.QuestId), 0);
             break;
         case EInsimulEventType::DirectionStepCompleted:
             RetractPlayerFactByPattern(TEXT("quest_progress"), TEXT("player"), Sanitize(Event.QuestId));
@@ -1158,10 +1146,8 @@ void UPrologEngine::ReevaluateQuests()
     {
         if (CompletedQuests.Contains(QuestId)) continue;
 
-        // Check individual objective completion
         CheckObjectiveCompletion(QuestId);
 
-        // Check whole-quest completion
         if (IsQuestComplete(QuestId, TEXT("player")) && !CompletedQuests.Contains(QuestId))
         {
             CompletedQuests.Add(QuestId);
@@ -1204,10 +1190,8 @@ void UPrologEngine::UpdateItemQuantity(const FString& ItemName, int32 Delta)
     int32& CurrentQty = ItemQuantities.FindOrAdd(ItemName);
     CurrentQty = FMath::Max(0, CurrentQty + Delta);
 
-    // Retract old quantity fact
-    RetractPattern(TEXT("has_item"), TEXT("player"), ItemName);
+    RetractAllMatching(FString::Printf(TEXT("has_item(player, %s, _)"), *ItemName));
 
-    // Assert new quantity if > 0
     if (CurrentQty > 0)
     {
         AssertFact(FString::Printf(TEXT("has_item(player, %s, %d)"), *ItemName, CurrentQty));
@@ -1223,6 +1207,7 @@ void UPrologEngine::AssertPlayerFact(const FString& Fact)
     FString CleanFact = Fact.TrimStartAndEnd();
     CleanFact.RemoveFromEnd(TEXT("."));
     PlayerFacts.Add(CleanFact + TEXT("."));
+    FactCount = PlayerFacts.Num();
 }
 
 void UPrologEngine::RetractPlayerFact(const FString& Fact)
@@ -1232,39 +1217,36 @@ void UPrologEngine::RetractPlayerFact(const FString& Fact)
     FString CleanFact = Fact.TrimStartAndEnd();
     CleanFact.RemoveFromEnd(TEXT("."));
     PlayerFacts.Remove(CleanFact + TEXT("."));
+    FactCount = PlayerFacts.Num();
 }
 
-void UPrologEngine::RetractPlayerFactByPattern(const FString& Predicate, const FString& FirstArg, const FString& SecondArg)
+void UPrologEngine::RetractPlayerFactByPattern(const FString& Predicate, const FString& FirstArg, const FString& SecondArg, int32 ExtraArity)
 {
-    // Retract from the main KB
-    RetractPattern(Predicate, FirstArg, SecondArg);
-
-    // Build the same prefix used by RetractPattern to clean up PlayerFacts
-    FString Prefix;
+    // Build the ground goal with `_` wildcards for the trailing columns, then
+    // retract every matching clause from the real engine.
+    FString GroundPrefix;
+    FString ArgList;
     if (SecondArg.IsEmpty())
     {
-        Prefix = FString::Printf(TEXT("%s(%s"), *Predicate, *FirstArg);
+        GroundPrefix = FString::Printf(TEXT("%s(%s"), *Predicate, *FirstArg);
+        ArgList = FirstArg;
     }
     else
     {
-        Prefix = FString::Printf(TEXT("%s(%s, %s"), *Predicate, *FirstArg, *SecondArg);
+        GroundPrefix = FString::Printf(TEXT("%s(%s, %s"), *Predicate, *FirstArg, *SecondArg);
+        ArgList = FString::Printf(TEXT("%s, %s"), *FirstArg, *SecondArg);
     }
 
-    TArray<FString> ToRemove;
-    for (const FString& PF : PlayerFacts)
+    for (int32 i = 0; i < ExtraArity; ++i)
     {
-        // PlayerFacts entries are stored with trailing dot, strip it for prefix match
-        FString WithoutDot = PF;
-        WithoutDot.RemoveFromEnd(TEXT("."));
-        if (WithoutDot.StartsWith(Prefix))
-        {
-            ToRemove.Add(PF);
-        }
+        ArgList += TEXT(", _");
     }
-    for (const FString& Key : ToRemove)
-    {
-        PlayerFacts.Remove(Key);
-    }
+
+    FString Goal = FString::Printf(TEXT("%s(%s)"), *Predicate, *ArgList);
+    RetractAllMatching(Goal);
+
+    // Clean up the tracked player-fact log using the same ground prefix.
+    PurgeTrackedByPrefix(GroundPrefix);
 }
 
 void UPrologEngine::UpdateItemQuantityTracked(const FString& ItemName, int32 Delta)
@@ -1272,10 +1254,8 @@ void UPrologEngine::UpdateItemQuantityTracked(const FString& ItemName, int32 Del
     int32& CurrentQty = ItemQuantities.FindOrAdd(ItemName);
     CurrentQty = FMath::Max(0, CurrentQty + Delta);
 
-    // Retract old quantity fact (with player fact tracking)
     RetractPlayerFactByPattern(TEXT("has_item"), TEXT("player"), ItemName);
 
-    // Assert new quantity if > 0
     if (CurrentQty > 0)
     {
         AssertPlayerFact(FString::Printf(TEXT("has_item(player, %s, %d)"), *ItemName, CurrentQty));
@@ -1330,7 +1310,6 @@ void UPrologEngine::RestorePlayerFacts(const TArray<FString>& InFacts)
         // Rebuild ItemQuantities from has_item/3 facts
         if (Fact.StartsWith(TEXT("has_item(player,")))
         {
-            // Parse has_item(player, ItemName, Qty)
             int32 FirstComma = INDEX_NONE;
             int32 SecondComma = INDEX_NONE;
             int32 CloseParen = INDEX_NONE;
@@ -1354,6 +1333,7 @@ void UPrologEngine::RestorePlayerFacts(const TArray<FString>& InFacts)
         }
     }
 
+    FactCount = PlayerFacts.Num();
     UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine restored %d player facts from save"), InFacts.Num());
 }
 
@@ -1445,101 +1425,118 @@ void UPrologEngine::RestoreFromSaveState(const FString& SaveStateJson)
     UE_LOG(LogTemp, Log, TEXT("[Insimul] PrologEngine::RestoreFromSaveState restored %d facts from structured save data"), RestoredCount);
 }
 
+FString UPrologEngine::SnapshotToString()
+{
+    if (UInsimulPrologSubsystem* Engine = ResolveEngine())
+    {
+        return Engine->SnapshotToString();
+    }
+    return FString();
+}
+
+bool UPrologEngine::RestoreFromString(const FString& Image)
+{
+    if (UInsimulPrologSubsystem* Engine = ResolveEngine())
+    {
+        return Engine->RestoreFromString(Image);
+    }
+    return false;
+}
+
 // ── Volition & Romance Queries ──────────────────────────────────────────────
 
 TArray<FString> UPrologEngine::EvaluateVolitionRules(const FString& NPCId)
 {
     if (!bInitialized) return {};
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::EvaluateVolitionRules(%s) — stub query"), *NPCId);
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return {};
 
-    // Look for volition_score(NPCId, Action, Target, Score) facts
-    FString Prefix = FString::Printf(TEXT("volition_score(%s,"), *Sanitize(NPCId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
+    // volition_score(NPCId, Action, Target, Score) — reconstruct the ground facts
+    // and sort by score descending (the score column drives NPC decision-making).
+    FString Goal = FString::Printf(TEXT("volition_score(%s, Action, Target, Score)"), *Sanitize(NPCId));
+    TArray<FInsimulPrologBinding> Solutions;
+    if (!Engine->QueryAll(Goal, Solutions)) return {};
 
-    // Return matching facts as strings (sorted by score descending would require parsing)
-    return MatchingFacts;
+    FString NpcAtom = Sanitize(NPCId);
+
+    struct FScoredAction
+    {
+        FString Fact;
+        double Score = 0.0;
+    };
+    TArray<FScoredAction> Scored;
+
+    for (const FInsimulPrologBinding& Solution : Solutions)
+    {
+        FInsimulPrologValue ActionVal, TargetVal, ScoreVal;
+        UInsimulPrologSubsystem::GetBoundValue(Solution, TEXT("Action"), ActionVal);
+        UInsimulPrologSubsystem::GetBoundValue(Solution, TEXT("Target"), TargetVal);
+        UInsimulPrologSubsystem::GetBoundValue(Solution, TEXT("Score"), ScoreVal);
+
+        double Score = (ScoreVal.Type == EInsimulPrologValueType::Int)
+            ? static_cast<double>(ScoreVal.IntValue)
+            : ScoreVal.FloatValue;
+
+        FScoredAction Entry;
+        Entry.Fact = FString::Printf(TEXT("volition_score(%s, %s, %s, %s)"),
+            *NpcAtom, *ActionVal.DisplayString, *TargetVal.DisplayString, *ScoreVal.DisplayString);
+        Entry.Score = Score;
+        Scored.Add(Entry);
+    }
+
+    Scored.Sort([](const FScoredAction& A, const FScoredAction& B) { return A.Score > B.Score; });
+
+    TArray<FString> Results;
+    for (const FScoredAction& Entry : Scored)
+    {
+        Results.Add(Entry.Fact);
+    }
+    return Results;
 }
 
 FString UPrologEngine::GetRomanceStage(const FString& NPCId)
 {
     if (!bInitialized) return FString();
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::GetRomanceStage(%s) — stub query"), *NPCId);
-
-    // Look for romance_stage(player, NPCId, Stage) fact
-    FString Prefix = FString::Printf(TEXT("romance_stage(player, %s,"), *Sanitize(NPCId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
-
-    if (MatchingFacts.Num() > 0)
-    {
-        // Extract third argument (stage)
-        int32 LastCommaIdx = INDEX_NONE;
-        int32 CloseParenIdx = INDEX_NONE;
-        MatchingFacts[0].FindLastChar(TEXT(','), LastCommaIdx);
-        MatchingFacts[0].FindLastChar(TEXT(')'), CloseParenIdx);
-        if (LastCommaIdx != INDEX_NONE && CloseParenIdx != INDEX_NONE && CloseParenIdx > LastCommaIdx + 1)
-        {
-            return MatchingFacts[0].Mid(LastCommaIdx + 1, CloseParenIdx - LastCommaIdx - 1).TrimStartAndEnd();
-        }
-    }
-
-    return FString();
+    FString Goal = FString::Printf(TEXT("romance_stage(player, %s, Stage)"), *Sanitize(NPCId));
+    TArray<FString> Stages = QueryColumn(Goal, TEXT("Stage"));
+    return Stages.Num() > 0 ? Stages[0] : FString();
 }
 
 bool UPrologEngine::CanPerformRomanceAction(const FString& NPCId, const FString& ActionType)
 {
     if (!bInitialized) return true;
 
-    UE_LOG(LogTemp, Verbose, TEXT("[Insimul] PrologEngine::CanPerformRomanceAction(%s, %s) — stub query"),
-        *NPCId, *ActionType);
-
-    // Check for can_romance_action(player, NPCId, ActionType) fact
-    FString Pattern = FString::Printf(TEXT("can_romance_action(player, %s, %s)"),
-        *Sanitize(NPCId), *Sanitize(ActionType));
-
-    // If no romance rules loaded, allow by default (graceful degradation)
-    bool bHasRomanceRules = FindFacts(TEXT("can_romance_action(")).Num() > 0;
+    // If no romance rules loaded, allow by default (graceful degradation).
+    bool bHasRomanceRules = QueryHas(TEXT("can_romance_action(_A, _B, _C)"));
     if (!bHasRomanceRules) return true;
 
-    return HasFact(Pattern);
+    FString Pattern = FString::Printf(TEXT("can_romance_action(player, %s, %s)"),
+        *Sanitize(NPCId), *Sanitize(ActionType));
+    return QueryHas(Pattern);
 }
 
 void UPrologEngine::CheckObjectiveCompletion(const FString& QuestId)
 {
     FString SanitizedId = Sanitize(QuestId);
 
-    // Find quest_objective facts for this quest
-    FString Prefix = FString::Printf(TEXT("quest_objective(%s,"), *SanitizedId);
-    TArray<FString> ObjectiveFacts = FindFacts(Prefix);
-
-    for (const FString& Fact : ObjectiveFacts)
+    // Objective indices: quest_objective(QuestId, Idx, ...) — try arity 3 then 2.
+    TArray<FString> Indices = QueryColumn(FString::Printf(TEXT("quest_objective(%s, I, _)"), *SanitizedId), TEXT("I"));
+    if (Indices.Num() == 0)
     {
-        // Extract objective index (second argument)
-        int32 FirstComma = INDEX_NONE;
-        int32 SecondComma = INDEX_NONE;
-        Fact.FindChar(TEXT(','), FirstComma);
-        if (FirstComma != INDEX_NONE)
-        {
-            int32 SearchStart = FirstComma + 1;
-            SecondComma = Fact.Find(TEXT(","), ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchStart);
-            if (SecondComma == INDEX_NONE)
-            {
-                Fact.FindLastChar(TEXT(')'), SecondComma);
-            }
-        }
+        Indices = QueryColumn(FString::Printf(TEXT("quest_objective(%s, I)"), *SanitizedId), TEXT("I"));
+    }
 
-        if (FirstComma == INDEX_NONE || SecondComma == INDEX_NONE) continue;
-
-        FString IdxStr = Fact.Mid(FirstComma + 1, SecondComma - FirstComma - 1).TrimStartAndEnd();
+    for (const FString& IdxStr : Indices)
+    {
         int32 Idx = FCString::Atoi(*IdxStr);
 
         FString Key = FString::Printf(TEXT("%s:%d"), *QuestId, Idx);
         if (CompletedObjectives.Contains(Key)) continue;
 
-        // Check if this objective is complete
         FString CompletePattern = FString::Printf(TEXT("objective_complete(player, %s, %d)"), *SanitizedId, Idx);
-        if (HasFact(CompletePattern))
+        if (QueryHas(CompletePattern))
         {
             CompletedObjectives.Add(Key);
             OnObjectiveCompleted.Broadcast(QuestId, Idx);
@@ -1558,33 +1555,22 @@ void UPrologEngine::Reconcile(TArray<FString>& OutCompletedQuests, TArray<FStrin
     {
         FString SanitizedId = Sanitize(QuestId);
 
-        // Check objectives
-        FString Prefix = FString::Printf(TEXT("quest_objective(%s,"), *SanitizedId);
-        TArray<FString> ObjectiveFacts = FindFacts(Prefix);
-        for (const FString& Fact : ObjectiveFacts)
+        TArray<FString> Indices = QueryColumn(FString::Printf(TEXT("quest_objective(%s, I, _)"), *SanitizedId), TEXT("I"));
+        if (Indices.Num() == 0)
         {
-            int32 FirstComma = INDEX_NONE;
-            int32 SecondComma = INDEX_NONE;
-            Fact.FindChar(TEXT(','), FirstComma);
-            if (FirstComma != INDEX_NONE)
-            {
-                int32 SearchStart = FirstComma + 1;
-                SecondComma = Fact.Find(TEXT(","), ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchStart);
-                if (SecondComma == INDEX_NONE) Fact.FindLastChar(TEXT(')'), SecondComma);
-            }
-            if (FirstComma == INDEX_NONE || SecondComma == INDEX_NONE) continue;
+            Indices = QueryColumn(FString::Printf(TEXT("quest_objective(%s, I)"), *SanitizedId), TEXT("I"));
+        }
 
-            FString IdxStr = Fact.Mid(FirstComma + 1, SecondComma - FirstComma - 1).TrimStartAndEnd();
+        for (const FString& IdxStr : Indices)
+        {
             int32 Idx = FCString::Atoi(*IdxStr);
-
             FString CompletePattern = FString::Printf(TEXT("objective_complete(player, %s, %d)"), *SanitizedId, Idx);
-            if (HasFact(CompletePattern))
+            if (QueryHas(CompletePattern))
             {
                 OutCompletedObjectiveKeys.Add(FString::Printf(TEXT("%s:%d"), *QuestId, Idx));
             }
         }
 
-        // Check quest-level
         if (IsQuestComplete(QuestId, TEXT("player")))
         {
             OutCompletedQuests.Add(QuestId);
@@ -1596,126 +1582,33 @@ TArray<FString> UPrologEngine::GetBonusRewards(const FString& QuestId)
 {
     if (!bInitialized) return {};
 
-    FString Prefix = FString::Printf(TEXT("quest_bonus_reward(player, %s,"), *Sanitize(QuestId));
-    TArray<FString> MatchingFacts = FindFacts(Prefix);
+    UInsimulPrologSubsystem* Engine = ResolveEngine();
+    if (!Engine) return {};
 
+    // quest_bonus_reward(player, QuestId, Type, Value) — reconstruct ground facts.
+    FString Goal = FString::Printf(TEXT("quest_bonus_reward(player, %s, Type, Value)"), *Sanitize(QuestId));
+    TArray<FInsimulPrologBinding> Solutions;
+    if (!Engine->QueryAll(Goal, Solutions)) return {};
+
+    FString QuestAtom = Sanitize(QuestId);
     TArray<FString> Results;
-    for (const FString& Fact : MatchingFacts)
+    for (const FInsimulPrologBinding& Solution : Solutions)
     {
-        // Return raw facts — Blueprint parsing can extract Type and Value
-        Results.Add(Fact);
+        FInsimulPrologValue TypeVal, ValueVal;
+        UInsimulPrologSubsystem::GetBoundValue(Solution, TEXT("Type"), TypeVal);
+        UInsimulPrologSubsystem::GetBoundValue(Solution, TEXT("Value"), ValueVal);
+        Results.Add(FString::Printf(TEXT("quest_bonus_reward(player, %s, %s, %s)"),
+            *QuestAtom, *TypeVal.DisplayString, *ValueVal.DisplayString));
     }
     return Results;
 }
 
 // ── Private Helpers ─────────────────────────────────────────────────────────
 
-void UPrologEngine::ParseKnowledgeBase()
-{
-    Facts.Empty();
-    Rules.Empty();
-
-    if (KnowledgeBase.IsEmpty())
-    {
-        FactCount = 0;
-        RuleCount = 0;
-        return;
-    }
-
-    // Split KB into lines and classify each as fact or rule
-    TArray<FString> Lines;
-    KnowledgeBase.ParseIntoArrayLines(Lines);
-
-    for (const FString& RawLine : Lines)
-    {
-        FString Line = RawLine.TrimStartAndEnd();
-
-        // Skip empty lines and comments
-        if (Line.IsEmpty()) continue;
-        if (Line.StartsWith(TEXT("%"))) continue;
-        if (Line.StartsWith(TEXT("/*"))) continue;
-
-        // Remove trailing period for storage
-        FString CleanLine = Line;
-        CleanLine.RemoveFromEnd(TEXT("."));
-        CleanLine = CleanLine.TrimEnd();
-
-        if (CleanLine.IsEmpty()) continue;
-
-        if (Line.Contains(TEXT(":-")))
-        {
-            // This is a rule/clause
-            Rules.AddUnique(CleanLine);
-        }
-        else
-        {
-            // This is a fact
-            Facts.AddUnique(CleanLine);
-        }
-    }
-
-    FactCount = Facts.Num();
-    RuleCount = Rules.Num();
-}
-
-bool UPrologEngine::HasFact(const FString& Pattern) const
-{
-    FString CleanPattern = Pattern.TrimStartAndEnd();
-    CleanPattern.RemoveFromEnd(TEXT("."));
-
-    for (const FString& Fact : Facts)
-    {
-        if (Fact == CleanPattern) return true;
-    }
-    return false;
-}
-
-TArray<FString> UPrologEngine::FindFacts(const FString& Prefix) const
-{
-    TArray<FString> Results;
-    for (const FString& Fact : Facts)
-    {
-        if (Fact.StartsWith(Prefix))
-        {
-            Results.Add(Fact);
-        }
-    }
-    return Results;
-}
-
-void UPrologEngine::RetractPattern(const FString& Predicate, const FString& FirstArg, const FString& SecondArg)
-{
-    FString Prefix;
-    if (SecondArg.IsEmpty())
-    {
-        Prefix = FString::Printf(TEXT("%s(%s"), *Predicate, *FirstArg);
-    }
-    else
-    {
-        Prefix = FString::Printf(TEXT("%s(%s, %s"), *Predicate, *FirstArg, *SecondArg);
-    }
-
-    Facts.RemoveAll([&Prefix](const FString& F) {
-        return F.StartsWith(Prefix);
-    });
-
-    FactCount = Facts.Num();
-}
-
-void UPrologEngine::RetractByPredicate(const FString& Predicate)
-{
-    FString Prefix = FString::Printf(TEXT("%s("), *Predicate);
-    Facts.RemoveAll([&Prefix, &Predicate](const FString& F) {
-        return F.StartsWith(Prefix) || F == Predicate;
-    });
-    FactCount = Facts.Num();
-}
-
 FString UPrologEngine::Sanitize(const FString& Str)
 {
     FString Result = Str.ToLower();
 
-    // Replace non-alphanumeric/underscore characters with underscore
     FString Sanitized;
     Sanitized.Reserve(Result.Len());
     for (int32 i = 0; i < Result.Len(); ++i)
@@ -1731,19 +1624,16 @@ FString UPrologEngine::Sanitize(const FString& Str)
         }
     }
 
-    // Prefix leading digits with underscore
     if (Sanitized.Len() > 0 && FChar::IsDigit(Sanitized[0]))
     {
         Sanitized = TEXT("_") + Sanitized;
     }
 
-    // Collapse multiple underscores
     while (Sanitized.Contains(TEXT("__")))
     {
         Sanitized = Sanitized.Replace(TEXT("__"), TEXT("_"));
     }
 
-    // Remove trailing underscore
     Sanitized.RemoveFromEnd(TEXT("_"));
 
     return Sanitized;

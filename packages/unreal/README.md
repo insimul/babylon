@@ -166,6 +166,7 @@ For offline TTS, install the **Runtime Text To Speech** plugin from Fab (Piper/K
 | `UInsimulCharacterMappingSubsystem` | World subsystem. Manages character ID pool. Auto-loads from server (online) or JSON file (offline) at startup. `LoadInsimulCharacters(ServerURL)` / `LoadInsimulCharactersFromFile(FilePath)`. |
 | `UInsimulCrowdIntegration` | GameInstance subsystem. Auto-adds `InsimulCharacterMappingComponent` to spawned crowd actors. `EnableAutomaticMapping(bool)`. |
 | `UInsimulQuestManager` | GameInstance subsystem. Quest tracking and UI management. |
+| `UInsimulPrologSubsystem` | GameInstance subsystem. **Real Prolog** knowledge base (libinsimul, not the legacy substring matcher). Consult/assert/retract/query/snapshot over the game world's logic. See [Prolog subsystem](#prolog-subsystem-real-logic-engine) below. |
 
 ### Networking
 
@@ -183,6 +184,96 @@ For offline TTS, install the **Runtime Text To Speech** plugin from Fab (Piper/K
 | `FInsimulExportedWorld` | Exported world data: characters + dialogue contexts. |
 | `FInsimulDialogueContext` | Per-character: system prompt, greeting, voice, truths. |
 | `FInsimulWorldExportLoader` | Loads world data from JSON (single-file or split-file layout). |
+
+## Prolog subsystem (real logic engine)
+
+`UInsimulPrologSubsystem` is a **GameInstance subsystem** that owns one real
+Prolog knowledge base backed by `libinsimul` (Trealla under the hood). It replaces
+the legacy `PrologEngine` substring matcher with a genuine unification engine.
+The subsystem is a **thin marshalling layer** — all engine logic lives in the
+UE-free `insimul::InsimulKB` core (`Private/Prolog/InsimulKB.h`); the subsystem
+only converts between UE reflected types and that core and enforces game-thread
+affinity.
+
+### Getting the subsystem
+
+**Blueprint:** `Get Game Instance Subsystem` → class `InsimulPrologSubsystem`.
+
+**C++:**
+```cpp
+UInsimulPrologSubsystem* Prolog =
+    GetGameInstance()->GetSubsystem<UInsimulPrologSubsystem>();
+```
+
+The KB is created in `Initialize` and released in `Deinitialize` — one long-lived
+KB per GameInstance. Check `IsPrologReady()` before use.
+
+### Blueprint surface
+
+| Function | Kind | Description |
+| --- | --- | --- |
+| `ConsultWorldData(PrologSource)` → `bool` | Callable | Load a block of Prolog clauses/directives (e.g. the exported world `*.pl`). `false` on syntax error — nothing is loaded then (see `GetLastError`). |
+| `AssertFact(Fact)` → `bool` | Callable | Assert one clause as term text **without** a trailing `.` (e.g. `quest(find_sword, active)`). |
+| `RetractFact(Fact)` → `bool` | Callable | Retract the first clause unifying with `Fact`. `true` only when a clause was actually removed; a no-match is `false` without setting an error. |
+| `QueryFirst(Goal, out Binding)` → `bool` | Callable | First solution of `Goal` into `Binding`. `false` on zero solutions **or** a start error — disambiguate via `GetLastError` (empty vs set). |
+| `QueryAll(Goal, out Solutions)` → `bool` | Callable | Every solution of `Goal`. `false` only if the query failed to start; a `true` with an empty array means zero solutions. |
+| `SnapshotToString()` → `FString` | Callable | Serialize the KB's dynamic state to a canonical Prolog-text image (for `GameSaveState.prologFacts`). `""` on error. **Clauses only — not `:- op/3` directives.** |
+| `RestoreFromString(Image)` → `bool` | Callable | Replace the KB's dynamic state from a snapshot image. `false` on a malformed image (KB unchanged). |
+| `GetLastError()` → `FString` | Pure | Message for the last operation, or `""` on success. |
+| `IsPrologReady()` → `bool` | Pure | `true` once the KB is created and ready. |
+| `GetPrologVersion()` → `FString` | Pure (static) | `libinsimul` version string. |
+| `GetBoundValue(Binding, VarName, out Value)` → `bool` | Pure (static) | Look up a named variable in a binding set. |
+
+Goals/facts are term text **without** a trailing `.` (e.g. `parent(tom, X)`).
+
+### Binding types
+
+A solution is an `FInsimulPrologBinding` — an array of `FInsimulPrologVar`
+(`Name` + `Value`). `FInsimulPrologValue` is a flattened term:
+
+- `Type` (`EInsimulPrologValueType`: `Atom` / `Int` / `Float` / `List` /
+  `Compound` / `Null`)
+- `Text` — atom text or a compound's functor
+- `IntValue` / `FloatValue` — numeric payloads
+- `DisplayString` — the canonical rendered term (always populated)
+- `Elements` — rendered list items / compound args
+
+Use the static `GetBoundValue(Binding, "X", ...)` to pull a variable out of a
+solution.
+
+### Usage snippet (C++)
+
+```cpp
+UInsimulPrologSubsystem* Prolog =
+    GetGameInstance()->GetSubsystem<UInsimulPrologSubsystem>();
+if (!Prolog || !Prolog->IsPrologReady()) return;
+
+// Load world data + assert a runtime fact.
+Prolog->ConsultWorldData(TEXT("parent(tom, bob). parent(bob, ann)."));
+Prolog->AssertFact(TEXT("quest(find_sword, active)"));
+
+// Query every solution.
+TArray<FInsimulPrologBinding> Solutions;
+if (Prolog->QueryAll(TEXT("parent(tom, X)"), Solutions))
+{
+    for (const FInsimulPrologBinding& Sol : Solutions)
+    {
+        FInsimulPrologValue X;
+        if (UInsimulPrologSubsystem::GetBoundValue(Sol, TEXT("X"), X))
+        {
+            UE_LOG(LogTemp, Log, TEXT("child = %s"), *X.DisplayString);
+        }
+    }
+}
+
+// Save / load round-trip (GameSaveState.prologFacts).
+FString Image = Prolog->SnapshotToString();
+// ... later, into a fresh KB ...
+Prolog->RestoreFromString(Image);
+```
+
+> **Thread affinity:** the KB is single-thread-owned. Every call must run on the
+> game thread — off-thread calls are logged and ignored (they return `false`/`""`).
 
 ## World Export JSON Format
 
