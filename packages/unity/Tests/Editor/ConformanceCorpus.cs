@@ -64,16 +64,11 @@ namespace Insimul.Prolog.Conformance
     /// </summary>
     public static class ConformanceCorpus
     {
-        /// <summary>
-        /// Radiant conformance is SKIPPED: the libinsimul C ABI
-        /// (insimul-native/include/insimul.h) exposes no radiant tick yet, so there
-        /// is no way to drive radiant cases through <see cref="InsimulProlog"/>.
-        /// TODO: enable when the libinsimul radiant story lands a tick entry point,
-        /// then load <c>conformance/radiant/*.json</c> here alongside the Prolog cases.
-        /// </summary>
-        public const string RadiantSkipReason =
-            "radiant conformance skipped: libinsimul exposes no radiant tick yet " +
-            "(insimul-native/include/insimul.h). TODO: libinsimul radiant story.";
+        // Radiant conformance (conformance/radiant/*.json) is now runnable: the
+        // radiant generator is Prolog template DATA + a fixed deterministic algorithm
+        // (InsimulRadiantEngine), so it re-implements over the SAME real KB rather
+        // than needing a native radiant tick entry point. Its runner lives in the
+        // sibling RadiantCorpus.cs.
 
         // Optional override for machines/CI where the corpus is not adjacent to the
         // package (e.g. a UPM install pulled out of the monorepo). Points at the
@@ -147,15 +142,6 @@ namespace Insimul.Prolog.Conformance
                 }
             }
             return cases;
-        }
-
-        /// <summary>True if a non-empty <c>radiant/*.json</c> corpus exists (currently unused — see <see cref="RadiantSkipReason"/>).</summary>
-        public static bool RadiantCorpusPresent(string corpusRoot = null)
-        {
-            corpusRoot ??= LocateCorpusRoot();
-            if (corpusRoot == null) return false;
-            string radiantDir = Path.Combine(corpusRoot, "radiant");
-            return Directory.Exists(radiantDir) && Directory.GetFiles(radiantDir, "*.json").Length > 0;
         }
 
         /// <summary>

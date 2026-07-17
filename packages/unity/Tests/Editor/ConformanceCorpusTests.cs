@@ -49,14 +49,5 @@ namespace Insimul.Prolog.Tests.Editor
                 $"{c}: expected {ConformanceCorpus.Describe(c.Expected)} " +
                 $"but got {ConformanceCorpus.Describe(actual)}");
         }
-
-        // Radiant conformance is not runnable yet — the native ABI exposes no radiant
-        // tick. Kept as an explicitly-ignored test so the skip is tracked and visible
-        // in the Unity Test Runner rather than silently absent.
-        [Test]
-        public void RadiantConformance_SkippedUntilNativeTick()
-        {
-            Assert.Ignore(ConformanceCorpus.RadiantSkipReason);
-        }
     }
 }

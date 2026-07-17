@@ -229,6 +229,51 @@ Not deleted yet — a shipped game still vendors these for the current export/sc
 path; they retire once the template bootstrap (US-UC5) forwards its MonoBehaviour
 events to `InsimulQuestRuntime`.
 
+## US-UC4 — Radiant tick
+
+`Runtime/Radiant/InsimulRadiantEngine.cs` ports the radiant slot-filling
+generator (`packages/core/src/radiant/radiant-engine.ts`) — a byte-for-byte C#
+twin of `generateRadiantQuests`. It is a **semantics port, not a native tick**:
+the radiant generator is Prolog template DATA + a fixed deterministic algorithm,
+so it re-implements the algorithm over the SAME real KB (via the `IRadiantSolver`
+seam) rather than needing a `libinsimul` radiant entry point.
+
+- **Determinism (the conformance contract)**: candidate slot fills come from the
+  real Prolog engine, are CANONICALLY SORTED here (never trust engine enumeration
+  order), and exactly one is chosen with a seeded `mulberry32` RNG (the same
+  uint32 arithmetic as the TS reference). Templates process in sorted TplId order.
+  Same `(kb, seed, now)` ⇒ byte-identical `questContent` / `factsToAssert` /
+  `factsToRetract`.
+- **Native backing**: `Runtime/Radiant/InsimulPrologRadiantSolver.cs` wraps an
+  `InsimulProlog` session so preconditions / exclusions / cooldowns solve against
+  the real `libinsimul` KB (the same engine the Prolog conformance corpus uses).
+- **Wiring**: `InsimulQuestRuntime.RunRadiantTick(program, solver, opts)` generates
+  side quests, registers each (`RegisterQuest`), folds its provenance / cooldown
+  bookkeeping into `currentState.prologFacts` (retract-then-assert), and fires
+  `OnRadiantQuestGenerated`. The caller triggers it on the same events as the
+  Babylon `RadiantQuestDirector` (time tick / quest board open / quest completion).
+  The read-only `worldSnapshot` is never touched — this runtime only mutates the KB.
+
+### Verification
+
+- `RadiantCorpus.cs` (framework-agnostic) + `RadiantCorpusTests.cs` (Unity NUnit)
+  run every case in `packages/core/conformance/radiant/*.json` through the engine
+  backed by the real `InsimulProlog`; `tools/verify-unity/Program.cs`
+  (`RunRadiantConformance`) is the authoritative host gate.
+- `RunRadiantPureTests` (Program.cs) + the pure NUnit tests drive the deterministic
+  engine with a `StubRadiantSolver` (no native library): seed-driven pick,
+  cooldown/exclusion suppression, and the tick-folds-into-quest-system +
+  worldSnapshot-byte-stable assertions.
+- On a box without the .NET SDK the host tests SKIP (autoMerge is off; CI runs the
+  dotnet half). The C# parser + uint32 RNG + serialization are proven byte-identical
+  to all 11 golden corpus cases via a JS transliteration during development (see
+  progress.txt).
+
+### Retired template file
+
+None — radiant generation is a NEW capability (the template `QuestSystem.cs`
+prototype had no procedural/radiant quest generation).
+
 ## Regenerating
 
 ```

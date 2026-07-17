@@ -16,6 +16,8 @@ using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
 using Insimul.Quest;
 using Insimul.Quest.TestSupport;
+using Insimul.Radiant;
+using Insimul.Radiant.Conformance;
 using Insimul.Save;
 using Insimul.Save.TestSupport;
 using Insimul.World;
@@ -39,6 +41,7 @@ namespace Insimul.Verify
             RunWorldSourceTests();
             RunSaveSystemTests();
             RunQuestSystemTests();
+            RunRadiantPureTests();
 
             if (skipNative)
             {
@@ -52,6 +55,7 @@ namespace Insimul.Verify
                 RunNativeTests();
                 RunAdapterNativeTests();
                 RunConformanceCorpus();
+                RunRadiantConformance();
                 RunSaveKbRoundTripNative();
                 RunQuestKbRoundTripNative();
             }
@@ -660,12 +664,168 @@ namespace Insimul.Verify
                         $"but got {ConformanceCorpus.Describe(actual)}");
                 });
             }
+        }
 
-            // Radiant: skipped until libinsimul exposes a radiant tick (tracked TODO).
-            string radiantNote = ConformanceCorpus.RadiantCorpusPresent(root)
-                ? "radiant corpus present but " + ConformanceCorpus.RadiantSkipReason
-                : "no radiant corpus; " + ConformanceCorpus.RadiantSkipReason;
-            Console.WriteLine($"  SKIP  {radiantNote}");
+        // ---- Radiant conformance (US-UC4, native) ---------------------------
+
+        private static void RunRadiantConformance()
+        {
+            Section("Radiant conformance (packages/core/conformance/radiant)");
+
+            string root = RadiantCorpus.LocateCorpusRoot();
+            var cases = RadiantCorpus.Load(root);
+            if (cases.Count == 0)
+            {
+                _failed++;
+                Console.WriteLine("  FAIL  no radiant corpus cases loaded " +
+                                  "(set INSIMUL_CONFORMANCE_DIR to the conformance root)");
+                return;
+            }
+
+            Console.WriteLine($"      {cases.Count} case(s) from {root}");
+            foreach (RadiantCorpusCase c in cases)
+            {
+                Case($"[{c.File}] {c.Name}", () =>
+                {
+                    var produced = RadiantCorpus.Run(c);
+                    var (ok, message) = RadiantCorpus.Compare(produced, c);
+                    AssertTrue(ok, message ?? "mismatch");
+                });
+            }
+        }
+
+        // ---- Radiant engine (US-UC4, pure — libinsimul-free) ----------------
+
+        private static void RunRadiantPureTests()
+        {
+            Section("Radiant engine (US-UC4, pure)");
+
+            // A single fetch template with two givers × two herbs. Mirrors the
+            // conformance single-slot-fill-multi-candidate case (minus the exclusion,
+            // which does not affect the pick) so the seeded pick + serialization are
+            // proven byte-identical to the golden output WITHOUT a native library.
+            const string program =
+                "radiant_template(rt_fetch, [category(fetch), title('Gather Herbs for {giver}'), quest_type(gathering), difficulty(2)]).\n" +
+                "radiant_precondition(rt_fetch, giver, character_occupation(Giver, herbalist)).\n" +
+                "radiant_precondition(rt_fetch, item, item_category(Item, herb)).\n" +
+                "radiant_objective(rt_fetch, collect(Item, 5)).\n" +
+                "radiant_objective(rt_fetch, deliver(Item, Giver)).\n" +
+                "radiant_reward(rt_fetch, gold, times(20, difficulty)).\n" +
+                "radiant_reward(rt_fetch, experience, 25).\n" +
+                "radiant_cooldown(rt_fetch, 3600).";
+
+            const string conj = "character_occupation(Giver, herbalist), item_category(Item, herb)";
+
+            StubRadiantSolver Solver() => new StubRadiantSolver()
+                .On(conj,
+                    "{\"Giver\":\"anne\",\"Item\":\"sage\"}",
+                    "{\"Giver\":\"anne\",\"Item\":\"mint\"}",
+                    "{\"Giver\":\"bob\",\"Item\":\"sage\"}",
+                    "{\"Giver\":\"bob\",\"Item\":\"mint\"}");
+
+            Case("seed 'contract' picks the golden candidate (anne, sage) byte-identically", () =>
+            {
+                var r = InsimulRadiantEngine.Generate(program, Solver(),
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 1000 });
+                AssertEqual(1, r.Quests.Count);
+                var q = r.Quests[0];
+                AssertEqual("radiant_rt_fetch_1000", q.QuestId);
+                var content = new HashSet<string>(q.QuestContent.Split('\n'));
+                AssertTrue(content.Contains("quest(radiant_rt_fetch_1000, 'Gather Herbs for anne', gathering, 2, available)."),
+                    "quest header with anne");
+                AssertTrue(content.Contains("quest_objective(radiant_rt_fetch_1000, 0, collect(sage, 5))."), "objective 0");
+                AssertTrue(content.Contains("quest_objective(radiant_rt_fetch_1000, 1, deliver(sage, anne))."), "objective 1");
+                AssertTrue(content.Contains("quest_reward(radiant_rt_fetch_1000, gold, 40)."), "gold = 20 × difficulty(2)");
+                AssertTrue(content.Contains("quest_reward(radiant_rt_fetch_1000, experience, 25)."), "flat experience");
+                AssertTrue(q.FactsToAssert.Contains("radiant_generated(radiant_rt_fetch_1000, rt_fetch, 1000)."), "provenance");
+                AssertTrue(q.FactsToAssert.Contains("radiant_cooldown_until(rt_fetch, 4600)."), "cooldown");
+                AssertEqual(0, q.FactsToRetract.Count);
+            });
+
+            Case("alternate seed 'zephyr' selects a different giver (bob) — seed drives the pick", () =>
+            {
+                var r = InsimulRadiantEngine.Generate(program, Solver(),
+                    new RadiantOptions { Seed = RadiantSeed.Of("zephyr"), Now = 1000 });
+                AssertEqual(1, r.Quests.Count);
+                AssertTrue(r.Quests[0].QuestContent.Contains("'Gather Herbs for bob'"), "seed selects bob");
+            });
+
+            Case("exclusion goal that succeeds suppresses the template", () =>
+            {
+                var solver = Solver().Succeed("radiant_generated(_, rt_fetch, _)");
+                string withExcl = program + "\nradiant_exclusion(rt_fetch, radiant_generated(_, rt_fetch, _)).";
+                var r = InsimulRadiantEngine.Generate(withExcl, solver,
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 1000 });
+                AssertEqual(0, r.Quests.Count);
+            });
+
+            Case("an active future cooldown suppresses; retract-then-assert once elapsed", () =>
+            {
+                var solver = Solver().On("radiant_cooldown_until(rt_fetch, T)", "{\"T\":5000}");
+                var active = InsimulRadiantEngine.Generate(program, solver,
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 1000 });
+                AssertEqual(0, active.Quests.Count);
+
+                var elapsed = InsimulRadiantEngine.Generate(program, solver,
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 6000 });
+                AssertEqual(1, elapsed.Quests.Count);
+                AssertTrue(elapsed.Quests[0].FactsToRetract.Contains("radiant_cooldown_until(rt_fetch, 5000)."),
+                    "stale cooldown retracted");
+                AssertTrue(elapsed.Quests[0].FactsToAssert.Contains("radiant_cooldown_until(rt_fetch, 9600)."),
+                    "fresh cooldown asserted (6000 + 3600)");
+            });
+
+            Case("RunRadiantTick folds generated quests + facts into the quest system; worldSnapshot untouched", () =>
+            {
+                const string worldSnapshot =
+                    "{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}";
+
+                var save = new InsimulSaveSystem();
+                save.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                string snapHashBefore = ExtractWorldSnapshotIntegrity(save);
+
+                var rt = new InsimulQuestRuntime();
+                string generated = null;
+                rt.OnRadiantQuestGenerated += id => generated = id;
+
+                var result = rt.RunRadiantTick(program, Solver(),
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 1000 });
+
+                AssertEqual(1, result.Quests.Count);
+                AssertEqual("radiant_rt_fetch_1000", generated);
+                AssertTrue(rt.GetQuest("radiant_rt_fetch_1000") != null, "quest registered in the runtime");
+
+                // The provenance + cooldown facts landed in currentState.prologFacts.
+                AssertTrue(rt.Kb.Has("radiant_generated",
+                        new[] { PrologArg.Atom("radiant_rt_fetch_1000"), PrologArg.Atom("rt_fetch"), PrologArg.Number(1000) }),
+                    "radiant_generated in the KB");
+                AssertTrue(rt.Kb.Has("radiant_cooldown_until",
+                        new[] { PrologArg.Atom("rt_fetch"), PrologArg.Number(4600) }),
+                    "radiant_cooldown_until in the KB");
+
+                // Persist through the save file — worldSnapshot must be byte-stable.
+                save.SnapshotFacts(rt.Facts);
+                string snapHashAfter = ExtractWorldSnapshotIntegrity(save);
+                AssertEqual(snapHashBefore, snapHashAfter);
+
+                // Reload → generated quest survives, facts intact.
+                var reloaded = new InsimulSaveSystem();
+                reloaded.Load(save.SerializeCanonical());
+                var restored = reloaded.RestoreFacts();
+                bool provenance = false;
+                foreach (var f in restored)
+                    if (f.Predicate == "radiant_generated") provenance = true;
+                AssertTrue(provenance, "radiant provenance round-trips through the save");
+            });
+        }
+
+        /// <summary>Canonical integrity hash of just the SaveFile.worldSnapshot node.</summary>
+        private static string ExtractWorldSnapshotIntegrity(InsimulSaveSystem save)
+        {
+            var root = save.SaveFile;
+            return root.TryGet("worldSnapshot", out var snap)
+                ? Insimul.Save.CanonicalJson.Integrity(snap)
+                : "<none>";
         }
 
         // ---- Save system (US-UC2) -------------------------------------------

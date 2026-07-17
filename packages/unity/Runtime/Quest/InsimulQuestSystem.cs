@@ -145,6 +145,16 @@ namespace Insimul.Quest
             return false;
         }
 
+        /// <summary>Retract an exact ground fact. Returns true if one was removed.</summary>
+        public bool Retract(PrologFact fact)
+        {
+            for (int i = 0; i < _facts.Count; i++)
+            {
+                if (_facts[i].Equals(fact)) { _facts.RemoveAt(i); return true; }
+            }
+            return false;
+        }
+
         public IReadOnlyList<PrologFact> Facts => _facts;
 
         public void Load(IEnumerable<PrologFact> facts)
