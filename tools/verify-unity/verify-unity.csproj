@@ -155,6 +155,16 @@
          tests (action facts through the real KB path, history round-trip to
          save.conversations). -->
     <Compile Include="../../packages/unity/Runtime/UI/InsimulChatModel.cs" />
+    <!-- Unified pause menu + main menu + save/load view-models (US-UU5): the pure,
+         UnityEngine-free tab-gating model (module-bundle-gated tabs, driven off the
+         genre bundle) + the save/load slot model (outcome→row projection +
+         corrupted-envelope messaging, with a ClassifyEnvelope path over the real
+         SHA-256 integrity chain). The UGUI views (Runtime/UI/InsimulPauseMenu/
+         MainMenu/SaveLoadPanel.cs) are structural-gate-only. RunPauseMenu/SaveSlot
+         tests in Program.cs drive these against the shared corpus (pause-menu-cases.json,
+         save-slot-cases.json) + a real envelope validate/tamper. -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulPauseMenuModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulSaveSlotModel.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/UiCorpus.cs" />
   </ItemGroup>
 

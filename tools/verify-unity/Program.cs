@@ -63,6 +63,8 @@ namespace Insimul.Verify
             RunQuestFeedTests();
             RunTradeTests();
             RunChatTests();
+            RunPauseMenuTests();
+            RunSaveSlotTests();
 
             if (skipNative)
             {
@@ -2624,6 +2626,160 @@ namespace Insimul.Verify
                 AssertEqual("Hello", turns.Items[1].TryGet("content", out var c1) ? c1.Str : "");
                 AssertEqual("Good day to you.", turns.Items[2].TryGet("content", out var c2) ? c2.Str : "");
             });
+        }
+
+        private static void RunPauseMenuTests()
+        {
+            Section("Default UI — pause menu: tab-gating view-model (US-UU5)");
+
+            var cases = UiCorpus.LoadPauseMenuCases();
+            AssertTrue(cases.Count > 0, "pause-menu-cases.json must load");
+            foreach (PauseMenuCase c in cases)
+            {
+                Case($"pause-menu: {c.Name}", () =>
+                {
+                    List<MenuTabDef> tabs = null;
+                    if (c.Tabs != null)
+                    {
+                        tabs = new List<MenuTabDef>();
+                        foreach (PauseMenuTabDef t in c.Tabs)
+                            tabs.Add(new MenuTabDef(t.Key, t.Label, t.Requires?.ToArray() ?? new string[0]));
+                    }
+                    var model = new InsimulPauseMenuModel(c.EnabledModules, tabs);
+
+                    AssertSequence(c.ExpectedVisibleKeys, model.VisibleKeys(), $"{c.Name}: visible keys");
+
+                    foreach (PauseMenuStep s in c.Steps)
+                    {
+                        switch (s.Op)
+                        {
+                            case "open": model.OpenMenu(string.IsNullOrEmpty(s.Tab) ? null : s.Tab); break;
+                            case "close": model.CloseMenu(); break;
+                            case "toggle": model.Toggle(); break;
+                            case "set_active":
+                            {
+                                bool ok = model.SetActive(s.Key);
+                                if (s.HasExpectedOk) AssertEqual(s.ExpectedOk, ok);
+                                break;
+                            }
+                            case "expect_active": AssertEqual(s.Key, model.ActiveTab()); break;
+                            case "expect_open": AssertEqual(s.Value, model.IsOpen()); break;
+                            default: throw new Exception($"unknown pause-menu step op '{s.Op}'");
+                        }
+                    }
+                });
+            }
+
+            // AC1: genre-bundle fixtures show different tab sets (rpg vs strategy vs
+            // language-learning — the IR's genre bundle drives tab visibility).
+            Case("Genre-bundle gating: rpg, strategy, and language-learning show different tabs", () =>
+            {
+                var rpg = InsimulPauseMenuModel.ForGenre("rpg").VisibleKeys();
+                var strategy = InsimulPauseMenuModel.ForGenre("strategy").VisibleKeys();
+                var learning = InsimulPauseMenuModel.ForGenre("language-learning").VisibleKeys();
+
+                // rpg: character/vocabulary/skills/analytics but NOT assessment.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "character", "vocabulary", "skills", "analytics", "settings", "save" },
+                    rpg, "rpg tabs");
+                // strategy: proficiency only among the gated tabs -> character shows, the rest hide.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "character", "settings", "save" },
+                    strategy, "strategy tabs");
+                // language-learning: every gated tab including assessment.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "character", "vocabulary", "skills", "analytics", "assessment", "settings", "save" },
+                    learning, "language-learning tabs");
+
+                AssertTrue(rpg.Count != strategy.Count, "rpg and strategy differ");
+                AssertTrue(learning.Contains("assessment"), "language-learning shows assessment");
+                AssertTrue(!rpg.Contains("assessment"), "rpg hides assessment");
+                AssertTrue(!strategy.Contains("vocabulary"), "strategy hides vocabulary");
+
+                // An unknown genre enables no modules -> only the ungated core tabs.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "settings", "save" },
+                    InsimulPauseMenuModel.ForGenre("no-such-genre").VisibleKeys(), "unknown genre tabs");
+            });
+        }
+
+        private static void RunSaveSlotTests()
+        {
+            Section("Default UI — save/load slot view-model (US-UU5)");
+
+            var cases = UiCorpus.LoadSaveSlotCases();
+            AssertTrue(cases.Count > 0, "save-slot-cases.json must load");
+            foreach (SaveSlotCase c in cases)
+            {
+                Case($"save-slot: {c.Name}", () =>
+                {
+                    var seeds = new List<SlotLoadResult>();
+                    foreach (SaveSlotSeed s in c.Slots)
+                        seeds.Add(new SlotLoadResult(s.Index, s.Outcome, ToSummary(s.Summary)));
+                    var model = new InsimulSaveSlotModel(seeds);
+
+                    List<SlotView> rows = model.Slots();
+                    AssertEqual(c.Expected.Count, rows.Count);
+                    for (int i = 0; i < c.Expected.Count; i++)
+                    {
+                        SaveSlotExpectedRow e = c.Expected[i];
+                        AssertEqual(e.Index, rows[i].Index);
+                        AssertEqual(e.Status, rows[i].Status);
+                        AssertEqual(e.Title, rows[i].Title);
+                        AssertEqual(e.Message, rows[i].Message);
+                        AssertEqual(e.CanLoad, rows[i].CanLoad);
+                        AssertEqual(e.CanSave, rows[i].CanSave);
+                    }
+                    AssertEqual(c.ExpectedHasLoadable, model.HasAnyLoadable());
+                });
+            }
+
+            // AC2: corrupted-envelope handling proven through the REAL integrity chain
+            // (SHA-256) via ClassifyEnvelope over InsimulSaveSystem.ValidateEnvelope.
+            Case("ClassifyEnvelope: healthy save -> ok; tampered -> corrupted (integrity_mismatch)", () =>
+            {
+                const string worldSnapshot = "{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}";
+                var save = new InsimulSaveSystem();
+                save.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                string good = save.BuildEnvelopeJson("1.0.0", "2026-01-01T00:00:00.000Z");
+
+                var okRes = InsimulSaveSlotModel.ClassifyEnvelope(0, good);
+                AssertEqual("ok", okRes.Outcome);
+
+                // Tamper with the payload -> the SHA-256 chain rejects it.
+                string tampered = good.Replace("\"totalPlaytime\":0", "\"totalPlaytime\":9999");
+                AssertTrue(tampered != good, "tamper applied");
+                var badRes = InsimulSaveSlotModel.ClassifyEnvelope(1, tampered);
+                AssertEqual("integrity_mismatch", badRes.Outcome);
+
+                // Wrong format + empty candidate map to the right outcomes.
+                AssertEqual("invalid_format",
+                    InsimulSaveSlotModel.ClassifyEnvelope(2, "{\"format\":\"nope\",\"saveFile\":{},\"integrity\":\"x\"}").Outcome);
+                AssertEqual("empty", InsimulSaveSlotModel.ClassifyEnvelope(3, null).Outcome);
+
+                // A model built from these renders the corrupted MESSAGING + gates loading.
+                var model = new InsimulSaveSlotModel(new List<SlotLoadResult> { okRes, badRes });
+                AssertTrue(model.HasAnyLoadable(), "the healthy slot is loadable");
+                SlotView corrupted = model.Slot(1);
+                AssertEqual("corrupted", corrupted.Status);
+                AssertEqual("Save file integrity check failed — file may be corrupted or tampered.", corrupted.Message);
+                AssertTrue(!corrupted.CanLoad && corrupted.CanSave, "corrupted: cannot load, can overwrite");
+            });
+        }
+
+        private static SlotSummary ToSummary(SaveSlotSummarySeed s)
+        {
+            if (s == null) return null;
+            return new SlotSummary
+            {
+                PlayerName = s.PlayerName,
+                HasLevel = s.HasLevel,
+                Level = s.Level,
+                LocationName = s.LocationName,
+                HasGold = s.HasGold,
+                Gold = s.Gold,
+                SavedAt = s.SavedAt,
+            };
         }
 
         /// <summary>Replay a chat case's ordered event stream against the model, asserting

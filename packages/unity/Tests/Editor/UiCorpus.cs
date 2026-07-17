@@ -166,6 +166,75 @@ namespace Insimul.UI.TestSupport
         public override string ToString() => $"chat:{Name}";
     }
 
+    // ── Pause-menu tab-gating cases ───────────────────────────────────────────
+
+    public sealed class PauseMenuStep
+    {
+        public string Op;                     // open | close | toggle | set_active | expect_active | expect_open
+        public string Key;                    // set_active / expect_active
+        public string Tab;                    // open (target tab)
+        public bool HasExpectedOk;
+        public bool ExpectedOk;               // set_active
+        public bool HasValue;
+        public bool Value;                    // expect_open
+    }
+
+    public sealed class PauseMenuTabDef
+    {
+        public string Key;
+        public string Label;
+        public List<string> Requires;         // null when absent
+    }
+
+    public sealed class PauseMenuCase
+    {
+        public string Name;
+        public List<string> EnabledModules = new List<string>();
+        public List<PauseMenuTabDef> Tabs;    // null = default tabs
+        public List<string> ExpectedVisibleKeys = new List<string>();
+        public List<PauseMenuStep> Steps = new List<PauseMenuStep>();
+        public override string ToString() => $"pause-menu:{Name}";
+    }
+
+    // ── Save/load slot cases ──────────────────────────────────────────────────
+
+    public sealed class SaveSlotSummarySeed
+    {
+        public string PlayerName;
+        public bool HasLevel;
+        public int Level;
+        public string LocationName;
+        public bool HasGold;
+        public int Gold;
+        public string SavedAt;
+    }
+
+    public sealed class SaveSlotSeed
+    {
+        public int Index;
+        public string Outcome;
+        public SaveSlotSummarySeed Summary;   // null when absent
+    }
+
+    public sealed class SaveSlotExpectedRow
+    {
+        public int Index;
+        public string Status;
+        public string Title;
+        public string Message;
+        public bool CanLoad;
+        public bool CanSave;
+    }
+
+    public sealed class SaveSlotCase
+    {
+        public string Name;
+        public List<SaveSlotSeed> Slots = new List<SaveSlotSeed>();
+        public List<SaveSlotExpectedRow> Expected = new List<SaveSlotExpectedRow>();
+        public bool ExpectedHasLoadable;
+        public override string ToString() => $"save-slot:{Name}";
+    }
+
     // ── Corpus locator + parsers ──────────────────────────────────────────────
 
     public static class UiCorpus
@@ -391,6 +460,94 @@ namespace Insimul.UI.TestSupport
                 list.Add(cc);
             }
             return list;
+        }
+
+        public static IReadOnlyList<PauseMenuCase> LoadPauseMenuCases()
+        {
+            var list = new List<PauseMenuCase>();
+            var root = ReadFile("pause-menu-cases.json");
+            if (root == null || !root.Value.TryGetProperty("cases", out JsonElement cases)) return list;
+            foreach (JsonElement el in cases.EnumerateArray())
+            {
+                var pc = new PauseMenuCase
+                {
+                    Name = Str(el, "name"),
+                    EnabledModules = StrList(el, "enabled_modules") ?? new List<string>(),
+                    ExpectedVisibleKeys = StrList(el, "expected_visible_keys") ?? new List<string>(),
+                };
+                if (el.TryGetProperty("tabs", out JsonElement tabs) && tabs.ValueKind == JsonValueKind.Array)
+                {
+                    pc.Tabs = new List<PauseMenuTabDef>();
+                    foreach (JsonElement t in tabs.EnumerateArray())
+                        pc.Tabs.Add(new PauseMenuTabDef
+                        {
+                            Key = Str(t, "key"),
+                            Label = Str(t, "label"),
+                            Requires = StrList(t, "requires"),
+                        });
+                }
+                if (el.TryGetProperty("steps", out JsonElement steps) && steps.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement s in steps.EnumerateArray())
+                    {
+                        var step = new PauseMenuStep
+                        {
+                            Op = Str(s, "op"),
+                            Key = Str(s, "key"),
+                            Tab = Str(s, "tab"),
+                        };
+                        if (s.TryGetProperty("expected_ok", out JsonElement ok)) { step.HasExpectedOk = true; step.ExpectedOk = ok.GetBoolean(); }
+                        if (s.TryGetProperty("value", out JsonElement v)) { step.HasValue = true; step.Value = v.GetBoolean(); }
+                        pc.Steps.Add(step);
+                    }
+                }
+                list.Add(pc);
+            }
+            return list;
+        }
+
+        public static IReadOnlyList<SaveSlotCase> LoadSaveSlotCases()
+        {
+            var list = new List<SaveSlotCase>();
+            var root = ReadFile("save-slot-cases.json");
+            if (root == null || !root.Value.TryGetProperty("cases", out JsonElement cases)) return list;
+            foreach (JsonElement el in cases.EnumerateArray())
+            {
+                var sc = new SaveSlotCase { Name = Str(el, "name") };
+                foreach (JsonElement s in el.GetProperty("slots").EnumerateArray())
+                {
+                    var seed = new SaveSlotSeed { Index = (int)s.GetProperty("index").GetDouble(), Outcome = Str(s, "outcome") };
+                    if (s.TryGetProperty("summary", out JsonElement sum) && sum.ValueKind == JsonValueKind.Object)
+                        seed.Summary = ParseSummary(sum);
+                    sc.Slots.Add(seed);
+                }
+                foreach (JsonElement e in el.GetProperty("expected").EnumerateArray())
+                    sc.Expected.Add(new SaveSlotExpectedRow
+                    {
+                        Index = (int)e.GetProperty("index").GetDouble(),
+                        Status = Str(e, "status"),
+                        Title = Str(e, "title"),
+                        Message = Str(e, "message"),
+                        CanLoad = Bool(e, "can_load"),
+                        CanSave = Bool(e, "can_save"),
+                    });
+                sc.ExpectedHasLoadable = Bool(el, "expected_has_loadable");
+                list.Add(sc);
+            }
+            return list;
+        }
+
+        private static SaveSlotSummarySeed ParseSummary(JsonElement sum)
+        {
+            var seed = new SaveSlotSummarySeed
+            {
+                PlayerName = Str(sum, "playerName"),
+                LocationName = Str(sum, "locationName"),
+                SavedAt = Str(sum, "savedAt"),
+            };
+            if (sum.TryGetProperty("level", out JsonElement lv)) { seed.HasLevel = true; seed.Level = (int)lv.GetDouble(); }
+            if (sum.TryGetProperty("gold", out JsonElement gd)) { seed.HasGold = true; seed.Gold = (int)gd.GetDouble(); }
+            return seed;
         }
 
         /// <summary>Read an object of {itemId: quantity} into a dict (null when absent).</summary>

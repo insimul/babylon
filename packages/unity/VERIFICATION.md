@@ -369,3 +369,39 @@ required.
       (or inspect the save). The exchange is in `save.conversations` as a
       ConversationSummary (`recentTurns` role/content + `totalTurnCount`); in-flight /
       errored turns are excluded.
+
+## 11. Unified pause menu + main menu + save/load (US-UU5, Unity editor + Play mode)
+
+The GameMenuSystem equivalent. Tab-gating lives in the UnityEngine-free
+`InsimulPauseMenuModel` (module-bundle-gated tabs — ungated core tabs
+resume/journal/inventory/map/settings/save always show; character/vocabulary/skills/
+analytics/assessment gate on their feature module, driven off the IR's genre bundle via
+`ForGenre`), host-tested (`tools/verify-unity`, `RunPauseMenuTests` against the shared
+corpus `packages/core/conformance/ui/pause-menu-cases.json` + rpg/strategy/
+language-learning genre fixtures showing **different** tab sets). The save/load slot
+projection lives in the UnityEngine-free `InsimulSaveSlotModel` (outcome → row: empty /
+ok-with-summary / corrupted-with-messaging; `HasAnyLoadable` gates main-menu Continue),
+host-tested (`RunSaveSlotTests` against `save-slot-cases.json` + a **ClassifyEnvelope**
+path over the real SHA-256 integrity chain — a tampered envelope renders "Corrupted
+Save … integrity check failed" and cannot be loaded). This is the **human pass** for the
+UGUI seams (`InsimulPauseMenu` resolving through registry keys `pause_menu`/`game_menu`,
+`InsimulMainMenu` → `main_menu`, `InsimulSaveLoadPanel` → `save_load`) plus the
+engine-coupled bits only seen live: `Time.timeScale` pausing, cursor capture, ESC toggle.
+
+- [ ] Press **ESC** in Play mode. The pause overlay opens, the game **pauses**
+      (`Time.timeScale = 0`), the cursor unlocks, and the first visible tab is active.
+      Press ESC again — it closes and the game resumes.
+- [ ] Load a world whose genre bundle is **rpg**: the menu shows Character / Vocabulary /
+      Skills / Analytics but **not** Assessment. Load a **strategy** bundle: only
+      Character shows among the gated tabs. Load a **language-learning** bundle: every
+      gated tab (incl. Assessment) shows.
+- [ ] Open the **Save / Load** panel. Each slot renders its status: an **empty** slot
+      ("Empty Slot", Load disabled), a **healthy** slot (`Name · Lv N · Location`, "Saved
+      <time>", Load enabled), and a **corrupted** slot ("Corrupted Save" + the integrity
+      message, Load disabled but Save/overwrite enabled).
+- [ ] From the **main menu**, with no save present, **Continue** and **Load** are
+      disabled. After saving at least once, both enable (`HasAnyLoadable`).
+- [ ] **Full loop:** main menu → **New Game** → play → ESC → **Save** to a slot → **Quit**
+      to the main menu → **Continue**. The world + quest/inventory/conversation state
+      restore from the slot. Corrupt the save file on disk, reopen Save/Load — the slot
+      shows **Corrupted Save** with the integrity-failure message and cannot be loaded.

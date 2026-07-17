@@ -413,6 +413,110 @@ namespace Insimul.Prolog.Tests.Editor
             }
         }
 
+        // ── Pause menu tab-gating (US-UU5) ────────────────────────────────────
+
+        private static IEnumerable<PauseMenuCase> PauseMenuCases() => UiCorpus.LoadPauseMenuCases();
+
+        [Test]
+        [TestCaseSource(nameof(PauseMenuCases))]
+        public void PauseMenuCase(PauseMenuCase c)
+        {
+            List<MenuTabDef> tabs = null;
+            if (c.Tabs != null)
+            {
+                tabs = new List<MenuTabDef>();
+                foreach (PauseMenuTabDef t in c.Tabs)
+                    tabs.Add(new MenuTabDef(t.Key, t.Label, t.Requires?.ToArray() ?? new string[0]));
+            }
+            var model = new InsimulPauseMenuModel(c.EnabledModules, tabs);
+            Assert.That(model.VisibleKeys(), Is.EqualTo(c.ExpectedVisibleKeys), $"{c}: visible keys");
+
+            foreach (PauseMenuStep s in c.Steps)
+            {
+                switch (s.Op)
+                {
+                    case "open": model.OpenMenu(string.IsNullOrEmpty(s.Tab) ? null : s.Tab); break;
+                    case "close": model.CloseMenu(); break;
+                    case "toggle": model.Toggle(); break;
+                    case "set_active":
+                    {
+                        bool ok = model.SetActive(s.Key);
+                        if (s.HasExpectedOk) Assert.That(ok, Is.EqualTo(s.ExpectedOk), $"{c}: set_active {s.Key}");
+                        break;
+                    }
+                    case "expect_active": Assert.That(model.ActiveTab(), Is.EqualTo(s.Key), $"{c}: active"); break;
+                    case "expect_open": Assert.That(model.IsOpen(), Is.EqualTo(s.Value), $"{c}: open"); break;
+                    default: throw new System.Exception($"unknown pause-menu step op '{s.Op}'");
+                }
+            }
+        }
+
+        [Test]
+        public void PauseMenu_GenreBundlesShowDifferentTabs()
+        {
+            var rpg = InsimulPauseMenuModel.ForGenre("rpg").VisibleKeys();
+            var strategy = InsimulPauseMenuModel.ForGenre("strategy").VisibleKeys();
+            var learning = InsimulPauseMenuModel.ForGenre("language-learning").VisibleKeys();
+            Assert.That(rpg, Does.Not.Contain("assessment"), "rpg hides assessment");
+            Assert.That(strategy, Does.Not.Contain("vocabulary"), "strategy hides vocabulary");
+            Assert.That(learning, Does.Contain("assessment"), "language-learning shows assessment");
+            Assert.That(rpg, Is.Not.EqualTo(strategy), "rpg and strategy differ");
+        }
+
+        // ── Save / load slots (US-UU5) ────────────────────────────────────────
+
+        private static IEnumerable<SaveSlotCase> SaveSlotCases() => UiCorpus.LoadSaveSlotCases();
+
+        [Test]
+        [TestCaseSource(nameof(SaveSlotCases))]
+        public void SaveSlotCase(SaveSlotCase c)
+        {
+            var seeds = new List<SlotLoadResult>();
+            foreach (SaveSlotSeed s in c.Slots) seeds.Add(new SlotLoadResult(s.Index, s.Outcome, ToSummary(s.Summary)));
+            var model = new InsimulSaveSlotModel(seeds);
+            var rows = model.Slots();
+            Assert.That(rows.Count, Is.EqualTo(c.Expected.Count), $"{c}: row count");
+            for (int i = 0; i < c.Expected.Count; i++)
+            {
+                Assert.That(rows[i].Index, Is.EqualTo(c.Expected[i].Index), $"{c}: row[{i}] index");
+                Assert.That(rows[i].Status, Is.EqualTo(c.Expected[i].Status), $"{c}: row[{i}] status");
+                Assert.That(rows[i].Title, Is.EqualTo(c.Expected[i].Title), $"{c}: row[{i}] title");
+                Assert.That(rows[i].Message, Is.EqualTo(c.Expected[i].Message), $"{c}: row[{i}] message");
+                Assert.That(rows[i].CanLoad, Is.EqualTo(c.Expected[i].CanLoad), $"{c}: row[{i}] can_load");
+                Assert.That(rows[i].CanSave, Is.EqualTo(c.Expected[i].CanSave), $"{c}: row[{i}] can_save");
+            }
+            Assert.That(model.HasAnyLoadable(), Is.EqualTo(c.ExpectedHasLoadable), $"{c}: has loadable");
+        }
+
+        [Test]
+        public void SaveSlot_ClassifyEnvelope_CorruptedThroughRealIntegrityChain()
+        {
+            var save = new InsimulSaveSystem();
+            save.NewGame("{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}",
+                new NewGameOptions { Id = "s", WorldId = "w1" });
+            string good = save.BuildEnvelopeJson("1.0.0", "2026-01-01T00:00:00.000Z");
+            Assert.That(InsimulSaveSlotModel.ClassifyEnvelope(0, good).Outcome, Is.EqualTo("ok"));
+
+            string tampered = good.Replace("\"totalPlaytime\":0", "\"totalPlaytime\":9999");
+            Assert.That(InsimulSaveSlotModel.ClassifyEnvelope(1, tampered).Outcome, Is.EqualTo("integrity_mismatch"));
+            Assert.That(InsimulSaveSlotModel.ClassifyEnvelope(2, null).Outcome, Is.EqualTo("empty"));
+        }
+
+        private static SlotSummary ToSummary(SaveSlotSummarySeed s)
+        {
+            if (s == null) return null;
+            return new SlotSummary
+            {
+                PlayerName = s.PlayerName,
+                HasLevel = s.HasLevel,
+                Level = s.Level,
+                LocationName = s.LocationName,
+                HasGold = s.HasGold,
+                Gold = s.Gold,
+                SavedAt = s.SavedAt,
+            };
+        }
+
         // ── Theme tokens ──────────────────────────────────────────────────────
 
         [Test]
