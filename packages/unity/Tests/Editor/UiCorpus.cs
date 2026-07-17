@@ -113,6 +113,59 @@ namespace Insimul.UI.TestSupport
         public override string ToString() => $"trade:{Name}";
     }
 
+    // ── Chat / dialogue streaming cases ───────────────────────────────────────
+
+    public sealed class ChatEvent
+    {
+        public string Op;                     // greeting | begin | chunk | action | complete | fail
+        public string Text;
+        public bool HasFullText;
+        public string FullText;
+        public bool HasExpectedOk;
+        public bool ExpectedOk;
+        // action ops
+        public string Name;
+        public List<string> Args;             // null when absent
+        public string Fact;
+        // fail ops
+        public string Error;
+    }
+
+    public sealed class ChatExpectedMessage
+    {
+        public string Role;
+        public string Text;
+        public bool Error;
+    }
+
+    public sealed class ChatExpectedAction
+    {
+        public string Name;
+        public List<string> Args;             // null when absent
+        public string FactToAssert;
+    }
+
+    public sealed class ChatExpectedTurn
+    {
+        public string Role;
+        public string Content;
+    }
+
+    public sealed class ChatCase
+    {
+        public string Name;
+        public string CharacterId;
+        public string CharacterName;
+        public List<ChatEvent> Events = new List<ChatEvent>();
+        public List<ChatExpectedMessage> ExpectedMessages = new List<ChatExpectedMessage>();
+        public bool ExpectedStreaming;
+        public List<ChatExpectedAction> ExpectedActions = new List<ChatExpectedAction>();
+        public int ExpectedTurnCount;
+        public string ExpectedLastNpcText;
+        public List<ChatExpectedTurn> ExpectedHistoryTurns = new List<ChatExpectedTurn>();
+        public override string ToString() => $"chat:{Name}";
+    }
+
     // ── Corpus locator + parsers ──────────────────────────────────────────────
 
     public static class UiCorpus
@@ -294,6 +347,48 @@ namespace Insimul.UI.TestSupport
                 tc.ExpectedContainerItems = IntMap(exp, "container_items");
                 tc.ExpectedMerchantItems = IntMap(exp, "merchant_items");
                 list.Add(tc);
+            }
+            return list;
+        }
+
+        public static IReadOnlyList<ChatCase> LoadChatCases()
+        {
+            var list = new List<ChatCase>();
+            var root = ReadFile("chat-cases.json");
+            if (root == null || !root.Value.TryGetProperty("cases", out JsonElement cases)) return list;
+            foreach (JsonElement el in cases.EnumerateArray())
+            {
+                var cc = new ChatCase { Name = Str(el, "name") };
+                if (el.TryGetProperty("character", out JsonElement ch))
+                {
+                    cc.CharacterId = Str(ch, "id");
+                    cc.CharacterName = Str(ch, "name");
+                }
+                foreach (JsonElement e in el.GetProperty("events").EnumerateArray())
+                {
+                    var ev = new ChatEvent
+                    {
+                        Op = Str(e, "op"),
+                        Text = Str(e, "text"),
+                        Name = Str(e, "name"),
+                        Args = StrList(e, "args"),
+                        Fact = Str(e, "fact"),
+                        Error = Str(e, "error"),
+                    };
+                    if (e.TryGetProperty("full_text", out JsonElement ft)) { ev.HasFullText = true; ev.FullText = ft.GetString(); }
+                    if (e.TryGetProperty("expected_ok", out JsonElement ok)) { ev.HasExpectedOk = true; ev.ExpectedOk = ok.GetBoolean(); }
+                    cc.Events.Add(ev);
+                }
+                foreach (JsonElement m in el.GetProperty("expected_messages").EnumerateArray())
+                    cc.ExpectedMessages.Add(new ChatExpectedMessage { Role = Str(m, "role"), Text = Str(m, "text"), Error = Bool(m, "error") });
+                cc.ExpectedStreaming = Bool(el, "expected_streaming");
+                foreach (JsonElement a in el.GetProperty("expected_actions").EnumerateArray())
+                    cc.ExpectedActions.Add(new ChatExpectedAction { Name = Str(a, "name"), Args = StrList(a, "args"), FactToAssert = Str(a, "factToAssert") });
+                cc.ExpectedTurnCount = el.TryGetProperty("expected_turn_count", out JsonElement tc) ? (int)tc.GetDouble() : 0;
+                cc.ExpectedLastNpcText = Str(el, "expected_last_npc_text");
+                foreach (JsonElement h in el.GetProperty("expected_history_turns").EnumerateArray())
+                    cc.ExpectedHistoryTurns.Add(new ChatExpectedTurn { Role = Str(h, "role"), Content = Str(h, "content") });
+                list.Add(cc);
             }
             return list;
         }

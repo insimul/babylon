@@ -62,6 +62,7 @@ namespace Insimul.Verify
             RunQuestJournalTests();
             RunQuestFeedTests();
             RunTradeTests();
+            RunChatTests();
 
             if (skipNative)
             {
@@ -2487,6 +2488,183 @@ namespace Insimul.Verify
                 AssertEqual(3, model2.PlayerQuantity("potion"));
                 AssertItemQuantities(new Dictionary<string, int> { { "potion", 2 } }, model2.MerchantItems("shop"), "round-trip: merchant stock");
             });
+        }
+
+        private static void RunChatTests()
+        {
+            Section("Default UI — chat/dialogue view-model: streaming SDK (US-UU4)");
+
+            var cases = UiCorpus.LoadChatCases();
+            AssertTrue(cases.Count > 0, "chat-cases.json must load");
+            foreach (ChatCase c in cases)
+            {
+                Case($"chat: {c.Name}", () =>
+                {
+                    var model = new InsimulChatModel(c.CharacterId, c.CharacterName);
+                    ReplayChat(model, c);
+
+                    // Transcript (role / text / error flag), oldest first.
+                    IReadOnlyList<ChatMessage> msgs = model.MessageList();
+                    AssertEqual(c.ExpectedMessages.Count, msgs.Count);
+                    for (int i = 0; i < c.ExpectedMessages.Count; i++)
+                    {
+                        ChatExpectedMessage e = c.ExpectedMessages[i];
+                        AssertEqual(e.Role, InsimulChatModel.RoleName(msgs[i].Role));
+                        AssertEqual(e.Text, msgs[i].Text);
+                        AssertEqual(e.Error, msgs[i].Error);
+                    }
+
+                    AssertEqual(c.ExpectedStreaming, model.IsStreaming());
+                    AssertEqual(c.ExpectedTurnCount, model.CompletedTurnCount());
+                    AssertEqual(c.ExpectedLastNpcText, model.LastNpcText());
+
+                    // Triggered actions (name / args / factToAssert).
+                    IReadOnlyList<ChatAction> acts = model.ActionList();
+                    AssertEqual(c.ExpectedActions.Count, acts.Count);
+                    for (int i = 0; i < c.ExpectedActions.Count; i++)
+                    {
+                        ChatExpectedAction e = c.ExpectedActions[i];
+                        AssertEqual(e.Name, acts[i].Name);
+                        AssertEqual(e.FactToAssert, acts[i].FactToAssert);
+                        AssertSequence(e.Args ?? new List<string>(), new List<string>(acts[i].Args), $"{c.Name}: action args");
+                    }
+
+                    // History projection into save.conversations shape (role / content).
+                    ChatHistory hist = model.History();
+                    AssertEqual(c.ExpectedHistoryTurns.Count, hist.RecentTurns.Count);
+                    for (int i = 0; i < c.ExpectedHistoryTurns.Count; i++)
+                    {
+                        ChatExpectedTurn e = c.ExpectedHistoryTurns[i];
+                        AssertEqual(e.Role, InsimulChatModel.RoleName(hist.RecentTurns[i].Role));
+                        AssertEqual(e.Content, hist.RecentTurns[i].Content);
+                    }
+                });
+            }
+
+            Case("Chunk assembly + interruption + error recovery over the mocked SDK", () =>
+            {
+                var model = new InsimulChatModel("npc1", "Aldric");
+                AssertTrue(model.BeginUserTurn("  Hello  "), "opens a turn (trimming the input)");
+                AssertEqual("Hello", model.MessageList()[0].Text);
+                model.AppendChunk("Good ");
+                model.AppendChunk("day.");
+                AssertEqual("Good day.", model.StreamingText());
+                // A second begin while streaming is rejected (interruption guard).
+                AssertTrue(!model.BeginUserTurn("Second"), "second begin rejected while streaming");
+                // Error recovery: fail renders an error bubble, drops the turn, and re-opens.
+                AssertTrue(model.FailTurn("connection lost"), "fail closes the in-flight turn");
+                AssertEqual("[Error: connection lost]", model.MessageList()[1].Text);
+                AssertTrue(model.MessageList()[1].Error, "error bubble flagged");
+                AssertEqual(0, model.CompletedTurnCount());
+                AssertTrue(!model.IsStreaming(), "no longer streaming after fail");
+                // Recovered: a fresh turn completes normally after the error.
+                AssertTrue(model.BeginUserTurn("Again?"), "can open a new turn after an error");
+                model.AppendChunk("All good now.");
+                AssertTrue(model.CompleteTurn(), "completes");
+                AssertEqual("All good now.", model.LastNpcText());
+                AssertEqual(1, model.CompletedTurnCount());
+            });
+
+            Case("Action triggers assert facts through the real KB path (integration)", () =>
+            {
+                var runtime = new InsimulQuestRuntime();
+                var model = new InsimulChatModel("smith", "Bram");
+                // Panel-supplied fact sink = the real quest-runtime KB path.
+                int applied = 0;
+                void ApplyPending()
+                {
+                    IReadOnlyList<ChatAction> a = model.ActionList();
+                    while (applied < a.Count)
+                    {
+                        if (!string.IsNullOrEmpty(a[applied].FactToAssert))
+                            AssertTrue(runtime.AssertClause(a[applied].FactToAssert), "fact clause parses + asserts");
+                        applied++;
+                    }
+                }
+
+                AssertTrue(model.BeginUserTurn("Can I have the sword?"), "opens turn");
+                model.AppendChunk("Here, take it.");
+                model.TriggerAction(new ChatAction("give_item", new[] { "sword" }, "has_item(player,sword)"));
+                ApplyPending();
+                model.CompleteTurn();
+
+                // The fact landed in the real KB (queryable via the runtime).
+                AssertTrue(runtime.HasFact("has_item", "player", "sword"), "action fact present in the KB");
+                AssertTrue(!runtime.HasFact("has_item", "player", "shield"), "unrelated fact absent");
+            });
+
+            Case("History lands in save.conversations (round-trip through the save system)", () =>
+            {
+                var model = new InsimulChatModel("npc1", "Aldric");
+                model.Greeting("Well met, traveler.");
+                model.BeginUserTurn("Hello");
+                model.AppendChunk("Good day to you.");
+                model.CompleteTurn();
+
+                var save = new InsimulSaveSystem();
+                save.NewGame("{\"world\":{\"id\":\"w1\"}}", new InsimulSaveSystem.NewGameOptions { Id = "s1", WorldId = "w1" });
+
+                // Append the ConversationSummary projection into save.conversations.
+                save.SaveFile.TryGet("conversations", out var conversations);
+                conversations.Add(model.History("2026-07-17T00:00:00.000Z").ToConversationSummary(model.CharacterId, model.CharacterName));
+
+                // Serialize the whole save and load it back — the history must persist.
+                var reloaded = new InsimulSaveSystem();
+                reloaded.Load(save.SerializeCanonical());
+                reloaded.SaveFile.TryGet("conversations", out var convs2);
+                AssertEqual(1, convs2.Items.Count);
+                JsonVal summary = convs2.Items[0];
+                AssertEqual("npc1", summary.TryGet("characterId", out var cid) ? cid.Str : "");
+                AssertTrue(summary.TryGet("totalTurnCount", out var ttc) && (int)ttc.Number == 1, "totalTurnCount round-trips");
+                summary.TryGet("recentTurns", out var turns);
+                AssertEqual(3, turns.Items.Count);
+                AssertEqual("npc", turns.Items[0].TryGet("role", out var r0) ? r0.Str : "");
+                AssertEqual("Well met, traveler.", turns.Items[0].TryGet("content", out var c0) ? c0.Str : "");
+                AssertEqual("player", turns.Items[1].TryGet("role", out var r1) ? r1.Str : "");
+                AssertEqual("Hello", turns.Items[1].TryGet("content", out var c1) ? c1.Str : "");
+                AssertEqual("Good day to you.", turns.Items[2].TryGet("content", out var c2) ? c2.Str : "");
+            });
+        }
+
+        /// <summary>Replay a chat case's ordered event stream against the model, asserting
+        /// each begin/complete/fail's expected_ok when the case pins it.</summary>
+        private static void ReplayChat(InsimulChatModel model, ChatCase c)
+        {
+            foreach (ChatEvent e in c.Events)
+            {
+                switch (e.Op)
+                {
+                    case "greeting":
+                        model.Greeting(e.Text);
+                        break;
+                    case "begin":
+                    {
+                        bool ok = model.BeginUserTurn(e.Text);
+                        if (e.HasExpectedOk) AssertEqual(e.ExpectedOk, ok);
+                        break;
+                    }
+                    case "chunk":
+                        model.AppendChunk(e.Text);
+                        break;
+                    case "action":
+                        model.TriggerAction(new ChatAction(e.Name, e.Args, e.Fact));
+                        break;
+                    case "complete":
+                    {
+                        bool ok = model.CompleteTurn(e.HasFullText ? e.FullText : null);
+                        if (e.HasExpectedOk) AssertEqual(e.ExpectedOk, ok);
+                        break;
+                    }
+                    case "fail":
+                    {
+                        bool ok = model.FailTurn(e.Error);
+                        if (e.HasExpectedOk) AssertEqual(e.ExpectedOk, ok);
+                        break;
+                    }
+                    default:
+                        throw new Exception($"unknown chat event op '{e.Op}'");
+                }
+            }
         }
 
         private static TradeResult ApplyTradeOp(InsimulTradeModel model, TradeCase c)

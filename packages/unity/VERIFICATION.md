@@ -333,3 +333,39 @@ NPC merchant is required.
 - [ ] **Persistence check:** after a few trades, **save**, quit to menu, and
       **Continue**. Gold totals, inventory stacks, container contents, and merchant
       stock are exactly as you left them (no item created or lost across the save).
+
+## 10. Dialogue panel — streaming SDK, actions, history (US-UU4, Unity editor + Play mode)
+
+The transcript / streaming / action / history contract lives in the UnityEngine-free
+`InsimulChatModel`, host-tested (`tools/verify-unity`, `RunChatTests` against the
+shared corpus `packages/core/conformance/ui/chat-cases.json`, plus chunk-assembly /
+interruption / error-recovery, **action triggers through the real KB path**
+(`InsimulQuestRuntime.AssertClause` → `HasFact`), and a **history round-trip** into
+`save.conversations` through a save serialize → load). A player line opens a turn,
+response chunks accumulate into the in-flight NPC bubble, a stream error renders an
+error bubble and **drops** that turn from history, and `complete` settles it. This is
+the **human pass** for the UGUI seam (`InsimulChatPanel`, resolving through the
+`InsimulUIManager` registry key `dialogue`) plus the engine-coupled hooks that can only be
+seen live: streaming text, TTS playback, and `InsimulLipSync` visemes fed from the
+settled NPC line. A world with a talkable NPC and the conversation SDK configured is
+required.
+
+- [ ] Enter Play mode with a world loaded. Talk to an NPC — the **dialogue** panel
+      opens with the NPC's name in the header and its greeting (if any) as the first
+      bubble.
+- [ ] Type a message and send. The NPC reply **streams in token-by-token** into a
+      single growing bubble (not one bubble per chunk); the input is disabled until
+      the turn completes.
+- [ ] On completion, **TTS speaks** the settled line and the speaker's **lip-sync**
+      visemes track it. Sending a second line while the NPC is still streaming is
+      **ignored** (no interleaved turn).
+- [ ] Trigger a **dialogue action** (e.g. the NPC gives an item). The corresponding
+      Prolog fact is asserted into the KB — verify the downstream effect (inventory /
+      quest objective) reflects it.
+- [ ] Force a **stream error** (disconnect the SDK mid-reply). An **error bubble**
+      appears, the turn is **not** counted, and a fresh message afterwards streams
+      normally (recovery).
+- [ ] **Persistence check:** after a conversation, **save**, quit, and **Continue**
+      (or inspect the save). The exchange is in `save.conversations` as a
+      ConversationSummary (`recentTurns` role/content + `totalTurnCount`); in-flight /
+      errored turns are excluded.

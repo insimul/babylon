@@ -303,6 +303,116 @@ namespace Insimul.Prolog.Tests.Editor
             }
         }
 
+        // ── Chat / dialogue streaming (US-UU4) ────────────────────────────────
+
+        private static IEnumerable<ChatCase> ChatCases() => UiCorpus.LoadChatCases();
+
+        [Test]
+        [TestCaseSource(nameof(ChatCases))]
+        public void ChatCase(ChatCase c)
+        {
+            var model = new InsimulChatModel(c.CharacterId, c.CharacterName);
+            ReplayChat(model, c);
+
+            var msgs = model.MessageList();
+            Assert.That(msgs.Count, Is.EqualTo(c.ExpectedMessages.Count), $"{c}: message count");
+            for (int i = 0; i < c.ExpectedMessages.Count; i++)
+            {
+                Assert.That(InsimulChatModel.RoleName(msgs[i].Role), Is.EqualTo(c.ExpectedMessages[i].Role), $"{c}: msg[{i}] role");
+                Assert.That(msgs[i].Text, Is.EqualTo(c.ExpectedMessages[i].Text), $"{c}: msg[{i}] text");
+                Assert.That(msgs[i].Error, Is.EqualTo(c.ExpectedMessages[i].Error), $"{c}: msg[{i}] error");
+            }
+
+            Assert.That(model.IsStreaming(), Is.EqualTo(c.ExpectedStreaming), $"{c}: streaming");
+            Assert.That(model.CompletedTurnCount(), Is.EqualTo(c.ExpectedTurnCount), $"{c}: turn count");
+            Assert.That(model.LastNpcText(), Is.EqualTo(c.ExpectedLastNpcText), $"{c}: last npc text");
+
+            var acts = model.ActionList();
+            Assert.That(acts.Count, Is.EqualTo(c.ExpectedActions.Count), $"{c}: action count");
+            for (int i = 0; i < c.ExpectedActions.Count; i++)
+            {
+                Assert.That(acts[i].Name, Is.EqualTo(c.ExpectedActions[i].Name), $"{c}: action[{i}] name");
+                Assert.That(acts[i].FactToAssert, Is.EqualTo(c.ExpectedActions[i].FactToAssert), $"{c}: action[{i}] fact");
+            }
+
+            var hist = model.History();
+            Assert.That(hist.RecentTurns.Count, Is.EqualTo(c.ExpectedHistoryTurns.Count), $"{c}: history count");
+            for (int i = 0; i < c.ExpectedHistoryTurns.Count; i++)
+            {
+                Assert.That(InsimulChatModel.RoleName(hist.RecentTurns[i].Role), Is.EqualTo(c.ExpectedHistoryTurns[i].Role), $"{c}: turn[{i}] role");
+                Assert.That(hist.RecentTurns[i].Content, Is.EqualTo(c.ExpectedHistoryTurns[i].Content), $"{c}: turn[{i}] content");
+            }
+        }
+
+        [Test]
+        public void Chat_ActionTriggers_AssertThroughRealKbPath()
+        {
+            var runtime = new InsimulQuestRuntime();
+            var model = new InsimulChatModel("smith", "Bram");
+            model.BeginUserTurn("Can I have the sword?");
+            model.AppendChunk("Here, take it.");
+            model.TriggerAction(new ChatAction("give_item", new[] { "sword" }, "has_item(player,sword)"));
+            foreach (ChatAction a in model.ActionList())
+                if (!string.IsNullOrEmpty(a.FactToAssert))
+                    Assert.That(runtime.AssertClause(a.FactToAssert), Is.True);
+            model.CompleteTurn();
+            Assert.That(runtime.HasFact("has_item", "player", "sword"), Is.True);
+        }
+
+        [Test]
+        public void Chat_History_RoundTripsThroughSaveConversations()
+        {
+            var model = new InsimulChatModel("npc1", "Aldric");
+            model.Greeting("Well met, traveler.");
+            model.BeginUserTurn("Hello");
+            model.AppendChunk("Good day to you.");
+            model.CompleteTurn();
+
+            var save = new InsimulSaveSystem();
+            save.NewGame("{\"world\":{\"id\":\"w1\"}}", new InsimulSaveSystem.NewGameOptions { Id = "s1", WorldId = "w1" });
+            save.SaveFile.TryGet("conversations", out var conversations);
+            conversations.Add(model.History("2026-07-17T00:00:00.000Z").ToConversationSummary(model.CharacterId, model.CharacterName));
+
+            var reloaded = new InsimulSaveSystem();
+            reloaded.Load(save.SerializeCanonical());
+            reloaded.SaveFile.TryGet("conversations", out var convs2);
+            Assert.That(convs2.Items.Count, Is.EqualTo(1));
+            var turns = convs2.Items[0].TryGet("recentTurns", out var t) ? t : JsonVal.Arr();
+            Assert.That(turns.Items.Count, Is.EqualTo(3));
+        }
+
+        private static void ReplayChat(InsimulChatModel model, ChatCase c)
+        {
+            foreach (ChatEvent e in c.Events)
+            {
+                switch (e.Op)
+                {
+                    case "greeting": model.Greeting(e.Text); break;
+                    case "begin":
+                    {
+                        bool ok = model.BeginUserTurn(e.Text);
+                        if (e.HasExpectedOk) Assert.That(ok, Is.EqualTo(e.ExpectedOk), $"{c}: begin ok");
+                        break;
+                    }
+                    case "chunk": model.AppendChunk(e.Text); break;
+                    case "action": model.TriggerAction(new ChatAction(e.Name, e.Args, e.Fact)); break;
+                    case "complete":
+                    {
+                        bool ok = model.CompleteTurn(e.HasFullText ? e.FullText : null);
+                        if (e.HasExpectedOk) Assert.That(ok, Is.EqualTo(e.ExpectedOk), $"{c}: complete ok");
+                        break;
+                    }
+                    case "fail":
+                    {
+                        bool ok = model.FailTurn(e.Error);
+                        if (e.HasExpectedOk) Assert.That(ok, Is.EqualTo(e.ExpectedOk), $"{c}: fail ok");
+                        break;
+                    }
+                    default: throw new System.Exception($"unknown chat event op '{e.Op}'");
+                }
+            }
+        }
+
         // ── Theme tokens ──────────────────────────────────────────────────────
 
         [Test]

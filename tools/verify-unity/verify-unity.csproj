@@ -147,6 +147,14 @@
          structural-gate-only. RunTradeTests in Program.cs drives it against the shared
          corpus (trade-cases.json) + a save serialize/load round-trip. -->
     <Compile Include="../../packages/unity/Runtime/UI/InsimulTradeModel.cs" />
+    <!-- Dialogue / chat streaming view-model (US-UU4): the pure, UnityEngine-free
+         chat model (transcript / streaming / action / history contract) driving the
+         ChatPanel/DialogueUI seam over the conversation SDK. The UGUI view
+         (Runtime/UI/InsimulChatPanel.cs) is structural-gate-only. RunChatTests in
+         Program.cs drives it against the shared corpus (chat-cases.json) + integration
+         tests (action facts through the real KB path, history round-trip to
+         save.conversations). -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulChatModel.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/UiCorpus.cs" />
   </ItemGroup>
 
