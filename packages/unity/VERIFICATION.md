@@ -152,3 +152,112 @@ only a real editor can exercise.
       `building.*` descendant with no more-specific entry now resolves to that
       prefab (descendant matching in the resolver), while a more specific
       `building.commercial.bakery.medium` entry still wins for that key.
+
+## 5. World Browser — connect + browse + import (US-UE2, Unity editor + backend required)
+
+The World Browser's parsing, selection, compatibility-badge, and import
+orchestration all live in the UnityEngine-free `InsimulWorldBrowserModel`, unit-
+tested headless over a RoutingTransport + fake registry/pipeline
+(`WorldBrowserTests`, EditMode). This is the **human pass** for the two
+UnityEditor-coupled seams that only a real editor + backend can exercise: the
+`UnityWebRequestEditorTransport` HTTP path and the `UnitySceneImportPipeline`
+bridge into the US-UB3/US-UB4 scene generation + re-import diff. A running backend
+(`InsimulConnectionSettings.ServerUrl`) with at least one world on the account is
+required.
+
+- [ ] In **Project Settings ▸ Insimul**, set the server URL and authenticate
+      (world API key or user login). Open **Insimul ▸ World Browser** and click
+      **Refresh worlds**. The account's worlds list, each showing name, genre
+      bundle, `snapshot vN`, and NPC / Settlement / Quest counts.
+- [ ] Every never-imported world shows the **Not imported** badge. Expand one and
+      confirm the counts match the world's detail on the web.
+- [ ] Click **Open in web** — the browser opens `…/worlds/<id>` for that world.
+- [ ] Click **Preview Sync (dry run)**. A report line appears
+      (`+A / ~U / -D (… unchanged, … hand-edited)`) and the scene is **NOT**
+      mutated (no `GeneratedWorld` changes, no new objects).
+- [ ] Click **Sync IR now…**, confirm the dialog. The scene's `GeneratedWorld`
+      tree updates per the re-import policy (generated nodes added/updated,
+      hand-edited nodes untouched, dropped nodes moved to the **Deprecated** group,
+      never deleted — the US-UB4 behaviour). The badge flips to **Up to date
+      (vN)**.
+- [ ] Regenerate/advance the world on the backend so its snapshot version bumps,
+      **Refresh worlds** again, and confirm the badge now reads **Update available
+      (imported vN → vM)** — the stale-version detection.
+- [ ] Let the token expire (or revoke it) and Refresh: the window shows the
+      **Session expired — re-authenticate** warning (the `NeedsReauth` state), and
+      re-authenticating in Project Settings restores the list on the next Refresh.
+
+## 6. Generation Console — jobs with live progress (US-UE3, Unity editor + backend required)
+
+The console's whole job lifecycle (start → queued → progress → complete/failed →
+sync prompt), the entity-count diff parsing, cancellation, and premature-close
+handling live in the UnityEngine-free `InsimulGenerationConsoleModel`, unit-tested
+headless over a RoutingTransport + a scripted `FakeJobStream`
+(`GenerationConsoleTests`, EditMode). Progress is delivered by **POLLING** the
+`getGenerationJob` status endpoint (not edit-mode SSE) — a poll survives a domain
+reload; see the model header for the rationale. This is the **human pass** for the
+UnityEditor-coupled seam only a real editor + backend can exercise: the
+`UnityWebRequestJobPollStream` HTTP poll driven off `EditorApplication.update`, and
+the domain-reload safety of the window's OnEnable/OnDisable pump wiring. A running
+backend with generation-job support and at least one world on the account is
+required.
+
+- [ ] With the session authenticated (Project Settings ▸ Insimul), open **Insimul ▸
+      Generation Console**. Enter a **World id** (copy it from the World Browser),
+      pick a **Generator** (Regenerate settlements / Generate characters / Generate
+      quests), and click **Run**.
+- [ ] The **Status** advances Queued → Running with a live **progress bar** and a
+      phase label, without freezing the editor (the poll runs off
+      `EditorApplication.update`, one non-blocking request at a time).
+- [ ] On completion the status reads **Completed** and the results line shows the
+      entity diff (`+A added / ~U updated / -R removed`), and a **Sync IR now…**
+      button appears.
+- [ ] Click **Sync IR now…** — the **World Browser** opens so the generated changes
+      can be pulled in through the same (dry-run-then-apply) import path §5 covers.
+- [ ] Start another job and click **Cancel** mid-run: the status reads **Canceled**,
+      the progress stops updating, and no further polling occurs (the server job may
+      still finish — that is expected; the editor just stops tracking it).
+- [ ] **Domain-reload safety:** start a job, then force a recompile (edit any script)
+      or **enter Play mode** while it is Running. Confirm the editor does not throw,
+      the console does not keep polling a dead job after the reload (no repeated
+      network activity in the Profiler / no orphaned update loop), and re-opening the
+      window starts clean. This exercises the OnDisable → `EditorApplication.update -=`
+      + `model.Dispose()` (stream abort) path.
+- [ ] Run a job, then let the token expire / revoke it: the poll surfaces the failure
+      as **Job failed: session expired (401)**, and the next World Browser refresh
+      shows the **Session expired — re-authenticate** warning.
+
+## 7. Conversation Tester — talk to an NPC in the editor (US-UE4, Unity editor + backend required)
+
+The whole turn lifecycle (send → stream reply chunks → complete/error), the
+character-list + SSE parsing, and the multi-turn transcript over one session id live
+in the UnityEngine-free `InsimulConversationTesterModel`, unit-tested headless over a
+RoutingTransport + a scripted `FakeConversationStream` (`ConversationTesterTests`,
+EditMode). This is the **human pass** for the UnityEditor-coupled seam only a real
+editor + backend can exercise: the `UnityWebRequestConversationStream` SSE POST driven
+off `EditorApplication.update`, and the OnEnable/OnDisable pump wiring. A running
+backend with the conversation service and at least one world with characters on the
+account is required. **Text streaming works in edit mode; audio playback + lip sync do
+not (Play mode only) — see the README ▸ Conversation Tester window mode constraint.**
+
+- [ ] With the session authenticated (Project Settings ▸ Insimul), open **Insimul ▸
+      Conversation Tester**. Enter a **World id** (copy it from the World Browser) and
+      click **Load characters** — the **Character** picker fills with the world's NPCs.
+- [ ] Pick a character, type a message, and click **Send**: the **Transcript** shows a
+      **You** line immediately, then an **NPC** line as the reply streams in, without
+      freezing the editor (the request runs off `EditorApplication.update`).
+- [ ] Send a **second** turn to the same character and confirm the reply is coherent
+      in context (the two turns share one conversation session) and both exchanges
+      remain in the transcript.
+- [ ] If the world's characters have TTS enabled, confirm the **TTS audio: N chunk(s)
+      returned (not played in edit mode)** line appears — audio is not played here by
+      design.
+- [ ] Switch to a **different** character in the picker: the transcript clears (a fresh
+      conversation), and the next turn starts a new session.
+- [ ] **Domain-reload safety:** send a turn, then force a recompile (edit any script)
+      or **enter Play mode** while it is streaming. Confirm the editor does not throw,
+      no request keeps running after the reload, and re-opening the window starts clean
+      (the OnDisable → `EditorApplication.update -=` + `model.Dispose()` abort path).
+- [ ] Let the token expire / revoke it and send: the reply surfaces as a
+      **Conversation error: session expired (401)**, and the next World Browser refresh
+      shows the **Session expired — re-authenticate** warning.
