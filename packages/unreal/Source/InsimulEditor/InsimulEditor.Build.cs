@@ -32,6 +32,10 @@ public class InsimulEditor : ModuleRules
             "SlateCore",
             "AssetTools",
             "AssetRegistry",
+            // The editor-connect panels (US-XE1+) talk to the backend v1 API over
+            // FHttpModule; the pure session/operation-table core (Portable/) is
+            // UE-free + host-tested, the FHttpModule transport sits on top.
+            "HTTP",
             // The Binding Editor is an Editor Utility Widget (US-XG4); Blutility +
             // UMG back the UEditorUtilityWidget base + its UMG surface.
             "Blutility",

@@ -319,3 +319,205 @@ decisions are all pinned byte-for-byte against the shared cross-engine fixtures
 asset-ref strings (`placeholder:building` vs a real `/Game/...` path) differ, by
 design. Any classification / placement / coverage difference discovered in the
 human pass is a bug — file it against US-XG4.
+
+---
+
+## US-XE2 — World Browser: connect ▸ browse ▸ import (Unreal editor + backend required)
+
+The World Browser tab's parsing, list/detail/selection reducer, compatibility
+badge (imported snapshot version vs the world's current snapshot), open-in-web
+link, and Import/Sync orchestration all live in the Unreal-Engine-free
+`insimul::FWorldBrowserModel`, host-tested headless over a routing transport + a
+fake registry/pipeline (`test_world_browser.cpp`, `npm run
+engines:unreal:world-browser`). This is the **human pass** for the two UE-coupled
+seams only a real editor + backend can exercise: the `FInsimulEditorHttpTransport`
+HTTP path (US-XE1) and the `FInsimulSceneImportPipeline` bridge into the
+US-XG2/US-XG4 scene generation + re-import diff, with the imported-version record
+persisted per-user in `FInsimulImportedWorldRegistry` (GEditorPerProjectIni —
+never a committed asset). A running backend (`UInsimulSettings::ServerURL`) with at
+least one world on the account is required.
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:unreal:world-browser` — the view-model host gate is green
+      (parsing, list load incl. 401 re-auth, detail merge, selection reducer,
+      compatibility badge, open-in-web, import wiring, report summary).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE-coupled
+      seams (`FWorldBrowserModel` bridge, imported-world registry, scene-import
+      pipeline).
+
+### 1. Connect + browse
+
+- [ ] In **Project Settings ▸ Insimul**, set the server URL and authenticate
+      (world API key or user login — US-XE1). Open **Insimul ▸ World Browser** and
+      click **Refresh worlds**. The account's worlds list, each showing name, genre
+      bundle, `snapshot vN`, and NPC / Settlement / Quest counts.
+- [ ] Every never-imported world shows the **Not imported** badge. Select one and
+      confirm its detail counts match the world on the web.
+- [ ] Click **Open in web** — the browser opens `…/worlds/<id>` for that world.
+
+### 2. Import / Sync through the scene pipeline
+
+- [ ] With a level open, click **Preview Sync (dry run)**. A report line appears
+      (`+A / ~U / -D (… unchanged, … hand-edited)`) and the scene is **NOT**
+      mutated (no generated actors added/moved).
+- [ ] Click **Sync IR now…**, confirm the dialog. The scene's generated actors
+      update per the US-XG4 re-import policy (generated nodes added/updated,
+      hand-edited nodes untouched, dropped nodes reparented under the **Deprecated**
+      group — never deleted), all in one **Undo** group. The badge flips to **Up to
+      date (vN)**.
+- [ ] With **no level open**, the Import action is disabled and the tab shows
+      *"Open a level to import a world into the scene."* (the pipeline's unavailable
+      reason).
+
+### 3. Stale-version detection + re-auth
+
+- [ ] Regenerate/advance the world on the backend so its snapshot version bumps,
+      **Refresh worlds** again, and confirm the badge now reads **Update available
+      (imported vN → vM)** — the stale-version detection driven off the per-user
+      imported-version record.
+- [ ] Let the token expire (or revoke it) and Refresh: the tab shows the **Session
+      expired — re-authenticate** warning (the `NeedsReauth` state), and
+      re-authenticating in Project Settings restores the list on the next Refresh.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the parsing + reducer + badge + import-orchestration contract.**
+`FWorldBrowserModel` mirrors `InsimulWorldBrowserModel.cs` and
+`world-browser.ts` case-for-case (same `WorldBrowserTests` set). Only the
+engine-specific scene mutations (UE actors + `UInsimulEntityIdComponent` vs Unity
+GameObjects) differ, by design. Any parsing / selection / badge / count difference
+found in the human pass is a bug — file it against US-XE2.
+
+---
+
+## US-XE3 — Generation Console: invoke ▸ track progress ▸ sync (Unreal editor + backend required)
+
+The Generation Console's start-body build, status/event/diff parsing, the job
+lifecycle state machine (Idle → Starting → Queued → Running →
+Completed/Failed/Canceled), and the leak-free poll teardown all live in the
+Unreal-Engine-free `insimul::FGenerationConsoleModel` + `insimul::FJobPoller`,
+host-tested headless over a routing transport + a scripted stream + a fake clock
+(`test_generation_console.cpp`, `npm run engines:unreal:generation`). This is the
+**human pass** for the two UE-coupled seams only a real editor + backend can
+exercise: the `FInsimulEditorHttpTransport` HTTP start (US-XE1) and the
+`FInsimulHttpJobStream` FTimerManager+FHttpModule poll stream. A running backend
+(`UInsimulSettings::ServerURL`, authenticated) with at least one world is required.
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:unreal:generation` — the view-model host gate is green
+      (36 cases: body+parsing, lifecycle over a scripted stream, start guards incl.
+      401 re-auth, cancel/dispose/reset, and the FJobPoller no-leaked-ticker
+      teardown + maxPolls cap + end-to-end poll→stream→model).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE-coupled
+      seam (`FInsimulTimerScheduler`, `FInsimulHttpJobStream(Factory)`).
+
+### 1. Invoke a generator + live progress
+
+- [ ] Authenticate (US-XE1) and select a world in the World Browser, then open
+      **Insimul ▸ Generation Console**. Click **Regenerate settlements** (or
+      **Generate characters** / **Generate quests**).
+- [ ] The status advances **Queued → Running** with a live progress bar + phase
+      label as the poll returns fresh `getGenerationJob` frames (roughly one update
+      per second). No editor hitch/freeze while polling (the poll is non-blocking).
+- [ ] On completion the status reads **Completed**, the progress bar is full, and a
+      results line shows the entity diff (`+A added / ~U updated / -R removed`).
+
+### 2. Sync-now
+
+- [ ] With a level open, the completed job shows **Sync IR now…**. Click it, confirm
+      the dialog: the scene's generated actors update through the same US-XG4
+      re-import path (World Browser `ApplyImport`), and the World Browser badge for
+      that world flips to **Up to date (vN)**.
+- [ ] Re-open the Console and confirm a **New job** / reset returns it to Idle.
+
+### 3. Failure, cancel, and domain-reload safety
+
+- [ ] Trigger a failing generation (e.g. an invalid world / server-side error). The
+      status reads **Failed** with the server reason; no Sync is offered.
+- [ ] Start a job, then **Cancel** mid-run — the status reads **Canceled** and the
+      poll loop stops immediately (no further progress updates). The server job may
+      still finish; the editor simply stops tracking it.
+- [ ] Start a job, then force a **domain reload** (recompile / Live Coding, or enter
+      PIE). Confirm no orphaned polling continues after the tab is torn down — no
+      `getGenerationJob` requests fire once the Console tab is closed/reloaded, and
+      no `Ensure`/access-violation from a timer touching a freed widget.
+- [ ] Let the token expire and start a job: the Console surfaces the **Session
+      expired — re-authenticate** state (the `NeedsReauth` flag armed by the 401 on
+      `startGenerationJob`).
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the parsing + lifecycle + teardown contract.**
+`FGenerationConsoleModel` / `FJobPoller` mirror `InsimulGenerationConsoleModel.cs` /
+the core `generation-console.ts` + `job-poller.ts` case-for-case (same
+`GenerationConsoleTests` set). Only the engine-specific timer (`FTimerManager` vs
+`EditorApplication.update` vs `SceneTreeTimer`) and HTTP client differ, by design.
+Any status / progress / diff / teardown difference found in the human pass is a bug
+— file it against US-XE3.
+
+---
+
+## US-XE4 — Conversation Tester: talk to an NPC in the editor (Unreal editor + backend required)
+
+The whole turn lifecycle (send → stream reply chunks → complete/error), the
+character-list + SSE parsing, and the multi-turn transcript over one session id live
+in the Unreal-Engine-free `insimul::FConversationTesterModel`, host-tested headless
+over a routing transport + a scripted conversation stream
+(`test_conversation_tester.cpp`, `npm run engines:unreal:conversation`). This is the
+**human pass** for the UE-coupled seam only a real editor + backend can exercise: the
+`FInsimulHttpConversationStream` SSE POST driven off the editor tick, and the
+tab's pump / dispose wiring. A running backend (`UInsimulSettings::ServerURL`,
+authenticated) with the conversation service and at least one world with characters is
+required. **Text streaming works in edit mode; audio playback + lip sync do not (Play
+mode only) — see the README ▸ Conversation Tester window mode constraint.**
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:unreal:conversation` — the view-model host gate is green
+      (30 cases: parsing, character load incl. 401 re-auth, send guards, the turn
+      lifecycle over a scripted stream, multi-turn session sharing, character-switch
+      reset, dispose-on-teardown).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE-coupled
+      seam (`FInsimulHttpConversationClient` / `FInsimulHttpConversationStream`).
+
+### 1. Load characters + two-turn conversation
+
+- [ ] With the session authenticated (Project Settings ▸ Insimul), open **Insimul ▸
+      Conversation Tester**. Select a world (copy the id from the World Browser) and
+      click **Load characters** — the **Character** picker fills with the world's NPCs.
+- [ ] Pick a character, type a message, and click **Send**: the **Transcript** shows a
+      **You** line immediately, then an **NPC** line as the reply streams in, without
+      freezing the editor (the request runs off the editor tick, not blocking).
+- [ ] Send a **second** turn to the same character and confirm the reply is coherent
+      in context (the two turns share one conversation session) and **both** exchanges
+      remain in the transcript (four lines total).
+
+### 2. Audio, switching, and re-auth
+
+- [ ] If the world's characters have TTS enabled, confirm a **TTS audio: N chunk(s)
+      returned (not played in edit mode)** line appears — audio is not played here by
+      design (drive Play mode with `InsimulConversationComponent` to hear it).
+- [ ] Switch to a **different** character in the picker: the transcript clears (a fresh
+      conversation), and the next turn starts a **new** session id.
+- [ ] Let the token expire / revoke it and **Load characters** again: the load fails and
+      the panel shows the **Session expired — re-authenticate** state (the `NeedsReauth`
+      flag armed by the 401 on `getWorldDetail`).
+
+### 3. Domain-reload safety
+
+- [ ] Send a turn, then force a **recompile** (Live Coding) or **enter Play mode** while
+      it is streaming. Confirm the editor does not throw, **no** `/api/conversation/stream`
+      request keeps running after the reload/close, and re-opening the window starts
+      clean (the tab's `Dispose()` → cancel-request + drop-late-callback path).
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the parsing + lifecycle + teardown contract.**
+`FConversationTesterModel` mirrors `InsimulConversationTesterModel.cs` / the core
+`conversation-tester.ts` case-for-case (same `ConversationTesterTests` set). Only the
+engine-specific streaming HTTP client (`FHttpModule` vs `UnityWebRequest` vs
+`HTTPRequest`) and the edit-mode audio-playback wall (shared across all three) differ,
+by design. Any load / send-guard / transcript / teardown difference found in the human
+pass is a bug — file it against US-XE4.
