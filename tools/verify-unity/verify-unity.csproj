@@ -110,6 +110,16 @@
          proves the policy + golden-report parity + hand-edit invariants over this. -->
     <Compile Include="../../packages/unity/Runtime/Scene/ReimportDiff.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/ReimportCorpus.cs" />
+    <!-- Binding Editor window logic (US-UB5): the pure, UnityEngine-free suggestion
+         + taxonomy-grouping model (BindingEditorModel) and the portable binding-pack
+         serializer (BindingPack, over the same JsonVal/CanonicalJson core as the save
+         system). The EditorWindow that wires AssetDatabase + object pickers to these
+         (Editor/InsimulBindingEditorWindow.cs) is UnityEngine-coupled and thus NOT
+         included (structural gate only) — RunBindingEditorTests proves suggestion
+         ranking, taxonomy status, and pack round-trip / golden byte-parity over this. -->
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingPack.cs" />
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingEditorModel.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/BindingEditorCorpus.cs" />
   </ItemGroup>
 
 </Project>

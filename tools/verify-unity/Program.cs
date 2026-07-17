@@ -52,6 +52,7 @@ namespace Insimul.Verify
             RunPlaceholderPackTests();
             RunSceneGenTests();
             RunReimportDiffTests();
+            RunBindingEditorTests();
 
             if (skipNative)
             {
@@ -1866,6 +1867,157 @@ namespace Insimul.Verify
                 AssertEqual("prop.c", report.Added[0]);
                 AssertEqual("building.b", report.Updated[0]);
                 AssertEqual("prop.e", report.Deprecated[0]);
+            });
+        }
+
+        // ---- Binding Editor window logic (US-UB5) ---------------------------
+
+        private static void RunBindingEditorTests()
+        {
+            // A resolver: a project layer (building.* + npc.merchant.baker) layered
+            // over the placeholder pack, so the three statuses are all reachable.
+            BindingResolver EditorResolver() => new BindingResolver(new[]
+            {
+                Layer("project", BindingSourceKind.Project,
+                    new BindingRule("building.*", "Assets/MyBuilding.prefab"),
+                    new BindingRule("npc.merchant.baker", "Assets/Baker.prefab")),
+                PlaceholderPack.BuildLayer(),
+            });
+
+            Case("SuggestBindings scores by segment matches, sorts score desc then path asc", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                var assets = new List<AssetCandidate>
+                {
+                    new AssetCandidate("Assets/Props/Bakery_Commercial.prefab", "Bakery_Commercial",
+                        new List<string> { "building" }),          // building + commercial + bakery = 3
+                    new AssetCandidate("Assets/Props/Bakery.prefab", "Bakery", null),   // bakery = 1
+                    new AssetCandidate("Assets/Props/Shop_Commercial.prefab", "Shop", // commercial = 1
+                        new List<string> { "commercial" }),
+                    new AssetCandidate("Assets/Props/Tree.prefab", "Tree", null),       // 0 -> excluded
+                };
+                var hits = model.SuggestBindings("building.commercial.bakery", assets);
+                AssertEqual(3, hits.Count); // Tree excluded (score 0)
+                AssertEqual("Assets/Props/Bakery_Commercial.prefab", hits[0].Path);
+                AssertEqual(3, hits[0].Score);
+                // The two score-1 hits break the tie by path ascending.
+                AssertEqual("Assets/Props/Bakery.prefab", hits[1].Path);
+                AssertEqual("Assets/Props/Shop_Commercial.prefab", hits[2].Path);
+            });
+
+            Case("SuggestBindings on empty archetype / null assets is empty", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                AssertEqual(0, model.SuggestBindings("", new List<AssetCandidate>()).Count);
+                AssertEqual(0, model.SuggestBindings("building.house", null).Count);
+            });
+
+            Case("StatusFor distinguishes real / placeholder / unbound", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                // building.* is a real project rule.
+                AssertEqual(BindingStatus.Bound, model.StatusFor("building.commercial.bakery.medium"));
+                AssertEqual(BindingStatus.Bound, model.StatusFor("npc.merchant.baker"));
+                // npc.guard has no project rule -> falls to the placeholder npc.* tier.
+                AssertEqual(BindingStatus.Placeholder, model.StatusFor("npc.guard"));
+                AssertEqual(BindingStatus.Placeholder, model.StatusFor("item.sword"));
+            });
+
+            Case("Bound/unbound partition is deterministic + sorted (no placeholder tier)", () =>
+            {
+                // Project-only resolver so some keys are genuinely unbound.
+                var model = new BindingEditorModel(new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.*", "Assets/MyBuilding.prefab")),
+                }));
+                var keys = new[] { "npc.b", "building.a", "item.c", "building.a" }; // dup building.a
+                var bound = model.BoundKeys(keys);
+                var unbound = model.UnboundKeys(keys);
+                AssertEqual(1, bound.Count);
+                AssertEqual("building.a", bound[0]);
+                AssertEqual(2, unbound.Count);
+                AssertEqual("item.c", unbound[0]); // sorted ordinal: item < npc
+                AssertEqual("npc.b", unbound[1]);
+            });
+
+            Case("BuildTaxonomyTree groups by taxonomy + annotates leaf status", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                var tree = model.BuildTaxonomyTree(new[]
+                {
+                    "building.commercial.bakery",
+                    "building.residential.house",
+                    "npc.guard",
+                });
+                // Two roots, ordinal order.
+                var rootSegs = new List<string>(tree.Children.Keys);
+                AssertEqual(2, rootSegs.Count);
+                AssertEqual("building", rootSegs[0]);
+                AssertEqual("npc", rootSegs[1]);
+                // building is an intermediate node (not itself a used archetype).
+                var building = tree.Children["building"];
+                AssertTrue(!building.IsArchetype, "building is intermediate");
+                AssertEqual(2, building.Children.Count); // commercial + residential
+                // The bakery leaf is a used archetype, bound via the real project rule.
+                var bakery = building.Children["commercial"].Children["bakery"];
+                AssertTrue(bakery.IsArchetype, "bakery leaf is a used archetype");
+                AssertEqual(BindingStatus.Bound, bakery.Status);
+                AssertEqual("building.commercial.bakery", bakery.Path);
+                // npc.guard falls to the placeholder tier.
+                var guard = tree.Children["npc"].Children["guard"];
+                AssertEqual(BindingStatus.Placeholder, guard.Status);
+                AssertTrue(guard.IsPlaceholder, "npc.guard is a placeholder binding");
+            });
+
+            Case("Binding pack round-trips: export -> import -> export is identity", () =>
+            {
+                var layer = BindingEditorCorpus.BuildGoldenLayer();
+                string exported = BindingPack.Export(layer);
+                var reimported = BindingPack.Import(exported);
+                string reexported = BindingPack.Export(reimported);
+                AssertEqual(exported, reexported);
+
+                // The imported table is field-for-field identical (name, kind, rules).
+                AssertEqual(layer.Name, reimported.Name);
+                AssertEqual(layer.Kind, reimported.Kind);
+                AssertEqual(2, reimported.Rules.Count);
+                // Rules come back key-sorted; verify the bakery rule survived intact.
+                BindingRule bakery = null;
+                foreach (var r in reimported.Rules)
+                    if (r.Key == "building.commercial.bakery.medium") bakery = r;
+                AssertTrue(bakery != null, "bakery rule survives the round-trip");
+                AssertEqual("Assets/Bakery.prefab", bakery.AssetRef);
+                AssertEqual(FootprintAlignment.Center, bakery.FootprintAlign);
+                AssertVec3(new BindingVec3(1.5f, 1f, 1.5f), bakery.Scale, "bakery.scale");
+                AssertEqual(2, bakery.Tags.Count);
+                AssertEqual("oven", bakery.Tags[0]);
+                // The baker rule's socket + pivot survive.
+                BindingRule baker = null;
+                foreach (var r in reimported.Rules)
+                    if (r.Key == "npc.merchant.baker") baker = r;
+                AssertTrue(baker != null, "baker rule survives the round-trip");
+                AssertVec3(new BindingVec3(0f, 0.5f, 0f), baker.PivotOffset, "baker.pivot");
+                AssertEqual(1, baker.Sockets.Count);
+                AssertEqual("hat", baker.Sockets[0].Name);
+                AssertVec3(new BindingVec3(0f, 2f, 0f), baker.Sockets[0].LocalPosition, "hat.pos");
+            });
+
+            Case("Exported pack is byte-identical to the canonical golden", () =>
+            {
+                string golden = BindingEditorCorpus.ReadGoldenPackJson();
+                AssertTrue(golden != null, "golden-pack.json must load");
+                var layer = BindingEditorCorpus.BuildGoldenLayer();
+                AssertEqual(golden.Trim(), BindingPack.Export(layer));
+                // ...and importing the golden then re-exporting reproduces it.
+                AssertEqual(golden.Trim(), BindingPack.Export(BindingPack.Import(golden)));
+            });
+
+            Case("Importing malformed / empty pack JSON yields an empty layer (never throws)", () =>
+            {
+                AssertEqual(0, BindingPack.Import(null).Rules.Count);
+                AssertEqual(0, BindingPack.Import("").Rules.Count);
+                AssertEqual(0, BindingPack.Import("}{ not json").Rules.Count);
             });
         }
 

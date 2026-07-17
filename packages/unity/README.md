@@ -264,6 +264,35 @@ shown for confirmation before anything changes.
   engines reconcile against the same policy. See
   [`docs/reimport.md`](docs/reimport.md).
 
+## Binding Editor window
+
+The creator-facing cockpit for the binding layer. **Insimul ▸ Binding Editor**
+([`Editor/InsimulBindingEditorWindow.cs`](Editor/InsimulBindingEditorWindow.cs))
+loads a World IR, walks **every archetype it uses** grouped by taxonomy, and shows
+each row's status — **green = bound** to a real project/pack asset, **amber = only
+the placeholder** tier binds it (art still wanted), **red = unbound**. Per row: a
+prefab picker, a **+desc** ("bind all descendants") affordance, and fuzzy
+name/tag **candidate suggestions** over the project's prefabs (AssetDatabase) with
+preview thumbnails. Bindings write to the project override table; the whole set
+exports / imports as a portable **binding-pack JSON**.
+
+- The window is a thin view over two UnityEngine-free, host-tested cores
+  (`tools/verify-unity`, `RunBindingEditorTests`):
+  [`Runtime/Binding/BindingEditorModel.cs`](Runtime/Binding/BindingEditorModel.cs)
+  (taxonomy tree + bound/placeholder/unbound status + suggestion ranking) and
+  [`Runtime/Binding/BindingPack.cs`](Runtime/Binding/BindingPack.cs) (the
+  `insimul-binding-pack` export/import). Only the AssetDatabase / EditorGUI /
+  file-dialog wiring is UnityEngine-coupled (structural gate only).
+- **Suggestion ranking** scores each project prefab by the count of the
+  archetype's dot segments found (case-insensitive) in its name / path / labels,
+  sorted score-desc then path-asc — the same ranking the Godot dock uses.
+- **Pack round-trip** is byte-stable: export runs through the same canonical-JSON
+  core as the save system (keys sorted, entries key-sorted, minified), so
+  export → import → export is identity, pinned by a golden
+  ([`Tests/Editor/fixtures/binding-editor/golden-pack.json`](Tests/Editor/fixtures/binding-editor/golden-pack.json)).
+- The human end-to-end pass (open on the golden world, bind a custom prefab,
+  regenerate, see it placed) is [`VERIFICATION.md`](VERIFICATION.md) §4.
+
 ## Export pipeline: what gets copied and substituted
 
 Everything under [`templates/`](templates/) is a **game-template tree** the Insimul

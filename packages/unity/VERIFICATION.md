@@ -121,3 +121,34 @@ save/quest/world semantics) are:
 
 Any delta discovered during the human pass that is **not** listed here is a bug —
 file it against this story rather than accepting it.
+
+## 4. Binding Editor window (US-UB5, Unity editor required)
+
+The suggestion + taxonomy-grouping logic and the binding-pack round-trip are
+UnityEngine-free and host-tested (`tools/verify-unity`, `RunBindingEditorTests`
+— suggestion ranking, real/placeholder/unbound status, pack export→import→export
+identity, and golden byte-parity). This is the **human pass** for the EditorWindow
+seam (structural-gate-only) — the AssetDatabase pickers, thumbnails, and file I/O
+only a real editor can exercise.
+
+- [ ] Open **Insimul ▸ Binding Editor**. Click **Load World IR…** and choose the
+      golden world's IR JSON. The tree fills with the archetypes the world uses,
+      grouped by taxonomy root (`building`, `npc`, `item`, `prop`, `terrain`).
+- [ ] With **no** project table, every used archetype shows **amber**
+      "(placeholder)" — the bundled pack covers them all. The header reads
+      `N / N archetypes bound`.
+- [ ] Select a `building.*` row; the **Suggestions** panel ranks project prefabs by
+      name/tag match (highest score first) with mini-thumbnails. Click **Use** on a
+      custom bakery prefab (or **Bind…** and pick one). The row flips to **green**
+      and shows the asset path; a `ProjectBindingTable.asset` is created/updated
+      under `Assets/Insimul/` with the entry (sorted).
+- [ ] Run **Insimul ▸ Generate Scene From World IR** (or Re-import). The bound
+      custom prefab is instantiated at that archetype's placements instead of the
+      placeholder primitive — the bind flows through to generation.
+- [ ] **Export Pack…** writes a `binding-pack.json`. Open it: keys are sorted,
+      minified canonical JSON. **Import Pack…** it back into a fresh project table
+      and confirm the entries are identical (the round-trip the host test pins).
+- [ ] Bind a **non-leaf** key (e.g. `building` via **+desc**) and confirm every
+      `building.*` descendant with no more-specific entry now resolves to that
+      prefab (descendant matching in the resolver), while a more specific
+      `building.commercial.bakery.medium` entry still wins for that key.
