@@ -204,6 +204,15 @@ colors, player/combat tuning, etc.).
   code, and (c) exported world-data JSON — never on `packages/unreal` or
   `packages/godot`. The guard enforces the no-cross-engine-reach-in rule.
 
+## Releasing
+
+`npm run --workspace=com.insimul.sdk release:dry-run` (or `node
+scripts/release/pack-upm.mjs`) builds the UPM tarball into `dist/` via `npm pack`
+and asserts its layout — SDK sources only, no `templates/` tree — then prints an
+OpenUPM readiness checklist. It does **not** publish. See the repo-root
+`docs/RELEASING.md` for the full version-bump + publish flow (`VERSIONS.json` is
+the single version source).
+
 ## License
 
 MIT

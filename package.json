@@ -26,6 +26,7 @@
     "engines:manifests": "node scripts/engines/validate-manifests.mjs",
     "engines:templates": "node scripts/engines/validate-templates.mjs",
     "engines:check": "node tools/engines-check.mjs",
+    "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
     "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell"
   },

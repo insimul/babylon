@@ -280,3 +280,12 @@ player/combat tuning, etc.).
 - **Dependency rule:** template files depend only on (a) this package, (b) generated
   code, and (c) exported world-data JSON — never on `packages/unity` or
   `packages/godot`. The guard enforces the no-cross-engine-reach-in rule.
+
+## Releasing
+
+`node scripts/release/build-plugin-zip.mjs` stages the plugin into `dist/Insimul/`
+(the `.uplugin` at the root plus `Source/`, excluding `templates/` and build
+intermediates), zips it to `dist/Insimul-<version>.zip` in FAB/Marketplace layout,
+and asserts the file set. It does **not** publish. See the repo-root
+`docs/RELEASING.md` for the full version-bump + submission flow (`VERSIONS.json` is
+the single version source).

@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `VERSION` file alongside `Insimul.uplugin`, kept in sync with the manifest's
   `VersionName` and `VERSIONS.json` by `npm run engines:manifests`.
+- FAB/Marketplace release dry-run (`scripts/release/build-plugin-zip.mjs`): stages
+  the plugin (`.uplugin` + `Source/`, no `templates/` or build intermediates) and
+  builds + validates a `dist/Insimul-<version>.zip`.
 
 ### Notes
 - **Editor module deferred.** The plugin currently ships a single `InsimulRuntime`
