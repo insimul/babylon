@@ -293,6 +293,37 @@ exports / imports as a portable **binding-pack JSON**.
 - The human end-to-end pass (open on the golden world, bind a custom prefab,
   regenerate, see it placed) is [`VERIFICATION.md`](VERIFICATION.md) §4.
 
+## Conversation Tester window
+
+Talk to any character of the connected world from the editor. **Insimul ▸
+Conversation Tester**
+([`Editor/InsimulConversationTesterWindow.cs`](Editor/InsimulConversationTesterWindow.cs))
+loads the world's characters (via `getWorldDetail`) into a picker, streams each
+turn's reply from the conversation SDK's `/api/conversation/stream` SSE endpoint, and
+keeps the exchange in an inspectable transcript (**You** / **NPC** lines).
+
+- The window is a thin view over the UnityEngine-free, host-tested core
+  [`Editor/Connect/InsimulConversationTesterModel.cs`](Editor/Connect/InsimulConversationTesterModel.cs)
+  (the per-turn state machine Idle → Sending → Streaming → Idle/Error, transcript,
+  SSE parsing), unit-tested headless over a scripted stream
+  ([`Tests/Editor/ConversationTesterTests.cs`](Tests/Editor/ConversationTesterTests.cs)).
+  Only the `UnityWebRequest` SSE stream + IMGUI are UnityEngine-coupled (structural
+  gate only).
+- **Mode constraint — text streaming works in edit mode; audio does not.** The
+  production stream drives one non-blocking `UnityWebRequest` POST and parses the same
+  `data: {json}` SSE the runtime SDK ([`InsimulHttpClient`](Runtime/InsimulHttpClient.cs))
+  does, but **without** its coroutine path (an `IEnumerator` needs a `MonoBehaviour`
+  host, which edit mode lacks). Audio **playback** and lip sync are **not** available
+  in the tester — they need the `InsimulAudioPlayer` / `InsimulLipSync`
+  `MonoBehaviour`s. The tester reports how many TTS audio chunks a reply returned but
+  never plays them; drive a Play-mode scene with the runtime SDK to hear audio.
+- **Domain-reload safety:** OnEnable subscribes `EditorApplication.update`
+  (→ `model.Pump()` each tick); OnDisable unsubscribes + `model.Dispose()` (aborts the
+  in-flight request) — the same pattern the Generation Console uses, so no orphaned
+  request survives a recompile / entering Play mode.
+- The human end-to-end pass (pick an NPC, exchange two turns) is
+  [`VERIFICATION.md`](VERIFICATION.md) §7.
+
 ## Export pipeline: what gets copied and substituted
 
 Everything under [`templates/`](templates/) is a **game-template tree** the Insimul

@@ -226,3 +226,38 @@ required.
 - [ ] Run a job, then let the token expire / revoke it: the poll surfaces the failure
       as **Job failed: session expired (401)**, and the next World Browser refresh
       shows the **Session expired — re-authenticate** warning.
+
+## 7. Conversation Tester — talk to an NPC in the editor (US-UE4, Unity editor + backend required)
+
+The whole turn lifecycle (send → stream reply chunks → complete/error), the
+character-list + SSE parsing, and the multi-turn transcript over one session id live
+in the UnityEngine-free `InsimulConversationTesterModel`, unit-tested headless over a
+RoutingTransport + a scripted `FakeConversationStream` (`ConversationTesterTests`,
+EditMode). This is the **human pass** for the UnityEditor-coupled seam only a real
+editor + backend can exercise: the `UnityWebRequestConversationStream` SSE POST driven
+off `EditorApplication.update`, and the OnEnable/OnDisable pump wiring. A running
+backend with the conversation service and at least one world with characters on the
+account is required. **Text streaming works in edit mode; audio playback + lip sync do
+not (Play mode only) — see the README ▸ Conversation Tester window mode constraint.**
+
+- [ ] With the session authenticated (Project Settings ▸ Insimul), open **Insimul ▸
+      Conversation Tester**. Enter a **World id** (copy it from the World Browser) and
+      click **Load characters** — the **Character** picker fills with the world's NPCs.
+- [ ] Pick a character, type a message, and click **Send**: the **Transcript** shows a
+      **You** line immediately, then an **NPC** line as the reply streams in, without
+      freezing the editor (the request runs off `EditorApplication.update`).
+- [ ] Send a **second** turn to the same character and confirm the reply is coherent
+      in context (the two turns share one conversation session) and both exchanges
+      remain in the transcript.
+- [ ] If the world's characters have TTS enabled, confirm the **TTS audio: N chunk(s)
+      returned (not played in edit mode)** line appears — audio is not played here by
+      design.
+- [ ] Switch to a **different** character in the picker: the transcript clears (a fresh
+      conversation), and the next turn starts a new session.
+- [ ] **Domain-reload safety:** send a turn, then force a recompile (edit any script)
+      or **enter Play mode** while it is streaming. Confirm the editor does not throw,
+      no request keeps running after the reload, and re-opening the window starts clean
+      (the OnDisable → `EditorApplication.update -=` + `model.Dispose()` abort path).
+- [ ] Let the token expire / revoke it and send: the reply surfaces as a
+      **Conversation error: session expired (401)**, and the next World Browser refresh
+      shows the **Session expired — re-authenticate** warning.
