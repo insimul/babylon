@@ -86,3 +86,9 @@ export type { World } from './quest-types';
 // Runtime validators for the SaveFile, its export Envelope, and the World IR.
 // Emitted JSON Schemas live in packages/core/schemas/ (npm run schemas).
 export * from './schemas';
+
+// ── Editor v1 client contract (US-GE1) ─────────────────────────────────────
+// The engine-agnostic operation resolver + reference editor session the native
+// editor clients (Godot v1_client.gd / insimul_editor_session.gd) mirror.
+export * from './editor/operations';
+export * from './editor/editor-session';

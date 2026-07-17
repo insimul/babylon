@@ -111,6 +111,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/addons/insimul/editor/reimport/run_reimport_headless.sh
 	echo "== godot: binding-dock headless test (US-GB3, skips without a godot binary) =="
 	bash packages/godot/addons/insimul/editor/dock/run_binding_dock_headless.sh
+	echo "== godot: editor-connect headless test (US-GE1, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/connect/run_connect_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi
