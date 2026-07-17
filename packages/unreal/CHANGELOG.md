@@ -43,6 +43,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gated; `Landscape`/`LandscapeEditor`/`Foliage`/`NavigationSystem`/`PCG` deps
   declared in `InsimulEditor.Build.cs`. Conventions in `docs/scene-generation.md`.
   Wired into `npm run engines:check`.
+- **PCG vegetation + placeholder pack (US-XG3).** New UE-free placeholder pack
+  recipe (`Source/InsimulEditor/Portable/InsimulPlaceholderPack.{h,cpp}`): an
+  ordinally sorted list of primitive+taxonomy-color specs (five base-node wildcards
+  `building.*`/`npc.*`/`item.*`/`prop.*`/`terrain.*` + nicer sub-node defaults)
+  projected into a Priority-0 Placeholder-tier `FBindingSource`. Host coverage gate
+  (`npm run engines:unreal:placeholder`) proves every archetype key in the shared
+  `golden-world-archetypes.json` (byte-identical to Unity's) resolves with zero
+  unbound. The UE-coupled generator (`InsimulPlaceholderPackGenerator`) walks the
+  same specs to materialize primitive meshes + a pre-wired `UInsimulBindingTable`.
+  PCG vegetation scatter: portable graph descriptor
+  (`data/pcg/insimul-vegetation-graph.json`) + the syntax-gated
+  `InsimulPcgVegetation` stage that feeds graph parameters from the IR biome/density
+  slice. Licensing note `data/placeholders/LICENSE.md` (all original / CC0).
+  Conventions in `docs/scene-generation.md`; wired into `npm run engines:check`.
 
 ### Notes
 - `EngineVersion` is intentionally left unset: this is a source plugin that builds

@@ -109,3 +109,57 @@ The golden fixtures pin the math:
 
 Regenerate a manifest dump with `test_scene_placement --dump <fixtures-dir>`,
 never edit the golden by hand.
+
+## PCG vegetation + the placeholder pack (US-XG3)
+
+Two data-driven, engine-neutral artifacts sit on top of the placement pipeline;
+both are host-tested or documented, and their UE-coupled halves are syntax-gated
+only (no UBT in the harness).
+
+### PCG-driven vegetation scatter
+
+The **semantic layout** is Insimul's job (the sculpted Landscape, road splines,
+and building footprints from US-XG2, plus the IR's per-biome density map); the
+**per-instance scatter** is Unreal PCG's job — this is the native-procgen payoff.
+
+- **Graph descriptor**: `data/pcg/insimul-vegetation-graph.json` is the portable,
+  native-readable source of truth for the `PCG_InsimulVegetation` graph (mirroring
+  the `base-templates.pl` data-mirror convention). It lists the exposed
+  parameters, the seven-node topology (surface sampler → density mask → slope
+  filter → road/footprint exclusion → scale jitter → static-mesh spawner), and the
+  per-biome scatter bands (`grassland`/`forest`/`farmland`/`wetland`/`barren`).
+- **Parameter-feeding code**: `InsimulPcgVegetation` (Public/Private) is the
+  UE-coupled stage. `FeedParametersFromIr` reads the IR `meta.seed` +
+  `geography.terrain.density`/`.biomeBands` slice and fills the graph parameters,
+  backfilling any biome the IR omits with the descriptor defaults so the graph
+  always has full biome coverage. `BuildOrLoadGraph` loads (or, first-run,
+  materializes from the descriptor) the `UPCGGraph`; `AddToWorld` drops a
+  `UPCGComponent` on the terrain root and generates.
+- **Determinism**: the scatter `Seed` is the world IR seed, so a re-generate
+  reproduces the identical scatter. The road splines + building footprints already
+  in the world are the exclusion masks.
+- **PCG dependency**: declared in `InsimulEditor.Build.cs`
+  (`PrivateDependencyModuleNames += "PCG"`).
+
+### Placeholder asset pack
+
+Before any real art exists, every bound archetype resolves to a procedurally
+generated primitive so an imported world is instantiable out of the box.
+
+- **Pure recipe** (host-tested): `Portable/InsimulPlaceholderPack.{h,cpp}` is a
+  UE-free, ordinally sorted list of `FPlaceholderSpec` (archetype pattern →
+  primitive shape + taxonomy-labeled color) plus `BuildPlaceholderSource()`, which
+  projects them into a Priority-0 Placeholder-tier `FBindingSource`. The **five
+  base-node wildcards** (`building.*`, `npc.*`, `item.*`, `prop.*`, `terrain.*`)
+  guarantee coverage; the sub-node specs are nicer defaults (the resolver picks
+  the most specific).
+- **Coverage gate**: `Tests/test_placeholder_pack.cpp` (run via
+  `run-placeholder-tests.sh` / `npm run engines:unreal:placeholder`) asserts every
+  key in the shared `fixtures/golden-world-archetypes.json` (byte-identical to
+  Unity's) resolves against the pack with **zero unbound** — the same coverage
+  contract the Unity leg (`PlaceholderPackTests`) proves.
+- **Editor generator** (syntax-gated): `InsimulPlaceholderPackGenerator::Generate`
+  walks the same specs, materializes one primitive `StaticMesh` per spec with a
+  flat archetype-labeled material, and writes a pre-wired `UInsimulBindingTable`
+  (SourceKind = Placeholder). Nothing is a checked-in binary blob.
+- **Licensing**: `data/placeholders/LICENSE.md` — all original content, CC0.

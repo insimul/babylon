@@ -89,6 +89,8 @@ if changed_matches "packages/unreal/"; then
 	bash tools/verify-unreal/run-binding-tests.sh
 	echo "== unreal: scene-generation placement host tests (US-XG2) =="
 	bash tools/verify-unreal/run-scene-tests.sh
+	echo "== unreal: placeholder pack coverage host tests (US-XG3) =="
+	bash tools/verify-unreal/run-placeholder-tests.sh
 else
 	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
 fi
