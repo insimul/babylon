@@ -36,6 +36,16 @@ never as code.**
   gold, with item + gold conservation as the invariant). Run by
   `src/ui/__tests__/quest-trade-corpus.test.ts` and the Godot headless leg
   (`packages/godot/addons/insimul/tests/quest_trade_test.gd`).
+  US-GU3 adds `chat-cases.json` (dialogue streaming: an ordered event stream —
+  greeting/begin/chunk/action/complete/fail — pinning the transcript, streaming
+  flag, triggered KB actions, completed-turn count, and the `save.conversations`
+  history projection), `pause-menu-cases.json` (module-bundle-gated tab visibility +
+  the open/active-tab reducer) and `save-slot-cases.json` (codec-reported slot
+  outcome → rendered row status/title/message/can_load/can_save, incl. the
+  corrupted-envelope messaging). Run by
+  `src/ui/__tests__/dialogue-menu-save-corpus.test.ts` (which also proves the real
+  SHA-256 corrupted-envelope chain via `SaveSlotModel.classifyEnvelope`) and the
+  Godot headless leg (`packages/godot/addons/insimul/tests/dialogue_menu_save_test.gd`).
 
 ## Prolog case format
 

@@ -14,7 +14,9 @@
     "inventory",
     "container",
     "merchant",
-    "dialogue"
+    "dialogue",
+    "pause_menu",
+    "save_load"
   ],
   "cases": [
     {

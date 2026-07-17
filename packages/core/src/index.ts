@@ -125,3 +125,13 @@ export * from './ui/notifications';
 // packages/core/conformance/ui/{quest-journal-cases,trade-cases}.json.
 export * from './ui/quest-journal-model';
 export * from './ui/trade-model';
+
+// ── Default-UI dialogue + pause-menu + save-slot view-models (US-GU3) ──────
+// The streaming chat model (chunks/actions/history → save.conversations), the
+// module-bundle-gated pause-menu tab reducer, and the save/load slot model
+// (incl. corrupted-envelope messaging) the native mirrors (Godot chat_model.gd /
+// pause_menu_model.gd / save_slot_model.gd) implement. Shared matrices:
+// packages/core/conformance/ui/{chat-cases,pause-menu-cases,save-slot-cases}.json.
+export * from './ui/chat-model';
+export * from './ui/pause-menu-model';
+export * from './ui/save-slot-model';
