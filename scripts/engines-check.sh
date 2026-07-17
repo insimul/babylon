@@ -39,6 +39,41 @@ changed_matches() { # $1 = path prefix
 
 ran_any=0
 
+# ---- Unity ------------------------------------------------------------------
+# Always run the C# structural syntax gate (no SDK needed). When a .NET SDK IS
+# present, also run the pure host harness (tools/verify-unity), which exercises
+# the UnityEngine-free cores — the Prolog wrapper AND the US-UC1 world source —
+# against the golden fixtures on a bare SDK (no editor, no libinsimul). When
+# dotnet is absent we SKIP cleanly so this gate never fails for want of the
+# toolchain (autoMerge is off; a human/CI box runs the full suite before merge).
+if changed_matches "packages/unity/"; then
+	ran_any=1
+	echo "== unity: C# structural syntax gate (US-EP3) =="
+	node tools/verify-unity/check.mjs
+	if command -v dotnet >/dev/null 2>&1; then
+		echo "== unity: pure host tests — Prolog wrapper + world source + save system =="
+		bash tools/verify-unity/run.sh --pure
+	else
+		echo "unity: dotnet not found — SKIP host dotnet tests (structural gate only)"
+	fi
+	# Save-system portability cross-check (US-UC2): recompute the golden integrity
+	# vectors from the TS authority (the exact canonical bytes the C# side targets)
+	# + validate a C#-produced envelope if the dotnet run wrote one. Needs vite-node.
+	echo "== unity: save-system portability cross-check (US-UC2) =="
+	npx vite-node tools/verify-unity/cross-check.mjs
+	# Quest reward grep-guard (US-UC3): rewards must be READ FROM PROLOG
+	# (quest_reward/3), never a denormalized C# default. Fail if the quest core
+	# hardcodes a numeric reward assignment (ExperienceReward = <number>).
+	echo "== unity: quest reward grep-guard (US-UC3) =="
+	if grep -REn 'ExperienceReward[[:space:]]*=[[:space:]]*[0-9]' packages/unity/Runtime/Quest/; then
+		echo "unity: FAIL — denormalized reward literal in quest core (read from Prolog instead)"
+		exit 1
+	fi
+	echo "unity: quest reward grep-guard OK (no denormalized reward literals)"
+else
+	echo "engines:check: no packages/unity/ changes — skipping unity gates"
+fi
+
 # ---- Godot GDExtension -----------------------------------------------------
 if changed_matches "packages/godot/"; then
 	ran_any=1

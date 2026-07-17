@@ -32,6 +32,45 @@
          (ConformanceCorpusTests.cs) is deliberately NOT included here so this
          harness never needs nunit.framework. -->
     <Compile Include="../../packages/unity/Tests/Editor/ConformanceCorpus.cs" />
+    <!-- World loading core (US-UC1): engine-agnostic, UnityEngine-free. It parses
+         through the generated schema DTOs (InsimulGenerated.cs) via System.Text.Json,
+         so both are compiled here. Its shared fixture locator + the console tests in
+         Program.cs drive it against the golden saves. The StreamingAssets adapter is
+         UnityEngine-coupled and thus deliberately NOT included (structural gate only). -->
+    <Compile Include="../../packages/unity/Runtime/World/InsimulWorldSource.cs" />
+    <Compile Include="../../packages/unity/Runtime/Generated/InsimulGenerated.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/WorldSourceCorpus.cs" />
+    <!-- Portable save system (US-UC2): engine-agnostic, UnityEngine-free. The
+         mutable JSON model + canonical-JSON/SHA-256 core + migration chain. Its
+         shared fixture locator + the console tests in Program.cs drive it against
+         the golden saves + the TS-migration goldens. The StreamingAssets slot
+         adapter is UnityEngine-coupled and thus NOT included (structural gate only). -->
+    <Compile Include="../../packages/unity/Runtime/Save/JsonVal.cs" />
+    <Compile Include="../../packages/unity/Runtime/Save/InsimulSaveSystem.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/SaveSystemCorpus.cs" />
+    <!-- Quest system (US-UC3): engine-agnostic, UnityEngine-free. The portable
+         hydration + query-driven completion core over currentState.prologFacts,
+         plus the stateful shell preserving the template QuestSystem events. The
+         golden hydration corpus (packages/core/conformance/quests) + the console
+         tests in Program.cs drive it against the TS quest-hydrator output. -->
+    <Compile Include="../../packages/unity/Runtime/Quest/InsimulQuestSystem.cs" />
+    <Compile Include="../../packages/unity/Runtime/Quest/InsimulQuestRuntime.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/QuestSystemCorpus.cs" />
+    <!-- Radiant slot-filling engine (US-UC4): engine-agnostic, UnityEngine-free.
+         The deterministic generator (InsimulRadiantEngine) + the native-KB solver
+         adapter (InsimulPrologRadiantSolver). The pure tests in Program.cs drive it
+         with a stub solver; RunRadiantConformance drives it against the golden
+         radiant corpus through the real InsimulProlog engine. -->
+    <Compile Include="../../packages/unity/Runtime/Radiant/InsimulRadiantEngine.cs" />
+    <Compile Include="../../packages/unity/Runtime/Radiant/InsimulPrologRadiantSolver.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/RadiantCorpus.cs" />
+    <!-- Startup orchestrator (US-UC5): the UnityEngine-free full-loop context that
+         ties the world source + save system + quest runtime together (Boot / new
+         game / resume / commit / worldSnapshot-stability). The MonoBehaviour that
+         drives it (templates/scripts/core/InsimulRuntimeBootstrap.cs) is UnityEngine-
+         coupled and thus NOT included (structural gate only) — RunBootstrapTests in
+         Program.cs proves this core end-to-end. -->
+    <Compile Include="../../packages/unity/Runtime/InsimulRuntimeContext.cs" />
     <!-- The wrapper under test, referenced in place (no vendoring). -->
     <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
     <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />

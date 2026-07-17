@@ -1,0 +1,4 @@
+# US-UC2: the C#-produced portability envelope is a host-test artifact
+# (written by tools/verify-unity/Program.cs on a .NET SDK box, validated by
+# cross-check.mjs). Not source — regenerated each run.
+csharp-produced.envelope.json
