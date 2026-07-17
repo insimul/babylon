@@ -26,6 +26,7 @@ set(PORTABLE_SOURCES
     "${RUNTIME_DIR}/Portable/InsimulCanonicalJson.cpp"
     "${RUNTIME_DIR}/Portable/InsimulSaveSystem.cpp"
     "${RUNTIME_DIR}/Portable/InsimulQuestSystem.cpp"
+    "${RUNTIME_DIR}/Portable/InsimulBootstrap.cpp"
 )
 
 # Golden fixtures shipped by packages/core (semantics authority).
@@ -85,3 +86,15 @@ target_compile_definitions(insimul_verify_quest PRIVATE
 )
 target_compile_options(insimul_verify_quest PRIVATE ${WARN_FLAGS})
 add_test(NAME quest_system COMMAND insimul_verify_quest)
+
+# ── Bootstrap / full-loop host tests (US-XC4) ──
+add_executable(insimul_verify_bootstrap
+    test_bootstrap.cpp
+    ${PORTABLE_SOURCES}
+)
+target_include_directories(insimul_verify_bootstrap PRIVATE ${INCLUDE_DIRS})
+target_compile_definitions(insimul_verify_bootstrap PRIVATE
+    INSIMUL_FIXTURE_DIR="${FIXTURE_DIR}"
+)
+target_compile_options(insimul_verify_bootstrap PRIVATE ${WARN_FLAGS})
+add_test(NAME bootstrap COMMAND insimul_verify_bootstrap)

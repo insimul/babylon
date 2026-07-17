@@ -217,3 +217,64 @@ prefer:
 keeps working until the bootstrap integration (US-XC4) re-points the startup
 path at the new core. No template call sites are changed in US-XC3 — this is an
 additive, host-tested core with a documented migration target.
+
+## US-XC4 — Template bootstrap integration + human checklist
+
+### What changed
+
+- **New:** `FInsimulRuntimeContext`
+  (`Source/InsimulRuntime/Portable/InsimulBootstrap.{h,cpp}`) — the portable,
+  host-testable **startup orchestrator**. It ties the US-XC1..XC3 cores into the
+  single template-startup loop — **world source → save slot → KB → systems
+  init** — with three entry points: `Boot()` (resume a valid save slot, else new
+  game from the golden world; a corrupt slot falls back to a new game rather than
+  bricking startup), `CommitToSave()` (snapshot the live KB into
+  `currentState.prologFacts`), and `EvaluateAllQuests()` / `RunRadiantTick()`
+  (drive the quest + radiant transitions). `WorldSnapshotIntegrity()` exposes the
+  world-hash-stability check.
+- **New:** UE startup seam `UInsimulRuntimeSubsystem`
+  (`Public/InsimulRuntimeSubsystem.h`, `Private/InsimulRuntimeSubsystem.cpp`) — a
+  `GameInstanceSubsystem` that owns the one runtime context for the play session,
+  drives `Boot`/`SaveToSlot` through `FInsimulSaveSystemShell`, and projects the
+  world source through the UStruct boundary for its consumers. **Syntax-gated**
+  (UE-coupled, human-verified); it reimplements no runtime semantics.
+- **Re-pointed consumers (read from the world source):**
+  - `AInsimulLevelScriptActor` — pulls its spawn character ids/names from the
+    booted world source when the runtime is ready (defaults remain a fallback).
+  - `AInsimulSpawner` — new `PopulateSpawnDataFromWorldSource()`; the auto-spawn
+    path prefers the world source and **skips the per-entity server fetch** when
+    it yields characters.
+  - `UInsimulCrowdIntegration` — `ConfigureInsimul` resolves an empty world id
+    from the booted world source, so the crowd bridge maps against the same
+    loaded world as the rest of the runtime.
+
+### The full loop is host-tested
+
+`tools/verify-unreal/test_bootstrap.cpp` (the `bootstrap` ctest, **43 checks**)
+drives the whole loop in the portable core: boot-resume the golden save (entity
+counts match the cross-runtime parity numbers), new-game + corrupt-save fallback,
+and the full **radiant → objective → save → reload** sequence with quest +
+radiant facts round-tripping and the `worldSnapshot` hash stable throughout. The
+human pass ([VERIFICATION.md](./VERIFICATION.md)) confirms the same loop in a live
+Unreal build plus the `#if WITH_ENGINE` syntax gates.
+
+### Startup-path deprecation (DataLoader / SaveLoadSystem / QuestSystem)
+
+US-XC4 completes the re-pointing the earlier stories flagged: the template
+startup path (Module/LevelScriptActor/GameInstance) now boots through
+`UInsimulRuntimeSubsystem` → `FInsimulRuntimeContext`, so the world source, save
+system, and quest system supersede the template `DataLoader` per-entity reads,
+`SaveLoadSystem` slot plumbing, and `QuestSystem` KB for the covered shapes.
+
+| Old (template startup)                | New (runtime subsystem / portable core)              |
+| ------------------------------------- | ---------------------------------------------------- |
+| Hardcoded / server character ids in the level actor | `UInsimulRuntimeSubsystem::GetWorldCharacters()` (world source) |
+| `AInsimulSpawner` server fetch as the only source   | `PopulateSpawnDataFromWorldSource()` (server fetch is the fallback) |
+| Ad-hoc "new game vs load" startup branching         | `FInsimulRuntimeContext::Boot()` (resume-or-new, corrupt-safe) |
+| Manual save/load slot wiring                        | `UInsimulRuntimeSubsystem::SaveToSlot()` (canonical envelope) |
+
+**Compatibility path retained.** The template prototypes are still present and
+the server-fetch / manual-config paths remain as fallbacks when the runtime
+subsystem has not booted. Deliberate deltas vs the Babylon/Unity behaviour
+reference (target zero) are documented in
+[VERIFICATION.md §3](./VERIFICATION.md#3-deliberate-deltas-vs-the-babylonunity-behaviour-reference).

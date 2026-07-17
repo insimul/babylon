@@ -3,6 +3,8 @@
 #include "InsimulSpawner.h"
 #include "InsimulAICharacter.h"
 #include "InsimulSettings.h"
+#include "InsimulRuntimeSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Components/BillboardComponent.h"
 #include "Engine/Texture2D.h"
 #include "UObject/ConstructorHelpers.h"
@@ -65,7 +67,13 @@ void AInsimulSpawner::BeginPlay()
 
 	if (bAutoSpawnAI)
 	{
-		if (bFetchCharactersFromServer)
+		// Prefer the booted world source (US-XC4). If it yields characters, spawn
+		// from them and skip the per-entity server fetch entirely.
+		if (PopulateSpawnDataFromWorldSource())
+		{
+			GetWorldTimerManager().SetTimerForNextTick(this, &AInsimulSpawner::SpawnAICharacters);
+		}
+		else if (bFetchCharactersFromServer)
 		{
 			// Fetch characters from the server, then spawn
 			FetchAndSpawnCharacters();
@@ -76,6 +84,53 @@ void AInsimulSpawner::BeginPlay()
 			GetWorldTimerManager().SetTimerForNextTick(this, &AInsimulSpawner::SpawnAICharacters);
 		}
 	}
+}
+
+bool AInsimulSpawner::PopulateSpawnDataFromWorldSource()
+{
+	const UGameInstance* GI = GetGameInstance();
+	if (!GI)
+	{
+		return false;
+	}
+	const UInsimulRuntimeSubsystem* Runtime = GI->GetSubsystem<UInsimulRuntimeSubsystem>();
+	if (!Runtime || !Runtime->IsRuntimeReady())
+	{
+		return false;
+	}
+
+	const TArray<FInsimulWorldCharacter> WorldChars = Runtime->GetWorldCharacters();
+	if (WorldChars.Num() == 0)
+	{
+		return false;
+	}
+
+	// Rebuild spawn data from the world source, distributing points in a circle
+	// around the spawner (mirrors the server-fetch layout in OnCharactersFetched).
+	CharacterSpawnData.Empty();
+	const float SpawnSpacing = 300.0f;
+	for (int32 i = 0; i < WorldChars.Num(); i++)
+	{
+		const FInsimulWorldCharacter& C = WorldChars[i];
+
+		FInsimulCharacterSpawnData SpawnData;
+		SpawnData.CharacterID = C.Id;
+		SpawnData.CharacterName = FString::Printf(TEXT("%s %s"), *C.FirstName, *C.LastName).TrimStartAndEnd();
+		if (SpawnData.CharacterName.IsEmpty())
+		{
+			SpawnData.CharacterName = SpawnData.CharacterID;
+		}
+
+		const float Angle = (2.0f * PI * i) / FMath::Max(WorldChars.Num(), 1);
+		const float Radius = SpawnSpacing * FMath::Max(1, (i / 8) + 1);
+		SpawnData.Location = FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
+		SpawnData.Rotation = FRotator(0.0f, FMath::RadiansToDegrees(Angle) + 180.0f, 0.0f);
+
+		CharacterSpawnData.Add(SpawnData);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Insimul spawner populated %d characters from the world source"), WorldChars.Num());
+	return true;
 }
 
 FString AInsimulSpawner::GetEffectiveWorldID() const

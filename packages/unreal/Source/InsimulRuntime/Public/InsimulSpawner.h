@@ -97,6 +97,13 @@ private:
 	UPROPERTY()
 	TArray<class AInsimulAICharacter*> SpawnedAICharacters;
 
+	/**
+	 * Populate CharacterSpawnData from the booted runtime subsystem's world source
+	 * (US-XC4). Distributes spawn locations around the spawner. Returns true if the
+	 * world source was ready and yielded characters (so the server fetch is skipped).
+	 */
+	bool PopulateSpawnDataFromWorldSource();
+
 	/** Resolve the effective World ID (from property or plugin settings) */
 	FString GetEffectiveWorldID() const;
 

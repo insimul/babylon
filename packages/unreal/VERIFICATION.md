@@ -132,3 +132,100 @@ deltas this checklist exercises.
 - [ ] With `libinsimul` absent (subsystem unavailable), `LoadFromIR` logs the
       "unavailable" error and adapter mutations no-op / queries return
       empty-or-default **without** crashing PIE.
+# Insimul Unreal Runtime — Human Verification Checklist (US-XC4)
+
+The portable runtime core (`FInsimul*`) is proven cross-runtime by the host
+harness and the TS drift guards; those run without an engine. This document is
+the **human pass**: the things only a real Unreal Editor + build can confirm —
+the syntax gates on the UE-coupled seam and the full gameplay loop end-to-end.
+
+Everything in §1–§2 has an automated proxy that is already green (see
+[MIGRATION.md](./MIGRATION.md) and the harness commands below); the human is
+confirming an already-proven sequence, not debugging it.
+
+## 0. Automated pre-checks (run before the human pass)
+
+These must all be green first — they gate the portable semantics the loop below
+exercises.
+
+- [ ] Host harness: `cd packages/unreal/tools/verify-unreal && cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`
+      → 4/4 (`world_source`, `save_system`, `quest_system`, **`bootstrap`**).
+- [ ] Root type-check: `npm run check` → exit 0.
+- [ ] Root tests: `npm test` → all green (includes the save-integrity + quest
+      drift guards that pin the C++ output to the TS authority).
+- [ ] Save portability cross-check: `npx vite-node packages/unreal/tools/cross-check/verify-save-integrity.ts` → exit 0.
+
+## 1. Build / syntax gates (Unreal Editor required)
+
+The UE-coupled files are syntax-gated (`#if WITH_ENGINE`, UHT `GENERATED_BODY`)
+and are NOT compiled by the host harness. Confirm they build under UBT:
+
+- [ ] Generate project files and build the `InsimulExport` editor target
+      (`templates/project/`) — see `templates/project/INTEGRATION_GUIDE.md`.
+- [ ] The build compiles the new engine seam cleanly:
+  - [ ] `UInsimulRuntimeSubsystem` (`Public/InsimulRuntimeSubsystem.h`, `Private/InsimulRuntimeSubsystem.cpp`) — the startup orchestrator.
+  - [ ] `FInsimulSaveSystemShell`, `FInsimulQuestSystemShell`, `InsimulWorldBoundary` (the US-XC1..XC3 seams the subsystem drives).
+  - [ ] The re-pointed consumers: `AInsimulLevelScriptActor`, `AInsimulSpawner`, `UInsimulCrowdIntegration`.
+- [ ] No UHT errors on the `USTRUCT`/`UCLASS`/`UFUNCTION` reflection surface.
+
+## 2. Full gameplay loop (Play-In-Editor)
+
+Drive the whole loop the way the automated `bootstrap` host test does, but in the
+live engine. Use the golden world (`Content/Data/` export, or a bundled
+`worldSnapshot`).
+
+### New game on the golden world
+
+- [ ] Start Play with **no existing save slot**. `UInsimulRuntimeSubsystem::Boot`
+      logs `Insimul runtime booted (new game): N characters, M quests`.
+- [ ] NPCs spawn from the **world source**, not a hardcoded/server list:
+      `AInsimulSpawner` logs `populated N characters from the world source`
+      (and `AInsimulLevelScriptActor` uses the world-source ids when present).
+- [ ] The spawned character ids/names match the golden world's characters.
+
+### Radiant quest
+
+- [ ] A radiant-tagged quest is offered deterministically (the same offering the
+      `radiant-cases.json` corpus + host test pin). Re-running Play from the same
+      state offers the **same** quest(s) in the same order (RNG-free).
+
+### Objective
+
+- [ ] Complete an objective's trigger in-world (e.g. talk to the target NPC).
+      The quest system shell broadcasts `OnObjectiveCompleted`, then
+      `OnQuestCompleted` once all objectives are satisfied — and a
+      `quest_complete(<id>)` fact is asserted into the KB.
+
+### Save
+
+- [ ] Save to a slot (`UInsimulRuntimeSubsystem::SaveToSlot`). A canonical,
+      integrity-stamped envelope file is written under the project SaveGames dir.
+- [ ] (Optional) Copy that slot file to another device/runtime and confirm it
+      still verifies — the cross-runtime portability property (§5.2 B2).
+
+### Reload
+
+- [ ] Stop and re-enter Play. `Boot` logs `resumed save`; `DidResumeSave()` is
+      true.
+- [ ] Quest + radiant progress is intact: the completed quest stays completed,
+      the offered radiant quest is still offered (KB facts round-tripped).
+- [ ] The `worldSnapshot` hash is unchanged across the save/reload boundary (a
+      `currentState`-only mutation must never perturb the world hash) — the host
+      `bootstrap` test asserts this; confirm no world-drift warnings in the log.
+
+## 3. Deliberate deltas vs the Babylon/Unity behaviour reference
+
+**Target: zero.** The portable core ports the semantics authority
+(`packages/core`, TypeScript; Unity is the reference implementation) byte-for-byte
+where it matters, pinned by the shared corpora + drift guards. Known,
+**intentional** deltas at the UE seam (none change observable save/quest/world
+semantics):
+
+| Delta | Where | Why it is not a semantic difference |
+| ----- | ----- | ----------------------------------- |
+| Slot timestamps (`createdAt`/`lastSavedAt`/envelope `exportedAt`) use `FDateTime::UtcNow()` at write time. | `FInsimulSaveSystemShell` | Timestamps are identity metadata, not part of the integrity-hashed contract dimension the corpora pin; the golden envelope uses a fixed timestamp so the byte-pin holds. |
+| No native Prolog resolution engine yet (KB is a ground-fact store with Assert/Has). | `FInsimulKB` | Sufficient for query-driven completion; `unreal-native-prolog` plugs in behind the same Assert/Has shape without changing the fact contract. |
+| Corrupt/incompatible save slot falls back to a new game instead of aborting boot. | `FInsimulRuntimeContext::Boot` | Resilience choice, not a semantic difference; a valid save always resumes. Matches the "never brick startup" intent. |
+
+Any delta discovered during the human pass that is **not** listed here is a bug —
+file it against this story rather than accepting it.
