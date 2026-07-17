@@ -27,7 +27,10 @@ public class InsimulRuntime : ModuleRules
 
         PrivateDependencyModuleNames.AddRange(new string[]
         {
-            "Projects"
+            "Projects",
+            // Native Prolog core (libinsimul C ABI). Private: the InsimulKB
+            // wrapper (Private/Prolog) is the only consumer of insimul.h.
+            "InsimulLibrary"
         });
     }
 }
