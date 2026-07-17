@@ -56,6 +56,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/gdextension/test/run_binding_tests.sh
 	echo "== godot: scene-placement host tests (US-GB2) =="
 	bash packages/godot/gdextension/test/run_placement_tests.sh
+	echo "== godot: re-import diff host tests (US-GB3) =="
+	bash packages/godot/gdextension/test/run_reimport_tests.sh
 	echo "== godot: GDScript structural lint (US-GP3, godot --check-only stand-in) =="
 	python3 packages/godot/gdextension/tests/gdscript_structural_lint.py
 	echo "== godot: world-source headless test (US-GC1, skips without a godot binary) =="
@@ -70,6 +72,10 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/addons/insimul/editor/binding/run_binding_resolver_headless.sh
 	echo "== godot: scene-generator headless test (US-GB2, skips without a godot binary) =="
 	bash packages/godot/addons/insimul/editor/scene/run_scene_generator_headless.sh
+	echo "== godot: re-import diff headless test (US-GB3, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/reimport/run_reimport_headless.sh
+	echo "== godot: binding-dock headless test (US-GB3, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/dock/run_binding_dock_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi
