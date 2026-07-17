@@ -91,6 +91,17 @@
          proves the coverage guarantee (every golden-world key resolves) over this. -->
     <Compile Include="../../packages/unity/Runtime/Binding/PlaceholderPack.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/PlaceholderPackCorpus.cs" />
+    <!-- Editor-time scene generation (US-UB3): the pure placement core + the
+         UnityEngine-free pipeline orchestration (ISceneBuilder/ScenePipeline +
+         the RecordingSceneBuilder double). It parses the World IR through the
+         JsonVal model (already compiled for the save system) and resolves
+         bindings via the PlaceholderPack tier. The UnitySceneBuilder that
+         materializes GameObjects + the InsimulEntityId MonoBehaviour are
+         UnityEngine-coupled and thus NOT included (structural gate only) —
+         RunSceneGenTests proves the math + determinism + pipeline order. -->
+    <Compile Include="../../packages/unity/Runtime/Scene/SceneGenerator.cs" />
+    <Compile Include="../../packages/unity/Runtime/Scene/ISceneBuilder.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/SceneGenCorpus.cs" />
   </ItemGroup>
 
 </Project>

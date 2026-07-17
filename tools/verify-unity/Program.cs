@@ -23,6 +23,8 @@ using Insimul.Radiant.Conformance;
 using Insimul.Runtime;
 using Insimul.Save;
 using Insimul.Save.TestSupport;
+using Insimul.Scene;
+using Insimul.Scene.TestSupport;
 using Insimul.World;
 using Insimul.World.TestSupport;
 
@@ -48,6 +50,7 @@ namespace Insimul.Verify
             RunBootstrapTests();
             RunBindingResolverTests();
             RunPlaceholderPackTests();
+            RunSceneGenTests();
 
             if (skipNative)
             {
@@ -1630,6 +1633,174 @@ namespace Insimul.Verify
             foreach (var s in PlaceholderPack.Specs)
                 if (s.Pattern == pattern) return s;
             throw new Exception($"no placeholder spec for pattern {pattern}");
+        }
+
+        // ---- Editor-time scene generation (US-UB3) --------------------------
+
+        private static void RunSceneGenTests()
+        {
+            Case("QuantizeCoord rounds to 0.001 + normalizes signed zero", () =>
+            {
+                AssertEqual(1.16, SceneGenerator.QuantizeCoord(1.1604));
+                AssertEqual(3.142, SceneGenerator.QuantizeCoord(3.14159));
+                AssertEqual(0.0, SceneGenerator.QuantizeCoord(-0.0));
+                AssertEqual(0.0, SceneGenerator.QuantizeCoord(0.00004));
+                AssertEqual(0.0, SceneGenerator.QuantizeCoord(double.NaN));
+            });
+
+            Case("ZoneScaleForRole matches the cross-engine table", () =>
+            {
+                AssertEqual(1.3, SceneGenerator.ZoneScaleForRole("commercial"));
+                AssertEqual(1.4, SceneGenerator.ZoneScaleForRole("downtown"));
+                AssertEqual(1.2, SceneGenerator.ZoneScaleForRole("industrial"));
+                AssertEqual(0.9, SceneGenerator.ZoneScaleForRole("outskirts"));
+                AssertEqual(1.0, SceneGenerator.ZoneScaleForRole("residential"));
+                AssertEqual(1.0, SceneGenerator.ZoneScaleForRole("who-knows"));
+            });
+
+            Case("SampleTerrainHeight: bilinear over the golden heightmap", () =>
+            {
+                var heights = new List<double> { 0, 0, 0, 0, 4, 0, 0, 0, 0 };
+                // Centre of the map = grid centre = the peak value.
+                AssertEqual(4.0, SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, 50, 50));
+                // Chunk centre (25,25) = quarter-way = 1.0 (matches the golden manifest).
+                AssertEqual(1.0, SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, 25, 25));
+                // Road-main centroid (50,10) samples to 0.8.
+                AssertEqual(0.8, Round3(SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, 50, 10)));
+                // Out-of-range clamps to the edge (0 here), no throw.
+                AssertEqual(0.0, SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, -50, -50));
+                // Degenerate inputs are safe.
+                AssertEqual(0.0, SceneGenerator.SampleTerrainHeight(new List<double>(), 0, 100, 100, 5, 5));
+                AssertEqual(7.0, SceneGenerator.SampleTerrainHeight(new List<double> { 7 }, 1, 100, 100, 5, 5));
+            });
+
+            Case("ComputePlacement over the golden IR matches the golden manifest", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                AssertTrue(ir != null, "golden-ir.json must load");
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var got = SceneGenerator.ComputePlacement(ir, resolver);
+
+                var golden = SceneGenCorpus.ParseManifest(SceneGenCorpus.ReadGoldenManifestJson());
+                AssertTrue(golden.Nodes.Count > 0, "golden manifest must load with nodes");
+                AssertEqual(golden.Seed, got.Seed);
+                AssertEqual(golden.NodeCount, got.NodeCount);
+
+                for (int i = 0; i < golden.Nodes.Count; i++)
+                {
+                    var e = golden.Nodes[i];
+                    var a = got.Nodes[i];
+                    AssertEqual(e.EntityId, a.EntityId);
+                    AssertEqual(e.Kind, a.Kind);
+                    AssertEqual(e.Archetype, a.Archetype);
+                    AssertEqual(e.AssetRef, a.AssetRef);
+                    AssertEqual(e.BindingSource, a.BindingSource);
+                    AssertVec3(e.Position, a.Position, e.EntityId + ".pos");
+                    AssertTrue(Math.Abs(e.RotationY - a.RotationY) < 0.001f, e.EntityId + ".rotY");
+                    AssertVec3(e.Scale, a.Scale, e.EntityId + ".scale");
+                }
+            });
+
+            Case("Determinism: same IR + table -> byte-identical serialized manifest", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                string a = SceneGenerator.SerializeManifest(SceneGenerator.ComputePlacement(ir, resolver));
+                string b = SceneGenerator.SerializeManifest(SceneGenerator.ComputePlacement(ir, resolver));
+                AssertEqual(a, b);
+                // Nodes are canonically ordered (ordinal by entityId) in the output.
+                AssertTrue(a.IndexOf("bld-house", StringComparison.Ordinal) <
+                           a.IndexOf("terrain.chunk.0_0", StringComparison.Ordinal),
+                           "serialized nodes must be ordinal-sorted by entityId");
+            });
+
+            Case("ComputePlacement is order-insensitive to the IR array order", () =>
+            {
+                // Two IRs, identical content, buildings/props in OPPOSITE order ->
+                // byte-identical serialized manifests (canonical EntityId sort).
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                string forward = SceneGenerator.SerializeManifest(
+                    SceneGenerator.ComputePlacement(BuildTwoEntityIr(false), resolver));
+                string reversed = SceneGenerator.SerializeManifest(
+                    SceneGenerator.ComputePlacement(BuildTwoEntityIr(true), resolver));
+                AssertEqual(forward, reversed);
+            });
+
+            Case("ScenePipeline drives the builder in stage order + bakes nav", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var manifest = SceneGenerator.ComputePlacement(ir, resolver);
+
+                var builder = new RecordingSceneBuilder();
+                ScenePipeline.Build(manifest, builder);
+
+                AssertEqual("golden-seed-1", builder.Seed);
+                AssertEqual("begin", builder.Calls[0]);
+                AssertTrue(builder.NavBaked, "nav must be baked");
+                AssertEqual("bake_nav", builder.Calls[builder.Calls.Count - 2]);
+                AssertEqual("end", builder.Calls[builder.Calls.Count - 1]);
+                AssertTrue(builder.Ended, "world must be ended (scene saved)");
+
+                // Every non-terminal call is a placed node, in the manifest's order.
+                AssertEqual(manifest.NodeCount, builder.Placed.Count);
+                for (int i = 0; i < manifest.NodeCount; i++)
+                    AssertEqual(manifest.Nodes[i].EntityId, builder.Placed[i].EntityId);
+
+                // The bake stage runs AFTER every node is placed.
+                int lastPlace = builder.Calls.FindLastIndex(c => c.Contains(":"));
+                int bakeIdx = builder.Calls.IndexOf("bake_nav");
+                AssertTrue(bakeIdx > lastPlace, "nav bake must run after all placements");
+            });
+
+            Case("Interior is a separate node at origin with no binding", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var manifest = SceneGenerator.ComputePlacement(ir, resolver);
+                var interior = manifest.Nodes.Find(n => n.EntityId == "bld-townhall.interior");
+                AssertTrue(interior != null, "townhall interior must exist");
+                AssertEqual("interior", interior.Kind);
+                AssertEqual("", interior.Archetype);
+                AssertEqual("", interior.AssetRef);
+                AssertVec3(BindingVec3.Zero, interior.Position, "interior at origin");
+            });
+        }
+
+        private static double Round3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);
+
+        /// <summary>A minimal two-building IR; <paramref name="reversed"/> lists them
+        /// in the opposite order to prove the manifest is order-insensitive.</summary>
+        private static JsonVal BuildTwoEntityIr(bool reversed)
+        {
+            JsonVal Building(string id, string role, double x, double z)
+            {
+                var b = JsonVal.Object();
+                b.Set("id", JsonVal.Str(id));
+                b.Set("role", JsonVal.Str(role));
+                var pos = JsonVal.Object();
+                pos.Set("x", JsonVal.Num(x));
+                pos.Set("z", JsonVal.Num(z));
+                b.Set("position", pos);
+                return b;
+            }
+            var a = Building("bld-a", "commercial", 10, 10);
+            var c = Building("bld-c", "residential", 20, 20);
+            var buildings = JsonVal.Arr();
+            if (reversed) { buildings.Add(c); buildings.Add(a); }
+            else { buildings.Add(a); buildings.Add(c); }
+            var entities = JsonVal.Object();
+            entities.Set("buildings", buildings);
+            var ir = JsonVal.Object();
+            ir.Set("entities", entities);
+            return ir;
+        }
+
+        private static void AssertVec3(BindingVec3 expected, BindingVec3 actual, string what)
+        {
+            AssertTrue(Math.Abs(expected.X - actual.X) < 0.001f, what + ".x");
+            AssertTrue(Math.Abs(expected.Y - actual.Y) < 0.001f, what + ".y");
+            AssertTrue(Math.Abs(expected.Z - actual.Z) < 0.001f, what + ".z");
         }
 
         // ---- Mini test framework --------------------------------------------

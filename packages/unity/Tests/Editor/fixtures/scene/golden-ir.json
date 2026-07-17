@@ -1,0 +1,74 @@
+{
+  "_comment": "Shared golden World IR for the Unity editor-time scene-generation pipeline (US-UB3). Consumed by the pure host placement gate (tools/verify-unity RunSceneGenTests) and the EditMode mirror (Tests/Editor/SceneGenTests.cs). The NUMERIC values (terrain size/heightmap, road points, building roles/positions/rotations, prop positions) are copied from the Godot cross-engine golden (packages/godot/addons/insimul/editor/scene/fixtures/golden-ir.json) so the placement MATH is identical across engines and can be cross-validated against golden-placement-manifest.json there. Archetype keys are Unity-native: Unity is locked to the US-UB1 five roots (building/npc/item/prop/terrain), so roads carry no archetype (default terrain.texture.road), terrain chunks resolve as terrain.chunk, and interiors / the nav root carry no binding.",
+  "meta": {
+    "insimulVersion": "1.0.0",
+    "worldId": "golden-world",
+    "worldName": "Golden Village",
+    "worldType": "settlement",
+    "exportVersion": 1,
+    "seed": "golden-seed-1"
+  },
+  "geography": {
+    "terrain": {
+      "size": { "x": 100, "z": 100 },
+      "chunkSize": 50,
+      "heightmap": {
+        "resolution": 3,
+        "heights": [0, 0, 0, 0, 4, 0, 0, 0, 0]
+      }
+    },
+    "roads": [
+      {
+        "id": "road-main",
+        "points": [
+          { "x": 10, "z": 10 },
+          { "x": 90, "z": 10 }
+        ]
+      },
+      {
+        "id": "road-side",
+        "points": [
+          { "x": 50, "z": 20 },
+          { "x": 50, "z": 80 }
+        ]
+      }
+    ]
+  },
+  "entities": {
+    "buildings": [
+      {
+        "id": "bld-townhall",
+        "role": "downtown",
+        "position": { "x": 50.4, "z": 50.6 },
+        "rotation": 1.5708,
+        "interior": true
+      },
+      {
+        "id": "bld-shop",
+        "role": "commercial",
+        "position": { "x": 30.2, "z": 40.9 },
+        "rotation": 0
+      },
+      {
+        "id": "bld-house",
+        "role": "residential",
+        "position": { "x": 70.7, "z": 25.1 },
+        "rotation": 3.1416
+      }
+    ],
+    "props": [
+      {
+        "id": "prop-tree-1",
+        "kind": "tree",
+        "position": { "x": 20, "z": 60 },
+        "rotation": 0.7854
+      },
+      {
+        "id": "prop-lamp-1",
+        "kind": "lamp",
+        "position": { "x": 55.5, "z": 12.5 },
+        "rotation": 0
+      }
+    ]
+  }
+}

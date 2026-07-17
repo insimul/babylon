@@ -214,6 +214,35 @@ transform fixups (pivot offset, scale, footprint alignment) and socket metadata.
   [`Runtime/Binding/Placeholder/LICENSE.md`](Runtime/Binding/Placeholder/LICENSE.md)
   (all content original/CC0). Your own project table always overrides it.
 
+## Scene generation from a World IR
+
+Editor-time native-scene generation (plan §4.3) — the higher-value path for
+creators. **Insimul ▸ Generate Scene From World IR**
+([`Editor/InsimulSceneGenerator.cs`](Editor/InsimulSceneGenerator.cs)) reads a
+world's IR and materializes a native Unity scene under `Assets/Insimul/Generated/`:
+a Unity Terrain per chunk (height sampled from the IR heightmap), road mesh strips
+along the street graph, building prefabs on their snapped, zone-scaled lot
+footprints (resolved via the binding stack), interiors as additive scenes, item/prop
+placements, and a NavMeshSurface bake stage. Every generated GameObject is stamped
+with an `InsimulEntityId` component (stable IR id + generated-content flag — the
+re-import diff match key).
+
+- All placement **math** (footprint grid snap, terrain heightmap conversion, road
+  centroid sampling, zone-based footprint scaling, coordinate quantization) lives in
+  the UnityEngine-free core
+  ([`Runtime/Scene/SceneGenerator.cs`](Runtime/Scene/SceneGenerator.cs)) and is
+  host-tested on a bare .NET SDK (`tools/verify-unity`, `RunSceneGenTests`) against a
+  golden IR fixture whose numbers match the cross-engine contract.
+- The Unity scene calls sit behind a thin `ISceneBuilder` interface
+  ([`Runtime/Scene/ISceneBuilder.cs`](Runtime/Scene/ISceneBuilder.cs)); the pipeline
+  orchestration (`ScenePipeline`) is pure, so the stage order (terrain → roads →
+  buildings/interiors → props → nav → bake) is host-tested too. Only the concrete
+  `UnitySceneBuilder` + the `InsimulEntityId` MonoBehaviour are structural-gate-only.
+- **Determinism**: same IR + table → byte-identical serialized manifest (nodes in
+  canonical `entityId` order). See
+  [`docs/scene-generation.md`](docs/scene-generation.md) for the pipeline stages,
+  the Unity archetype mapping, and the manifest contract.
+
 ## Export pipeline: what gets copied and substituted
 
 Everything under [`templates/`](templates/) is a **game-template tree** the Insimul
