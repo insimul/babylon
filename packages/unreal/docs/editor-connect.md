@@ -124,3 +124,71 @@ counts; an apply mutates the scene under one Undo group (hand edits preserved,
 dropped generated nodes reparented under **Deprecated**, never deleted). When no
 level is open the pipeline reports **unavailable** and the Import action is
 disabled — no backend call is made.
+
+## Generation Console (US-XE3)
+
+The Generation Console invokes a backend generator (settlement regenerate /
+character batch / quest generation) against the connected world as a **job**, then
+tracks its progress live and, on success, offers a "Sync IR now…" affordance that
+re-runs the World Browser import path against the freshly-generated world.
+
+```
+InsimulEditor/
+  Portable/                              UE-FREE, host-tested
+    InsimulGenerationConsoleModel.{h,cpp}  FGenerationConsoleModel: start body,
+                                         status/event/diff parsing, the job
+                                         lifecycle reducer (Idle → Starting →
+                                         Queued → Running → Completed/Failed/
+                                         Canceled) drained from an injected
+                                         IJobStream in Pump()
+    InsimulJobPoller.{h,cpp}             FJobPoller (the host-testable timer
+                                         abstraction over IScheduler + a fetch
+                                         seam) + FPollingJobStream (the poller
+                                         buffering events as an IJobStream)
+  Private/Connect/                       UE-COUPLED, syntax-gated only
+    InsimulHttpJobStream.*               FInsimulTimerScheduler (FTimerManager),
+                                         FInsimulHttpJobStream(Factory) (one
+                                         getGenerationJob poll per interval via
+                                         FHttpModule through the shared session)
+  Tests/test_generation_console.cpp      host gate (36 cases): body+parsing, the
+                                         lifecycle over a scripted stream, start
+                                         guards (401 re-auth / no world / stream
+                                         unavailable / refused-while-active),
+                                         cancel/dispose/reset, and the FJobPoller
+                                         leak-free teardown + cap + end-to-end
+```
+
+Run it with `npm run engines:unreal:generation` (also part of `npm run
+engines:check`). It is the case-for-case mirror of the Unity leg
+(`GenerationConsoleTests`) and the core `generation-console.test.ts` /
+`job-poller.test.ts`.
+
+**Streaming choice = POLLING (not edit-mode SSE).** The `startGenerationJob` call
+returns a job id; progress is then delivered by **polling** `getGenerationJob` on
+an interval, NOT by holding an SSE (`streamGenerationJob`) response open in the
+editor. Edit-mode SSE would need a streaming HTTP response re-established after
+every domain reload (Hot Reload / Live Coding recompile, or a PIE enter tears down
+module state) — brittle and easy to leak. A poll survives a reload because the
+window simply re-opens the stream for the same job id when the tab is
+reconstructed. This matches the Unity/Godot decision so the three consoles stay in
+lockstep. (`streamGenerationJob` remains in the operation table as the documented
+fallback transport — the WS/SSE client — but is not the edit-mode default.)
+
+**No leaked tickers after shutdown.** All the timer/request ownership lives in the
+UE-free, host-tested `FJobPoller`: exactly one poll is in flight at a time (the
+next is scheduled only after the current returns), and `Dispose()` clears any
+pending timer **and** flips a disposed flag so a fetch callback that returns *after*
+teardown is dropped — no `OnUpdate`, no next poll. So the window's teardown (on a
+domain reload / editor shutdown) or `Cancel()` disposes the stream (→ the poller),
+and nothing runs afterward — no orphaned ticker, no zombie request. The production
+`FInsimulTimerScheduler` backs `IScheduler` with `FTimerManager` (`ClearTimer`
+cancels the pending fire); the leak-free property is proven host-side over a fake
+clock (`test_generation_console.cpp`, the `job poller` block).
+
+**Sync-now.** A completed job sets `OffersSync()` + exposes the entity-count diff
+(`Result()`: added / updated / removed). The window turns that into a "Sync IR
+now…" button that re-runs the World Browser's `ApplyImport` for the same world —
+the generation happened server-side, so the local scene picks up the new world IR
+through the same US-XG2/US-XG4 re-import pipeline. The v1 API has no cancel
+endpoint, so `Cancel()` is client-side only: it stops the editor tracking the job
+(disposing the poll loop); the server job may still finish.

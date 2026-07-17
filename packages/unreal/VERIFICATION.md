@@ -388,3 +388,71 @@ least one world on the account is required.
 engine-specific scene mutations (UE actors + `UInsimulEntityIdComponent` vs Unity
 GameObjects) differ, by design. Any parsing / selection / badge / count difference
 found in the human pass is a bug — file it against US-XE2.
+
+---
+
+## US-XE3 — Generation Console: invoke ▸ track progress ▸ sync (Unreal editor + backend required)
+
+The Generation Console's start-body build, status/event/diff parsing, the job
+lifecycle state machine (Idle → Starting → Queued → Running →
+Completed/Failed/Canceled), and the leak-free poll teardown all live in the
+Unreal-Engine-free `insimul::FGenerationConsoleModel` + `insimul::FJobPoller`,
+host-tested headless over a routing transport + a scripted stream + a fake clock
+(`test_generation_console.cpp`, `npm run engines:unreal:generation`). This is the
+**human pass** for the two UE-coupled seams only a real editor + backend can
+exercise: the `FInsimulEditorHttpTransport` HTTP start (US-XE1) and the
+`FInsimulHttpJobStream` FTimerManager+FHttpModule poll stream. A running backend
+(`UInsimulSettings::ServerURL`, authenticated) with at least one world is required.
+
+### 0. Automated pre-checks (run before the human pass)
+
+- [ ] `npm run engines:unreal:generation` — the view-model host gate is green
+      (36 cases: body+parsing, lifecycle over a scripted stream, start guards incl.
+      401 re-auth, cancel/dispose/reset, and the FJobPoller no-leaked-ticker
+      teardown + maxPolls cap + end-to-end poll→stream→model).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE-coupled
+      seam (`FInsimulTimerScheduler`, `FInsimulHttpJobStream(Factory)`).
+
+### 1. Invoke a generator + live progress
+
+- [ ] Authenticate (US-XE1) and select a world in the World Browser, then open
+      **Insimul ▸ Generation Console**. Click **Regenerate settlements** (or
+      **Generate characters** / **Generate quests**).
+- [ ] The status advances **Queued → Running** with a live progress bar + phase
+      label as the poll returns fresh `getGenerationJob` frames (roughly one update
+      per second). No editor hitch/freeze while polling (the poll is non-blocking).
+- [ ] On completion the status reads **Completed**, the progress bar is full, and a
+      results line shows the entity diff (`+A added / ~U updated / -R removed`).
+
+### 2. Sync-now
+
+- [ ] With a level open, the completed job shows **Sync IR now…**. Click it, confirm
+      the dialog: the scene's generated actors update through the same US-XG4
+      re-import path (World Browser `ApplyImport`), and the World Browser badge for
+      that world flips to **Up to date (vN)**.
+- [ ] Re-open the Console and confirm a **New job** / reset returns it to Idle.
+
+### 3. Failure, cancel, and domain-reload safety
+
+- [ ] Trigger a failing generation (e.g. an invalid world / server-side error). The
+      status reads **Failed** with the server reason; no Sync is offered.
+- [ ] Start a job, then **Cancel** mid-run — the status reads **Canceled** and the
+      poll loop stops immediately (no further progress updates). The server job may
+      still finish; the editor simply stops tracking it.
+- [ ] Start a job, then force a **domain reload** (recompile / Live Coding, or enter
+      PIE). Confirm no orphaned polling continues after the tab is torn down — no
+      `getGenerationJob` requests fire once the Console tab is closed/reloaded, and
+      no `Ensure`/access-violation from a timer touching a freed widget.
+- [ ] Let the token expire and start a job: the Console surfaces the **Session
+      expired — re-authenticate** state (the `NeedsReauth` flag armed by the 401 on
+      `startGenerationJob`).
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the parsing + lifecycle + teardown contract.**
+`FGenerationConsoleModel` / `FJobPoller` mirror `InsimulGenerationConsoleModel.cs` /
+the core `generation-console.ts` + `job-poller.ts` case-for-case (same
+`GenerationConsoleTests` set). Only the engine-specific timer (`FTimerManager` vs
+`EditorApplication.update` vs `SceneTreeTimer`) and HTTP client differ, by design.
+Any status / progress / diff / teardown difference found in the human pass is a bug
+— file it against US-XE3.
