@@ -102,6 +102,14 @@
     <Compile Include="../../packages/unity/Runtime/Scene/SceneGenerator.cs" />
     <Compile Include="../../packages/unity/Runtime/Scene/ISceneBuilder.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/SceneGenCorpus.cs" />
+    <!-- Re-import diff policy (US-UB4): the pure, UnityEngine-free reconciliation
+         core (ReimportDiff classification + serialization) + the apply-orchestration
+         seam (IReimportSceneMutator / ReimportReconciler + RecordingReimportMutator
+         double). The UnityEngine-coupled applier that walks the live scene tree
+         (Editor/InsimulReimport.cs) is structural-gate-only — RunReimportDiffTests
+         proves the policy + golden-report parity + hand-edit invariants over this. -->
+    <Compile Include="../../packages/unity/Runtime/Scene/ReimportDiff.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/ReimportCorpus.cs" />
   </ItemGroup>
 
 </Project>

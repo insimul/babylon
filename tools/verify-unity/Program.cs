@@ -51,6 +51,7 @@ namespace Insimul.Verify
             RunBindingResolverTests();
             RunPlaceholderPackTests();
             RunSceneGenTests();
+            RunReimportDiffTests();
 
             if (skipNative)
             {
@@ -1764,6 +1765,107 @@ namespace Insimul.Verify
                 AssertEqual("", interior.Archetype);
                 AssertEqual("", interior.AssetRef);
                 AssertVec3(BindingVec3.Zero, interior.Position, "interior at origin");
+            });
+        }
+
+        private static void RunReimportDiffTests()
+        {
+            Case("Re-import diff over the shared fixtures matches the golden report", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var newNodes = ReimportCorpus.ReadNewNodes();
+                AssertTrue(oldNodes.Count == 5, "old manifest must load 5 nodes");
+                AssertTrue(newNodes.Count == 4, "new manifest must load 4 nodes");
+
+                var report = ReimportDiff.Compute(oldNodes, newNodes);
+                string got = ReimportDiff.SerializeReport(report);
+                string golden = ReimportCorpus.ReadGoldenReportJson();
+                AssertTrue(golden != null, "golden-diff-report.json must load");
+                AssertEqual(golden.Trim(), got);
+            });
+
+            Case("Every diff action is exercised + counts are correct", () =>
+            {
+                var report = ReimportDiff.Compute(ReimportCorpus.ReadOldNodes(), ReimportCorpus.ReadNewNodes());
+                // added: prop.c (new, generated, absent from old)
+                AssertEqual(1, report.Added.Count);
+                AssertEqual("prop.c", report.Added[0]);
+                // updated: building.b (both, generated, position moved)
+                AssertEqual(1, report.Updated.Count);
+                AssertEqual("building.b", report.Updated[0]);
+                // unchanged: building.a (both, generated, equivalent)
+                AssertEqual(1, report.Unchanged.Count);
+                AssertEqual("building.a", report.Unchanged[0]);
+                // skipped: prop.d (hand edit still in new) + prop.f (hand edit gone from new)
+                AssertEqual(2, report.Skipped.Count);
+                AssertEqual("prop.d", report.Skipped[0]);
+                AssertEqual("prop.f", report.Skipped[1]);
+                // deprecated: prop.e (generated, dropped from new)
+                AssertEqual(1, report.Deprecated.Count);
+                AssertEqual("prop.e", report.Deprecated[0]);
+            });
+
+            Case("Hand edit is NEVER updated or deprecated — always skipped", () =>
+            {
+                // prop.d is generated=false in OLD but the NEW manifest lists it as a
+                // fresh generated node at a different transform. Policy: skip it.
+                var report = ReimportDiff.Compute(ReimportCorpus.ReadOldNodes(), ReimportCorpus.ReadNewNodes());
+                AssertTrue(report.Skipped.Contains("prop.d"), "hand edit present-in-new must be skipped");
+                AssertTrue(!report.Updated.Contains("prop.d"), "hand edit must never be updated");
+                AssertTrue(!report.Deprecated.Contains("prop.d"), "hand edit must never be deprecated");
+                // prop.f is a hand edit absent from NEW — kept as-is (skipped), not deprecated.
+                AssertTrue(report.Skipped.Contains("prop.f"), "hand edit absent-from-new must be skipped");
+                AssertTrue(!report.Deprecated.Contains("prop.f"), "hand edit must never be deprecated");
+            });
+
+            Case("A no-op re-import (new == old) classifies everything unchanged/skipped", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var report = ReimportDiff.Compute(oldNodes, oldNodes);
+                AssertEqual(0, report.Added.Count);
+                AssertEqual(0, report.Updated.Count);
+                AssertEqual(0, report.Deprecated.Count);
+                // The 3 generated nodes -> unchanged; the 2 hand edits -> skipped.
+                AssertEqual(3, report.Unchanged.Count);
+                AssertEqual(2, report.Skipped.Count);
+            });
+
+            Case("Diff is deterministic (byte-identical over two runs)", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var newNodes = ReimportCorpus.ReadNewNodes();
+                string a = ReimportDiff.SerializeReport(ReimportDiff.Compute(oldNodes, newNodes));
+                string b = ReimportDiff.SerializeReport(ReimportDiff.Compute(oldNodes, newNodes));
+                AssertEqual(a, b);
+            });
+
+            Case("ReimportReconciler drives the mutator: updates+adds+deprecates, hand edits untouched", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var newNodes = ReimportCorpus.ReadNewNodes();
+                var mutator = new RecordingReimportMutator();
+                var report = ReimportReconciler.Apply(oldNodes, newNodes, mutator);
+
+                AssertEqual(1, mutator.Updated.Count);
+                AssertEqual("building.b", mutator.Updated[0]);
+                AssertEqual(1, mutator.Added.Count);
+                AssertEqual("prop.c", mutator.Added[0]);
+                AssertEqual(1, mutator.Deprecated.Count);
+                AssertEqual("prop.e", mutator.Deprecated[0]);
+                // Hand edits + unchanged nodes are never handed to the mutator.
+                AssertTrue(!mutator.Calls.Exists(c => c.EndsWith(":prop.d")), "hand edit prop.d untouched");
+                AssertTrue(!mutator.Calls.Exists(c => c.EndsWith(":prop.f")), "hand edit prop.f untouched");
+                AssertTrue(!mutator.Calls.Exists(c => c.EndsWith(":building.a")), "unchanged building.a untouched");
+                // The report returned is the same one that drove the mutator.
+                AssertEqual(1, report.Updated.Count);
+            });
+
+            Case("Reconciler with a null mutator is a pure dry run (report only)", () =>
+            {
+                var report = ReimportReconciler.Apply(ReimportCorpus.ReadOldNodes(), ReimportCorpus.ReadNewNodes(), null);
+                AssertEqual("prop.c", report.Added[0]);
+                AssertEqual("building.b", report.Updated[0]);
+                AssertEqual("prop.e", report.Deprecated[0]);
             });
         }
 

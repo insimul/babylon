@@ -243,6 +243,27 @@ re-import diff match key).
   [`docs/scene-generation.md`](docs/scene-generation.md) for the pipeline stages,
   the Unity archetype mapping, and the manifest contract.
 
+## Re-import: upstream changes without clobbering hand edits
+
+When a world's IR is regenerated, **Insimul ▸ Re-import World IR (Diff)**
+([`Editor/InsimulReimport.cs`](Editor/InsimulReimport.cs)) folds the changes into
+the existing scene *without* destroying a creator's hand edits (plan §5.3 risk 4).
+Objects are matched by their `InsimulEntityId` stamp: generated objects are updated
+in place, hand-placed (untagged / `generated=false`) objects are **never touched**,
+and entities dropped from the IR move to a `Deprecated/` group rather than being
+deleted. A dry-run report (added / updated / unchanged / skipped / deprecated) is
+shown for confirmation before anything changes.
+
+- The diff **classification** and apply **orchestration** are UnityEngine-free
+  ([`Runtime/Scene/ReimportDiff.cs`](Runtime/Scene/ReimportDiff.cs) — `ReimportDiff`,
+  `ReimportReconciler`) and host-tested (`tools/verify-unity`,
+  `RunReimportDiffTests`); only the live-tree mutator (`UnitySceneReimporter`) is
+  structural-gate-only.
+- **Determinism**: the report serializes to byte-identical canonical JSON, pinned
+  by a shared golden that is byte-for-byte identical to the Godot leg's — all three
+  engines reconcile against the same policy. See
+  [`docs/reimport.md`](docs/reimport.md).
+
 ## Export pipeline: what gets copied and substituted
 
 Everything under [`templates/`](templates/) is a **game-template tree** the Insimul
