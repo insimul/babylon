@@ -212,6 +212,38 @@ and asserts its layout — SDK sources only, no `templates/` tree — then print
 OpenUPM readiness checklist. It does **not** publish. See the repo-root
 `docs/RELEASING.md` for the full version-bump + publish flow (`VERSIONS.json` is
 the single version source).
+## Native Prolog conformance tests
+
+The SDK ships a real Prolog engine (`Runtime/Prolog/InsimulProlog.cs`, backed by
+the native `libinsimul` library — see `Runtime/Plugins/README.md`). Its behaviour
+is pinned by a language-neutral golden corpus at
+`packages/core/conformance/prolog/*.json` (41 cases across unification,
+backtracking, lists, negation, arithmetic, assert/retract, and gameplay
+predicates). The **same JSON** is the cross-engine parity gate for the TypeScript
+`tau-prolog` engine, so any divergence is caught here rather than in gameplay.
+
+Two harnesses run the identical loading + comparison logic
+(`Tests/Editor/ConformanceCorpus.cs`, compared as an **unordered multiset** per
+`conformance/README.md`):
+
+- **Host / CI (authoritative):** `tools/verify-unity/run.sh` builds `libinsimul`,
+  puts it on the loader path, and runs all corpus cases under `dotnet` — no Unity
+  editor required.
+- **In-editor (EditMode):** the `Insimul.Tests.Editor` assembly
+  (`Tests/Editor/`) exposes each case as an NUnit test via **Window > General >
+  Test Runner > EditMode**. Requirements to run in-editor:
+  1. The native library present under `Runtime/Plugins/…` (`scripts/fetch-native.sh`).
+  2. `System.Text.Json.dll` (+ transitive deps) dropped into a `Plugins/` folder —
+     the same DLL the runtime asmdef needs (see `Runtime/Prolog/CLAUDE.md`).
+  3. The corpus reachable on disk. When the package is installed outside the
+     monorepo, point `INSIMUL_CONFORMANCE_DIR` at the conformance root; otherwise
+     the corpus test reports *Inconclusive* (ignored) rather than failing.
+
+**Radiant conformance is skipped** in both harnesses: the native ABI
+(`insimul-native/include/insimul.h`) exposes no radiant tick yet. This is tracked
+as an explicitly-ignored test (`RadiantConformance_SkippedUntilNativeTick`) and a
+`SKIP` line in the host harness; enable it when the libinsimul radiant story lands
+a tick entry point.
 
 ## License
 

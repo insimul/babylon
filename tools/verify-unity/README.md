@@ -39,6 +39,12 @@ It then puts the library on the platform loader path (`DYLD_LIBRARY_PATH` /
   round-trip; **disposal safety** (double-dispose; query iterator after KB
   dispose throws `ObjectDisposedException`; method-after-dispose throws); and
   **thread affinity** (cross-thread use throws `InvalidOperationException`).
+- **Conformance corpus (US-UP2)** — every
+  `packages/core/conformance/prolog/*.json` case run through the real engine and
+  compared to `expected` as an unordered multiset, via the shared runner
+  `packages/unity/Tests/Editor/ConformanceCorpus.cs` (also driven in-editor by
+  the `Insimul.Tests.Editor` NUnit assembly). Radiant cases are skipped (the ABI
+  exposes no radiant tick yet).
 
 ## Notes
 

@@ -27,7 +27,11 @@
 
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="ConformanceCorpus.cs" Condition="Exists('ConformanceCorpus.cs')" />
+    <!-- The shared, framework-agnostic conformance runner (US-UP2), referenced in
+         place from the Unity EditMode test folder. The NUnit wrapper beside it
+         (ConformanceCorpusTests.cs) is deliberately NOT included here so this
+         harness never needs nunit.framework. -->
+    <Compile Include="../../packages/unity/Tests/Editor/ConformanceCorpus.cs" />
     <!-- The wrapper under test, referenced in place (no vendoring). -->
     <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
     <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />

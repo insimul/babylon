@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Insimul.Prolog;
+using Insimul.Prolog.Conformance;
 
 namespace Insimul.Verify
 {
@@ -37,6 +38,7 @@ namespace Insimul.Verify
             try
             {
                 RunNativeTests();
+                RunConformanceCorpus();
             }
             catch (DllNotFoundException ex)
             {
@@ -228,6 +230,53 @@ namespace Insimul.Verify
                 AssertTrue(captured is InvalidOperationException,
                     $"expected InvalidOperationException off-thread, got {captured?.GetType().Name ?? "none"}");
             });
+        }
+
+        // ---- Conformance corpus (US-UP2) ------------------------------------
+
+        // Runs the shared, framework-agnostic corpus runner (ConformanceCorpus) over
+        // every packages/core/conformance/prolog/*.json case through the real native
+        // engine. This is the authoritative host-side parity gate — the same JSON the
+        // tau-prolog TS suite and the Unity EditMode assembly consume.
+        private static void RunConformanceCorpus()
+        {
+            Section("Conformance corpus (packages/core/conformance/prolog)");
+
+            string root = ConformanceCorpus.LocateCorpusRoot();
+            if (root == null)
+            {
+                _failed++;
+                Console.WriteLine("  FAIL  corpus directory not found " +
+                                  "(set INSIMUL_CONFORMANCE_DIR to the conformance root)");
+                return;
+            }
+
+            var cases = ConformanceCorpus.LoadPrologCorpus(root);
+            if (cases.Count == 0)
+            {
+                _failed++;
+                Console.WriteLine($"  FAIL  no corpus cases loaded from {root}");
+                return;
+            }
+
+            Console.WriteLine($"      {cases.Count} case(s) from {root}");
+            foreach (CorpusCase c in cases)
+            {
+                Case($"[{c.File}] {c.Name}", () =>
+                {
+                    var actual = ConformanceCorpus.RunCase(c);
+                    AssertTrue(
+                        ConformanceCorpus.SameSolutionSet(actual, c.Expected),
+                        $"expected {ConformanceCorpus.Describe(c.Expected)} " +
+                        $"but got {ConformanceCorpus.Describe(actual)}");
+                });
+            }
+
+            // Radiant: skipped until libinsimul exposes a radiant tick (tracked TODO).
+            string radiantNote = ConformanceCorpus.RadiantCorpusPresent(root)
+                ? "radiant corpus present but " + ConformanceCorpus.RadiantSkipReason
+                : "no radiant corpus; " + ConformanceCorpus.RadiantSkipReason;
+            Console.WriteLine($"  SKIP  {radiantNote}");
         }
 
         // ---- Mini test framework --------------------------------------------
