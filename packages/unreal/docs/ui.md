@@ -176,3 +176,59 @@ quantities + gold + failure reasons) and the state-location invariant (reads ret
 the live currentState arrays, two models never share, every op conserves the item /
 gold census, a detached model fails safely). Wired into `npm run engines:check`
 under the Unreal block.
+
+## Dialogue panel + pause/main menu + save/load (US-XU4)
+
+The last three default-UI cores mirror the shared corpora case-for-case (Babylon /
+Unity / Godot / Unreal); all decision logic is UE-free and host-tested, with a thin
+UObject seam on top.
+
+### Dialogue / chat (`InsimulChatModel` → `UInsimulChatPanel`)
+
+`Portable/InsimulChatModel.{h,cpp}` is the streaming conversation view-model. A
+player line opens a turn + an empty in-flight NPC bubble; response CHUNKS accumulate
+into that bubble (`StreamingText()` is the live-render source); the stream may
+TRIGGER actions the panel asserts into the KB (`FactToAssert`); `CompleteTurn()`
+(optionally with an authoritative full text that overrides the chunks) or
+`FailTurn(error)` closes it. A second `BeginUserTurn` while streaming is rejected. A
+failed turn renders an `[Error: …]` bubble and is DROPPED from history. `LastNpcText()`
+(the last settled, non-error NPC line) feeds TTS + the `InsimulFaceSync` lip-sync
+hook. `History()` projects the settled transcript into the
+`save.conversations` (`ConversationSummary.recentTurns`) shape. Shared cases:
+`chat-cases.json`. The UE seam `UInsimulChatPanel` marshals the transcript /
+actions and broadcasts `OnChatChanged` after every mutation (the no-poll UMG seam).
+
+### Pause / ESC menu (`InsimulPauseMenuModel` → `UInsimulPauseMenu`)
+
+`Portable/InsimulPauseMenuModel.{h,cpp}` gates the unified in-game menu's tabs by the
+feature modules the active genre bundle enabled (from the IR feature-modules
+registry). Core tabs (`resume`/`journal`/`inventory`/`map`/`settings`/`save`) are
+ungated; learning/progression tabs (`character`/`vocabulary`/`skills`/`analytics`/
+`assessment`) gate on a module, and a custom tab may AND-gate on several. `OpenMenu`
+falls back to the first visible tab (opening to a hidden tab is coerced),
+`SetActive` rejects hidden tabs, and `Toggle` flips open/closed. Shared cases:
+`pause-menu-cases.json`. The `UInsimulPauseMenu` seam builds its tab bar from
+`VisibleTabs()`; the UUserWidget owns the actual pause + input capture.
+
+### Save / load slots (`InsimulSaveSlotModel` → `UInsimulSaveSlotPanel`)
+
+`Portable/InsimulSaveSlotModel.{h,cpp}` renders each codec-reported slot OUTCOME
+(empty / ok+summary / `invalid_format` / `missing_save_file` / `integrity_mismatch`,
+from the portable save system's canonical-JSON + SHA-256 chain) into a row
+(status / title / message / can_load / can_save). A healthy slot's title is
+`Name · Lv N · Location`; a corrupted slot cannot load but can be overwritten, and
+its MESSAGE is the cross-engine contract — e.g. an integrity mismatch on a tampered
+save always reads "Save file integrity check failed — file may be corrupted or
+tampered." `HasAnyLoadable()` gates the main-menu Continue button. Shared cases:
+`save-slot-cases.json`. The `UInsimulSaveSlotPanel` seam feeds the rows to the
+save/load screen.
+
+### Tests
+
+`npm run engines:unreal:dialogue-ui`
+(`tools/verify-unreal/run-dialogue-ui-tests.sh`) grep-guards all three cores as
+UE-free, then compiles + runs `test_dialogue_ui.cpp` (24 assertions): the full
+`chat-cases.json` streaming/action/history matrix, the `pause-menu-cases.json`
+tab-gating + open/active reducer, the `save-slot-cases.json` row rendering incl. the
+corrupted-envelope messaging, plus a handful of edge-behaviour unit assertions.
+Wired into `npm run engines:check` under the Unreal block.

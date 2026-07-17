@@ -661,3 +661,56 @@ editor build for the UMG layer (`UInsimulTradePanel` + `InsimulInventoryUI` /
 and the shared `trade-cases.json` case-for-case; only the UMG widget layer differs by
 design. Any buy/sell/transfer/conservation divergence found in the human pass is a
 bug — file it against US-XU3.
+
+## US-XU4 — Dialogue panel + pause/main menu + save/load
+
+Host gate: `npm run engines:unreal:dialogue-ui` (24 assertions — the shared
+`chat-cases.json` streaming/action/history matrix, `pause-menu-cases.json`
+tab-gating + reducer, and `save-slot-cases.json` row rendering incl. the
+corrupted-envelope messaging). Human pass in a real editor build for the UMG layer
+(`UInsimulChatPanel` + `InsimulChatPanel`, `UInsimulPauseMenu` +
+`InsimulGameMenuWidget`, `UInsimulSaveSlotPanel` + `InsimulSaveGame`):
+
+### 1. Dialogue / streaming conversation (full loop)
+
+- [ ] Start a conversation (WBP_Dialogue). The NPC greeting shows first. Send a line:
+      a player bubble appears immediately, then the NPC reply streams in chunk-by-chunk
+      into one bubble (typing indicator while `IsStreaming()`), and settles on
+      completion. TTS plays and the `InsimulFaceSync` lip-sync drives off the settled
+      `LastNpcText()`.
+- [ ] A reply that triggers an action (e.g. "take the sword") applies its
+      `FactToAssert` to the live KB — verify the world state changed (item now owned).
+- [ ] Force a stream error (kill the model connection): an `[Error: …]` bubble renders
+      and that turn does NOT persist. Send another line — it works; the errored turn is
+      absent from the saved history.
+- [ ] Send two turns, then save + reload: `save.conversations` holds exactly the
+      settled player/npc pairs (no in-flight or errored bubbles), `totalTurnCount`
+      matches the completed count.
+
+### 2. Pause / ESC menu tab-gating
+
+- [ ] Press ESC in a language-learning-bundle game: the menu shows every gated tab
+      (vocabulary / skills / analytics / assessment / character alongside the core
+      tabs). In an RPG bundle (no assessment module) the Assessment tab is absent; with
+      no modules only the six core tabs (resume/journal/inventory/map/settings/save)
+      show. Tabs match the enabled feature-modules from the IR.
+- [ ] Opening the menu selects the first visible tab; clicking a visible tab switches;
+      a hidden tab is never selectable. ESC toggles the menu open/closed and un-pauses.
+
+### 3. Main menu + save/load slots
+
+- [ ] Main menu Continue is enabled only when at least one slot is loadable
+      (`HasAnyLoadable()`). Open Save/Load: healthy slots show `Name · Lv N · Location`
+      + "Saved <when>"; empty slots show "Empty Slot".
+- [ ] Corrupt a save on disk (flip a byte): its slot renders as "Corrupted Save" with
+      the integrity message and cannot be loaded, but CAN be overwritten by a new save.
+      A missing/unrecognized payload shows its respective message. The messaging is
+      identical to the Unity/Godot legs.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the dialogue / menu / save contract.** The three cores mirror the
+Godot `chat_model.gd` / `pause_menu_model.gd` / `save_slot_model.gd` and the shared
+corpora case-for-case; only the UMG widget layer differs by design. Any streaming /
+gating / slot-rendering divergence found in the human pass is a bug — file it against
+US-XU4.
