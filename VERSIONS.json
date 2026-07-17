@@ -1,0 +1,6 @@
+{
+  "_comment": "Single source of truth for the native engine-package release versions. Each package manifest MUST match its entry here (enforced by `npm run engines:manifests`). Packages are independently releasable, so versions may diverge — but a package's manifest and its VERSIONS.json entry may never disagree. When bumping a package version, edit it here first, then sync the manifest + VERSION/plugin files, then update that package's CHANGELOG.md.",
+  "unity": "0.1.0",
+  "unreal": "1.0.0",
+  "godot": "1.0.0"
+}

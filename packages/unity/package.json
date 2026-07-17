@@ -20,6 +20,7 @@
     "url": "https://insimul.com"
   },
   "license": "MIT",
+  "dependencies": {},
   "samples": [
     {
       "displayName": "Basic Conversation",
