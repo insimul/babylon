@@ -97,6 +97,126 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /api/worlds:
+    get:
+      operationId: listWorlds
+      summary: List the worlds available to the editor.
+      tags: [worlds]
+      responses:
+        '200':
+          description: The world list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldListResponse'
+  /api/worlds/detail:
+    post:
+      operationId: getWorldDetail
+      summary: Fetch a single world's detail + stats.
+      tags: [worlds]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorldDetailRequest'
+      responses:
+        '200':
+          description: The world detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldDetailResponse'
+  /api/generation/import:
+    post:
+      operationId: importWorld
+      summary: Import/sync a world into the generation pipeline (dry-run supported).
+      tags: [generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+      responses:
+        '200':
+          description: The import/sync report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportReport'
+  /api/generation/jobs:
+    post:
+      operationId: startGenerationJob
+      summary: Start a generation job for a world.
+      tags: [generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartJobRequest'
+      responses:
+        '200':
+          description: The started job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJob'
+  /api/generation/jobs/status:
+    post:
+      operationId: getGenerationJob
+      summary: Poll a generation job's current status (polling fallback for SSE).
+      tags: [generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRef'
+      responses:
+        '200':
+          description: The job's current state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJob'
+  /api/generation/jobs/events:
+    post:
+      operationId: streamGenerationJob
+      summary: Stream a generation job's progress as SSE.
+      tags: [generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRef'
+      responses:
+        '200':
+          description: Server-Sent Events stream of job progress frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /api/generation/jobs/sync:
+    post:
+      operationId: syncGenerationJob
+      summary: Apply a completed job's output and return the diff summary.
+      tags: [generation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRef'
+      responses:
+        '200':
+          description: The applied diff summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncReport'
 components:
   schemas:
     ConversationTextRequest:
@@ -150,3 +270,113 @@ components:
           type: string
         version:
           type: string
+    WorldListResponse:
+      type: object
+      required: [worlds]
+      properties:
+        worlds:
+          type: array
+    WorldDetailRequest:
+      type: object
+      required: [worldId]
+      properties:
+        worldId:
+          type: string
+    WorldDetailResponse:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        worldVersion:
+          type: integer
+        saveFormatVersion:
+          type: integer
+        engineRevision:
+          type: string
+        stats:
+          type: object
+        webUrl:
+          type: string
+    ImportRequest:
+      type: object
+      required: [worldId]
+      properties:
+        worldId:
+          type: string
+        dryRun:
+          type: boolean
+    ImportReport:
+      type: object
+      required: [worldId, dryRun]
+      properties:
+        worldId:
+          type: string
+        dryRun:
+          type: boolean
+        added:
+          type: integer
+        updated:
+          type: integer
+        removed:
+          type: integer
+        unchanged:
+          type: integer
+        messages:
+          type: array
+    StartJobRequest:
+      type: object
+      required: [worldId, generator]
+      properties:
+        worldId:
+          type: string
+        generator:
+          type: string
+    JobRef:
+      type: object
+      required: [jobId]
+      properties:
+        jobId:
+          type: string
+    GenerationJob:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+        stage:
+          type: string
+        progress:
+          type: number
+        message:
+          type: string
+        added:
+          type: integer
+        updated:
+          type: integer
+        removed:
+          type: integer
+        error:
+          type: string
+    SyncReport:
+      type: object
+      required: [jobId, applied]
+      properties:
+        jobId:
+          type: string
+        applied:
+          type: boolean
+        added:
+          type: integer
+        updated:
+          type: integer
+        removed:
+          type: integer
+        messages:
+          type: array

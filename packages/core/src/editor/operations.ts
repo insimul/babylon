@@ -49,6 +49,41 @@ export const V1_OPERATIONS: Readonly<Record<string, V1Operation>> = {
     method: 'GET',
     path: '/api/conversation/health',
   },
+  listWorlds: {
+    operationId: 'listWorlds',
+    method: 'GET',
+    path: '/api/worlds',
+  },
+  getWorldDetail: {
+    operationId: 'getWorldDetail',
+    method: 'POST',
+    path: '/api/worlds/detail',
+  },
+  importWorld: {
+    operationId: 'importWorld',
+    method: 'POST',
+    path: '/api/generation/import',
+  },
+  startGenerationJob: {
+    operationId: 'startGenerationJob',
+    method: 'POST',
+    path: '/api/generation/jobs',
+  },
+  getGenerationJob: {
+    operationId: 'getGenerationJob',
+    method: 'POST',
+    path: '/api/generation/jobs/status',
+  },
+  streamGenerationJob: {
+    operationId: 'streamGenerationJob',
+    method: 'POST',
+    path: '/api/generation/jobs/events',
+  },
+  syncGenerationJob: {
+    operationId: 'syncGenerationJob',
+    method: 'POST',
+    path: '/api/generation/jobs/sync',
+  },
 } as const;
 
 /**
@@ -57,8 +92,23 @@ export const V1_OPERATIONS: Readonly<Record<string, V1Operation>> = {
  * id here resolves in the table — a used operation that isn't in the spec is a
  * client bug, caught before it 404s at runtime. Later editor stories (US-GE3's
  * conversation tester) extend this set as they wire in more operations.
+ *
+ * US-GE2 adds the World Browser + Generation Console operations: the browser
+ * lists/fetches worlds (`listWorlds` / `getWorldDetail`) and imports them into the
+ * pipeline (`importWorld`), and the console starts jobs (`startGenerationJob`),
+ * tracks progress via SSE (`streamGenerationJob`) with a polling fallback
+ * (`getGenerationJob`), then applies the diff (`syncGenerationJob`).
  */
-export const USED_OPERATION_IDS: readonly string[] = ['healthCheck'];
+export const USED_OPERATION_IDS: readonly string[] = [
+  'healthCheck',
+  'listWorlds',
+  'getWorldDetail',
+  'importWorld',
+  'startGenerationJob',
+  'getGenerationJob',
+  'streamGenerationJob',
+  'syncGenerationJob',
+];
 
 /**
  * Resolve an operationId to its {@link V1Operation}, or `null` if it is not a

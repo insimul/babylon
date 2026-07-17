@@ -92,3 +92,8 @@ export * from './schemas';
 // editor clients (Godot v1_client.gd / insimul_editor_session.gd) mirror.
 export * from './editor/operations';
 export * from './editor/editor-session';
+// US-GE2 — the World Browser + Generation Console dock view-models (list/detail/
+// compatibility badge; job lifecycle reducer; polling-fallback poller w/ teardown).
+export * from './editor/world-browser';
+export * from './editor/generation-console';
+export * from './editor/job-poller';
