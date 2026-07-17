@@ -74,6 +74,31 @@ else
 	echo "engines:check: no packages/unity/ changes — skipping unity gates"
 fi
 
+# ---- Unreal ----------------------------------------------------------------
+# Always run the C++ structural syntax gate (no UE SDK needed). The UE-coupled
+# layer (subsystems, actors, widgets, UDataAssets) is verified only structurally
+# in this harness; a human builds it in a real editor (autoMerge off). The
+# UE-FREE portable cores host-test on the clang toolchain: the InsimulKB Prolog
+# wrapper (US-XP*, needs a built libinsimul — skipped here) and the Asset Binding
+# Layer resolver (US-XG1, no external deps — always runnable).
+if changed_matches "packages/unreal/"; then
+	ran_any=1
+	echo "== unreal: C++ structural syntax gate (US-EP3) =="
+	node tools/verify-unreal/check.mjs
+	echo "== unreal: Asset Binding Layer resolver host tests (US-XG1) =="
+	bash tools/verify-unreal/run-binding-tests.sh
+	echo "== unreal: scene-generation placement host tests (US-XG2) =="
+	bash tools/verify-unreal/run-scene-tests.sh
+	echo "== unreal: placeholder pack coverage host tests (US-XG3) =="
+	bash tools/verify-unreal/run-placeholder-tests.sh
+	echo "== unreal: re-import diff policy host tests (US-XG4) =="
+	bash tools/verify-unreal/run-reimport-tests.sh
+	echo "== unreal: binding-editor view-model host tests (US-XG4) =="
+	bash tools/verify-unreal/run-binding-editor-tests.sh
+else
+	echo "engines:check: no packages/unreal/ changes — skipping unreal gates"
+fi
+
 # ---- Godot GDExtension -----------------------------------------------------
 if changed_matches "packages/godot/"; then
 	ran_any=1
