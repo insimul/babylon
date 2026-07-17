@@ -180,6 +180,119 @@ Player Input → InsimulNPC.SendText()
         → OnFacialData → InsimulLipSync → SkinnedMeshRenderer
 ```
 
+## Asset binding layer
+
+The "use your own assets with Insimul worlds" path (plan §4.2). Every placeable
+entity in a world's IR carries an **archetype key** — a hierarchical dot-path
+like `building.commercial.bakery.medium` or `npc.merchant.baker`. An
+`InsimulBindingTable` ScriptableObject
+([`Runtime/Binding/InsimulBindingTable.cs`](Runtime/Binding/InsimulBindingTable.cs))
+maps those keys (with `a.b.*` wildcard / descendant matching) to your prefabs plus
+transform fixups (pivot offset, scale, footprint alignment) and socket metadata.
+
+- The archetype-key grammar + matching semantics are engine-agnostic and
+  documented in
+  [`packages/core/docs/archetype-taxonomy.md`](../core/docs/archetype-taxonomy.md);
+  the executable authority is `packages/core/src/archetypes/taxonomy.ts`, ported to
+  C# in [`Runtime/Binding/ArchetypeKey.cs`](Runtime/Binding/ArchetypeKey.cs).
+- Resolution order is **project table → imported binding packs → placeholder pack**
+  ([`Runtime/Binding/BindingResolver.cs`](Runtime/Binding/BindingResolver.cs)); the
+  most specific matching rule in the first layer that binds wins (exact ≻ wildcard ≻
+  ancestor). Keys that bind nowhere are reported (`CollectUnbound`) so a creator
+  sees exactly what art is still missing before generating a scene.
+- The resolver, matcher, and unbound reporting are UnityEngine-free and host-tested
+  on a bare .NET SDK (`tools/verify-unity`, `RunBindingResolverTests`); the
+  ScriptableObject is verified by the C# structural gate.
+- A bundled **CC0 placeholder pack** ships as the lowest-precedence tier so any
+  imported world is instantiable out of the box. The pure recipe
+  ([`Runtime/Binding/PlaceholderPack.cs`](Runtime/Binding/PlaceholderPack.cs)) covers
+  every base taxonomy node (`building.*`, `npc.*`, `item.*`, `prop.*`, `terrain.*`);
+  **Insimul ▸ Generate Placeholder Pack**
+  ([`Editor/PlaceholderPackGenerator.cs`](Editor/PlaceholderPackGenerator.cs))
+  materializes primitive prefabs + a pre-wired table. Coverage (every golden-world
+  archetype resolves) is host-tested (`RunPlaceholderPackTests`); licensing note in
+  [`Runtime/Binding/Placeholder/LICENSE.md`](Runtime/Binding/Placeholder/LICENSE.md)
+  (all content original/CC0). Your own project table always overrides it.
+
+## Scene generation from a World IR
+
+Editor-time native-scene generation (plan §4.3) — the higher-value path for
+creators. **Insimul ▸ Generate Scene From World IR**
+([`Editor/InsimulSceneGenerator.cs`](Editor/InsimulSceneGenerator.cs)) reads a
+world's IR and materializes a native Unity scene under `Assets/Insimul/Generated/`:
+a Unity Terrain per chunk (height sampled from the IR heightmap), road mesh strips
+along the street graph, building prefabs on their snapped, zone-scaled lot
+footprints (resolved via the binding stack), interiors as additive scenes, item/prop
+placements, and a NavMeshSurface bake stage. Every generated GameObject is stamped
+with an `InsimulEntityId` component (stable IR id + generated-content flag — the
+re-import diff match key).
+
+- All placement **math** (footprint grid snap, terrain heightmap conversion, road
+  centroid sampling, zone-based footprint scaling, coordinate quantization) lives in
+  the UnityEngine-free core
+  ([`Runtime/Scene/SceneGenerator.cs`](Runtime/Scene/SceneGenerator.cs)) and is
+  host-tested on a bare .NET SDK (`tools/verify-unity`, `RunSceneGenTests`) against a
+  golden IR fixture whose numbers match the cross-engine contract.
+- The Unity scene calls sit behind a thin `ISceneBuilder` interface
+  ([`Runtime/Scene/ISceneBuilder.cs`](Runtime/Scene/ISceneBuilder.cs)); the pipeline
+  orchestration (`ScenePipeline`) is pure, so the stage order (terrain → roads →
+  buildings/interiors → props → nav → bake) is host-tested too. Only the concrete
+  `UnitySceneBuilder` + the `InsimulEntityId` MonoBehaviour are structural-gate-only.
+- **Determinism**: same IR + table → byte-identical serialized manifest (nodes in
+  canonical `entityId` order). See
+  [`docs/scene-generation.md`](docs/scene-generation.md) for the pipeline stages,
+  the Unity archetype mapping, and the manifest contract.
+
+## Re-import: upstream changes without clobbering hand edits
+
+When a world's IR is regenerated, **Insimul ▸ Re-import World IR (Diff)**
+([`Editor/InsimulReimport.cs`](Editor/InsimulReimport.cs)) folds the changes into
+the existing scene *without* destroying a creator's hand edits (plan §5.3 risk 4).
+Objects are matched by their `InsimulEntityId` stamp: generated objects are updated
+in place, hand-placed (untagged / `generated=false`) objects are **never touched**,
+and entities dropped from the IR move to a `Deprecated/` group rather than being
+deleted. A dry-run report (added / updated / unchanged / skipped / deprecated) is
+shown for confirmation before anything changes.
+
+- The diff **classification** and apply **orchestration** are UnityEngine-free
+  ([`Runtime/Scene/ReimportDiff.cs`](Runtime/Scene/ReimportDiff.cs) — `ReimportDiff`,
+  `ReimportReconciler`) and host-tested (`tools/verify-unity`,
+  `RunReimportDiffTests`); only the live-tree mutator (`UnitySceneReimporter`) is
+  structural-gate-only.
+- **Determinism**: the report serializes to byte-identical canonical JSON, pinned
+  by a shared golden that is byte-for-byte identical to the Godot leg's — all three
+  engines reconcile against the same policy. See
+  [`docs/reimport.md`](docs/reimport.md).
+
+## Binding Editor window
+
+The creator-facing cockpit for the binding layer. **Insimul ▸ Binding Editor**
+([`Editor/InsimulBindingEditorWindow.cs`](Editor/InsimulBindingEditorWindow.cs))
+loads a World IR, walks **every archetype it uses** grouped by taxonomy, and shows
+each row's status — **green = bound** to a real project/pack asset, **amber = only
+the placeholder** tier binds it (art still wanted), **red = unbound**. Per row: a
+prefab picker, a **+desc** ("bind all descendants") affordance, and fuzzy
+name/tag **candidate suggestions** over the project's prefabs (AssetDatabase) with
+preview thumbnails. Bindings write to the project override table; the whole set
+exports / imports as a portable **binding-pack JSON**.
+
+- The window is a thin view over two UnityEngine-free, host-tested cores
+  (`tools/verify-unity`, `RunBindingEditorTests`):
+  [`Runtime/Binding/BindingEditorModel.cs`](Runtime/Binding/BindingEditorModel.cs)
+  (taxonomy tree + bound/placeholder/unbound status + suggestion ranking) and
+  [`Runtime/Binding/BindingPack.cs`](Runtime/Binding/BindingPack.cs) (the
+  `insimul-binding-pack` export/import). Only the AssetDatabase / EditorGUI /
+  file-dialog wiring is UnityEngine-coupled (structural gate only).
+- **Suggestion ranking** scores each project prefab by the count of the
+  archetype's dot segments found (case-insensitive) in its name / path / labels,
+  sorted score-desc then path-asc — the same ranking the Godot dock uses.
+- **Pack round-trip** is byte-stable: export runs through the same canonical-JSON
+  core as the save system (keys sorted, entries key-sorted, minified), so
+  export → import → export is identity, pinned by a golden
+  ([`Tests/Editor/fixtures/binding-editor/golden-pack.json`](Tests/Editor/fixtures/binding-editor/golden-pack.json)).
+- The human end-to-end pass (open on the golden world, bind a custom prefab,
+  regenerate, see it placed) is [`VERIFICATION.md`](VERIFICATION.md) §4.
+
 ## Export pipeline: what gets copied and substituted
 
 Everything under [`templates/`](templates/) is a **game-template tree** the Insimul

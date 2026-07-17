@@ -12,6 +12,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using Insimul.Binding;
+using Insimul.Binding.TestSupport;
 using Insimul.Prolog;
 using Insimul.Prolog.Conformance;
 using Insimul.Quest;
@@ -21,6 +23,8 @@ using Insimul.Radiant.Conformance;
 using Insimul.Runtime;
 using Insimul.Save;
 using Insimul.Save.TestSupport;
+using Insimul.Scene;
+using Insimul.Scene.TestSupport;
 using Insimul.World;
 using Insimul.World.TestSupport;
 
@@ -44,6 +48,11 @@ namespace Insimul.Verify
             RunQuestSystemTests();
             RunRadiantPureTests();
             RunBootstrapTests();
+            RunBindingResolverTests();
+            RunPlaceholderPackTests();
+            RunSceneGenTests();
+            RunReimportDiffTests();
+            RunBindingEditorTests();
 
             if (skipNative)
             {
@@ -1378,6 +1387,674 @@ namespace Insimul.Verify
             }
             sb.Append(')');
             return sb.ToString();
+        }
+
+        // ---- Binding resolver (US-UB1) --------------------------------------
+
+        private static BindingLayer Layer(string name, BindingSourceKind kind, params BindingRule[] rules)
+            => new BindingLayer(name, kind, new List<BindingRule>(rules));
+
+        private static void RunBindingResolverTests()
+        {
+            Case("ArchetypeKey.Matches: exact / wildcard / ancestor", () =>
+            {
+                const string key = "building.commercial.bakery.medium";
+                AssertEqual(true, ArchetypeKey.Matches(key, key));
+                AssertEqual(false, ArchetypeKey.Matches("building.commercial.bakery.small", key));
+                AssertEqual(true, ArchetypeKey.Matches("building.commercial.*", key));
+                AssertEqual(true, ArchetypeKey.Matches("building.commercial.*", "building.commercial"));
+                AssertEqual(true, ArchetypeKey.Matches("building", key));           // ancestor
+                AssertEqual(false, ArchetypeKey.Matches("building.residential.*", key));
+                AssertEqual(false, ArchetypeKey.Matches("building.*", "building.*")); // query can't be wildcard
+            });
+
+            Case("ArchetypeKey.Specificity: exact > deep wildcard > shallow wildcard", () =>
+            {
+                const string key = "building.commercial.bakery.medium";
+                int exact = ArchetypeKey.Specificity(key, key);
+                int deep = ArchetypeKey.Specificity("building.commercial.bakery.*", key);
+                int shallow = ArchetypeKey.Specificity("building.commercial.*", key);
+                AssertEqual(true, exact > deep);
+                AssertEqual(true, deep > shallow);
+                AssertEqual(-1, ArchetypeKey.Specificity("building.residential.*", key));
+            });
+
+            Case("Resolver: exact match beats wildcard in the same layer", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.commercial.*", "wild"),
+                        new BindingRule("building.commercial.bakery.medium", "exact")),
+                });
+                var r = resolver.Resolve("building.commercial.bakery.medium");
+                AssertEqual("exact", r.Rule.AssetRef);
+            });
+
+            Case("Resolver: descendant binding via an ancestor rule", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("npc", "npc-generic")),
+                });
+                var r = resolver.Resolve("npc.merchant.baker");
+                AssertEqual("npc-generic", r.Rule.AssetRef);
+            });
+
+            Case("Resolver: fallback chain project > pack > placeholder", () =>
+            {
+                var placeholderOnly = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project),
+                    Layer("pack", BindingSourceKind.Pack),
+                    Layer("placeholder", BindingSourceKind.Placeholder,
+                        new BindingRule("item.*", "ph-item")),
+                });
+                var r1 = placeholderOnly.Resolve("item.tool.fishing_rod");
+                AssertEqual("ph-item", r1.Rule.AssetRef);
+                AssertEqual(BindingSourceKind.Placeholder, r1.Source);
+                AssertEqual(true, r1.IsPlaceholder);
+
+                // A project rule overrides even a MORE specific placeholder rule.
+                var projectWins = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("item.*", "proj-item")),
+                    Layer("placeholder", BindingSourceKind.Placeholder,
+                        new BindingRule("item.tool.fishing_rod", "ph-exact")),
+                });
+                var r2 = projectWins.Resolve("item.tool.fishing_rod");
+                AssertEqual("proj-item", r2.Rule.AssetRef);
+                AssertEqual(BindingSourceKind.Project, r2.Source);
+            });
+
+            Case("Resolver: unbound report lists missing keys, sorted + deduped", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("placeholder", BindingSourceKind.Placeholder,
+                        new BindingRule("building.*", "ph-building")),
+                });
+                var report = resolver.CollectUnbound(new[]
+                {
+                    "building.commercial.bakery",   // bound
+                    "npc.merchant.baker",           // unbound
+                    "item.food.bread",              // unbound
+                    "npc.merchant.baker",           // dup — collapses
+                });
+                AssertEqual(3, report.RequestedCount);
+                AssertEqual(1, report.BoundCount);
+                AssertEqual(2, report.MissingCount);
+                AssertEqual("item.food.bread", report.MissingKeys[0]);
+                AssertEqual("npc.merchant.baker", report.MissingKeys[1]);
+                AssertEqual(false, report.AllBound);
+            });
+
+            Case("Resolver: unmatched key resolves to null", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.*", "b")),
+                });
+                AssertEqual(true, resolver.Resolve("terrain.texture.grass") == null);
+            });
+
+            Case("SortRules: ordinal by key, stable for equal keys", () =>
+            {
+                var rules = new List<BindingRule>
+                {
+                    new BindingRule("prop.tree", "a"),
+                    new BindingRule("building.house", "b"),
+                    new BindingRule("building.house", "c"), // equal key, keeps order after b
+                    new BindingRule("item.sword", "d"),
+                };
+                BindingResolver.SortRules(rules);
+                AssertEqual("building.house", rules[0].Key);
+                AssertEqual("b", rules[0].AssetRef);
+                AssertEqual("c", rules[1].AssetRef); // stable
+                AssertEqual("item.sword", rules[2].Key);
+                AssertEqual("prop.tree", rules[3].Key);
+            });
+
+            Case("Empty-AssetRef rule counts as bound (deliberate gap)", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("prop.street.market-stall", "")),
+                });
+                var report = resolver.CollectUnbound(new[] { "prop.street.market-stall" });
+                AssertEqual(0, report.MissingCount);
+                var r = resolver.Resolve("prop.street.market-stall");
+                AssertEqual(false, r.Rule.HasAsset);
+            });
+        }
+
+        // ---- Placeholder asset pack (US-UB2) --------------------------------
+
+        private static void RunPlaceholderPackTests()
+        {
+            Case("PlaceholderPack.Specs cover the five base-node wildcards", () =>
+            {
+                var patterns = new HashSet<string>();
+                foreach (var s in PlaceholderPack.Specs) patterns.Add(s.Pattern);
+                AssertEqual(true, patterns.Contains("building.*"));
+                AssertEqual(true, patterns.Contains("npc.*"));
+                AssertEqual(true, patterns.Contains("item.*"));
+                AssertEqual(true, patterns.Contains("prop.*"));
+                AssertEqual(true, patterns.Contains("terrain.*"));
+            });
+
+            Case("PlaceholderPack.Specs are deterministic + ordinally sorted", () =>
+            {
+                var a = PlaceholderPack.Specs;
+                var b = PlaceholderPack.Specs;
+                AssertEqual(a.Count, b.Count);
+                for (int i = 0; i < a.Count; i++)
+                {
+                    AssertEqual(a[i].Pattern, b[i].Pattern);
+                    AssertEqual(a[i].AssetRef, b[i].AssetRef);
+                    if (i > 0)
+                        AssertTrue(string.CompareOrdinal(a[i - 1].Pattern, a[i].Pattern) < 0,
+                                   "specs must be strictly ordinally sorted (no dup patterns)");
+                }
+            });
+
+            Case("Placeholder AssetRefs are deterministic placeholder: handles", () =>
+            {
+                foreach (var s in PlaceholderPack.Specs)
+                {
+                    AssertTrue(s.AssetRef.StartsWith(PlaceholderPack.AssetPrefix),
+                               $"{s.Pattern} -> {s.AssetRef} must be a placeholder: handle");
+                    AssertTrue(!s.AssetRef.Contains("*"),
+                               $"{s.AssetRef} must strip the wildcard");
+                }
+                // The base-node handle strips the wildcard.
+                var building = FindSpec("building.*");
+                AssertEqual("placeholder:building", building.AssetRef);
+                var grass = FindSpec("terrain.texture.grass");
+                AssertEqual("placeholder:terrain.texture.grass", grass.AssetRef);
+            });
+
+            Case("PlaceholderPack.BuildLayer is Placeholder-tier, sorted, every rule bound", () =>
+            {
+                var layer = PlaceholderPack.BuildLayer();
+                AssertEqual(BindingSourceKind.Placeholder, layer.Kind);
+                AssertEqual(PlaceholderPack.Name, layer.Name);
+                AssertEqual(PlaceholderPack.Specs.Count, layer.Rules.Count);
+                for (int i = 1; i < layer.Rules.Count; i++)
+                    AssertTrue(string.CompareOrdinal(layer.Rules[i - 1].Key, layer.Rules[i].Key) <= 0,
+                               "layer rules must be ordinally sorted");
+                foreach (var r in layer.Rules)
+                    AssertTrue(r.HasAsset, $"placeholder rule {r.Key} must carry an asset handle");
+            });
+
+            Case("Every golden-world archetype resolves against the placeholder pack", () =>
+            {
+                var keys = PlaceholderPackCorpus.GoldenArchetypeKeys();
+                AssertTrue(keys.Count > 0, "golden-world-archetypes.json must load with keys");
+
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var report = resolver.CollectUnbound(keys);
+                if (!report.AllBound)
+                    throw new Exception("unbound golden keys: " + string.Join(", ", report.MissingKeys));
+                AssertEqual(0, report.MissingCount);
+                AssertEqual(report.RequestedCount, report.BoundCount);
+
+                // Each resolves via the Placeholder tier to a placeholder: handle.
+                foreach (var key in keys)
+                {
+                    var r = resolver.Resolve(key);
+                    AssertTrue(r != null, $"golden key {key} resolved to null");
+                    AssertEqual(BindingSourceKind.Placeholder, r.Source);
+                    AssertTrue(r.Rule.HasAsset, $"golden key {key} resolved to an empty asset");
+                }
+            });
+
+            Case("Placeholder is the fallback: a project rule overrides it", () =>
+            {
+                var resolver = new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.commercial.bakery.medium", "my-bakery")),
+                    PlaceholderPack.BuildLayer(),
+                });
+                var over = resolver.Resolve("building.commercial.bakery.medium");
+                AssertEqual("my-bakery", over.Rule.AssetRef);
+                AssertEqual(BindingSourceKind.Project, over.Source);
+                // An unbound-in-project key still falls through to the placeholder.
+                var fell = resolver.Resolve("npc.guard");
+                AssertEqual(BindingSourceKind.Placeholder, fell.Source);
+            });
+        }
+
+        private static PlaceholderSpec FindSpec(string pattern)
+        {
+            foreach (var s in PlaceholderPack.Specs)
+                if (s.Pattern == pattern) return s;
+            throw new Exception($"no placeholder spec for pattern {pattern}");
+        }
+
+        // ---- Editor-time scene generation (US-UB3) --------------------------
+
+        private static void RunSceneGenTests()
+        {
+            Case("QuantizeCoord rounds to 0.001 + normalizes signed zero", () =>
+            {
+                AssertEqual(1.16, SceneGenerator.QuantizeCoord(1.1604));
+                AssertEqual(3.142, SceneGenerator.QuantizeCoord(3.14159));
+                AssertEqual(0.0, SceneGenerator.QuantizeCoord(-0.0));
+                AssertEqual(0.0, SceneGenerator.QuantizeCoord(0.00004));
+                AssertEqual(0.0, SceneGenerator.QuantizeCoord(double.NaN));
+            });
+
+            Case("ZoneScaleForRole matches the cross-engine table", () =>
+            {
+                AssertEqual(1.3, SceneGenerator.ZoneScaleForRole("commercial"));
+                AssertEqual(1.4, SceneGenerator.ZoneScaleForRole("downtown"));
+                AssertEqual(1.2, SceneGenerator.ZoneScaleForRole("industrial"));
+                AssertEqual(0.9, SceneGenerator.ZoneScaleForRole("outskirts"));
+                AssertEqual(1.0, SceneGenerator.ZoneScaleForRole("residential"));
+                AssertEqual(1.0, SceneGenerator.ZoneScaleForRole("who-knows"));
+            });
+
+            Case("SampleTerrainHeight: bilinear over the golden heightmap", () =>
+            {
+                var heights = new List<double> { 0, 0, 0, 0, 4, 0, 0, 0, 0 };
+                // Centre of the map = grid centre = the peak value.
+                AssertEqual(4.0, SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, 50, 50));
+                // Chunk centre (25,25) = quarter-way = 1.0 (matches the golden manifest).
+                AssertEqual(1.0, SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, 25, 25));
+                // Road-main centroid (50,10) samples to 0.8.
+                AssertEqual(0.8, Round3(SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, 50, 10)));
+                // Out-of-range clamps to the edge (0 here), no throw.
+                AssertEqual(0.0, SceneGenerator.SampleTerrainHeight(heights, 3, 100, 100, -50, -50));
+                // Degenerate inputs are safe.
+                AssertEqual(0.0, SceneGenerator.SampleTerrainHeight(new List<double>(), 0, 100, 100, 5, 5));
+                AssertEqual(7.0, SceneGenerator.SampleTerrainHeight(new List<double> { 7 }, 1, 100, 100, 5, 5));
+            });
+
+            Case("ComputePlacement over the golden IR matches the golden manifest", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                AssertTrue(ir != null, "golden-ir.json must load");
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var got = SceneGenerator.ComputePlacement(ir, resolver);
+
+                var golden = SceneGenCorpus.ParseManifest(SceneGenCorpus.ReadGoldenManifestJson());
+                AssertTrue(golden.Nodes.Count > 0, "golden manifest must load with nodes");
+                AssertEqual(golden.Seed, got.Seed);
+                AssertEqual(golden.NodeCount, got.NodeCount);
+
+                for (int i = 0; i < golden.Nodes.Count; i++)
+                {
+                    var e = golden.Nodes[i];
+                    var a = got.Nodes[i];
+                    AssertEqual(e.EntityId, a.EntityId);
+                    AssertEqual(e.Kind, a.Kind);
+                    AssertEqual(e.Archetype, a.Archetype);
+                    AssertEqual(e.AssetRef, a.AssetRef);
+                    AssertEqual(e.BindingSource, a.BindingSource);
+                    AssertVec3(e.Position, a.Position, e.EntityId + ".pos");
+                    AssertTrue(Math.Abs(e.RotationY - a.RotationY) < 0.001f, e.EntityId + ".rotY");
+                    AssertVec3(e.Scale, a.Scale, e.EntityId + ".scale");
+                }
+            });
+
+            Case("Determinism: same IR + table -> byte-identical serialized manifest", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                string a = SceneGenerator.SerializeManifest(SceneGenerator.ComputePlacement(ir, resolver));
+                string b = SceneGenerator.SerializeManifest(SceneGenerator.ComputePlacement(ir, resolver));
+                AssertEqual(a, b);
+                // Nodes are canonically ordered (ordinal by entityId) in the output.
+                AssertTrue(a.IndexOf("bld-house", StringComparison.Ordinal) <
+                           a.IndexOf("terrain.chunk.0_0", StringComparison.Ordinal),
+                           "serialized nodes must be ordinal-sorted by entityId");
+            });
+
+            Case("ComputePlacement is order-insensitive to the IR array order", () =>
+            {
+                // Two IRs, identical content, buildings/props in OPPOSITE order ->
+                // byte-identical serialized manifests (canonical EntityId sort).
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                string forward = SceneGenerator.SerializeManifest(
+                    SceneGenerator.ComputePlacement(BuildTwoEntityIr(false), resolver));
+                string reversed = SceneGenerator.SerializeManifest(
+                    SceneGenerator.ComputePlacement(BuildTwoEntityIr(true), resolver));
+                AssertEqual(forward, reversed);
+            });
+
+            Case("ScenePipeline drives the builder in stage order + bakes nav", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var manifest = SceneGenerator.ComputePlacement(ir, resolver);
+
+                var builder = new RecordingSceneBuilder();
+                ScenePipeline.Build(manifest, builder);
+
+                AssertEqual("golden-seed-1", builder.Seed);
+                AssertEqual("begin", builder.Calls[0]);
+                AssertTrue(builder.NavBaked, "nav must be baked");
+                AssertEqual("bake_nav", builder.Calls[builder.Calls.Count - 2]);
+                AssertEqual("end", builder.Calls[builder.Calls.Count - 1]);
+                AssertTrue(builder.Ended, "world must be ended (scene saved)");
+
+                // Every non-terminal call is a placed node, in the manifest's order.
+                AssertEqual(manifest.NodeCount, builder.Placed.Count);
+                for (int i = 0; i < manifest.NodeCount; i++)
+                    AssertEqual(manifest.Nodes[i].EntityId, builder.Placed[i].EntityId);
+
+                // The bake stage runs AFTER every node is placed.
+                int lastPlace = builder.Calls.FindLastIndex(c => c.Contains(":"));
+                int bakeIdx = builder.Calls.IndexOf("bake_nav");
+                AssertTrue(bakeIdx > lastPlace, "nav bake must run after all placements");
+            });
+
+            Case("Interior is a separate node at origin with no binding", () =>
+            {
+                var ir = JsonVal.Parse(SceneGenCorpus.ReadGoldenIrJson());
+                var resolver = new BindingResolver(new[] { PlaceholderPack.BuildLayer() });
+                var manifest = SceneGenerator.ComputePlacement(ir, resolver);
+                var interior = manifest.Nodes.Find(n => n.EntityId == "bld-townhall.interior");
+                AssertTrue(interior != null, "townhall interior must exist");
+                AssertEqual("interior", interior.Kind);
+                AssertEqual("", interior.Archetype);
+                AssertEqual("", interior.AssetRef);
+                AssertVec3(BindingVec3.Zero, interior.Position, "interior at origin");
+            });
+        }
+
+        private static void RunReimportDiffTests()
+        {
+            Case("Re-import diff over the shared fixtures matches the golden report", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var newNodes = ReimportCorpus.ReadNewNodes();
+                AssertTrue(oldNodes.Count == 5, "old manifest must load 5 nodes");
+                AssertTrue(newNodes.Count == 4, "new manifest must load 4 nodes");
+
+                var report = ReimportDiff.Compute(oldNodes, newNodes);
+                string got = ReimportDiff.SerializeReport(report);
+                string golden = ReimportCorpus.ReadGoldenReportJson();
+                AssertTrue(golden != null, "golden-diff-report.json must load");
+                AssertEqual(golden.Trim(), got);
+            });
+
+            Case("Every diff action is exercised + counts are correct", () =>
+            {
+                var report = ReimportDiff.Compute(ReimportCorpus.ReadOldNodes(), ReimportCorpus.ReadNewNodes());
+                // added: prop.c (new, generated, absent from old)
+                AssertEqual(1, report.Added.Count);
+                AssertEqual("prop.c", report.Added[0]);
+                // updated: building.b (both, generated, position moved)
+                AssertEqual(1, report.Updated.Count);
+                AssertEqual("building.b", report.Updated[0]);
+                // unchanged: building.a (both, generated, equivalent)
+                AssertEqual(1, report.Unchanged.Count);
+                AssertEqual("building.a", report.Unchanged[0]);
+                // skipped: prop.d (hand edit still in new) + prop.f (hand edit gone from new)
+                AssertEqual(2, report.Skipped.Count);
+                AssertEqual("prop.d", report.Skipped[0]);
+                AssertEqual("prop.f", report.Skipped[1]);
+                // deprecated: prop.e (generated, dropped from new)
+                AssertEqual(1, report.Deprecated.Count);
+                AssertEqual("prop.e", report.Deprecated[0]);
+            });
+
+            Case("Hand edit is NEVER updated or deprecated — always skipped", () =>
+            {
+                // prop.d is generated=false in OLD but the NEW manifest lists it as a
+                // fresh generated node at a different transform. Policy: skip it.
+                var report = ReimportDiff.Compute(ReimportCorpus.ReadOldNodes(), ReimportCorpus.ReadNewNodes());
+                AssertTrue(report.Skipped.Contains("prop.d"), "hand edit present-in-new must be skipped");
+                AssertTrue(!report.Updated.Contains("prop.d"), "hand edit must never be updated");
+                AssertTrue(!report.Deprecated.Contains("prop.d"), "hand edit must never be deprecated");
+                // prop.f is a hand edit absent from NEW — kept as-is (skipped), not deprecated.
+                AssertTrue(report.Skipped.Contains("prop.f"), "hand edit absent-from-new must be skipped");
+                AssertTrue(!report.Deprecated.Contains("prop.f"), "hand edit must never be deprecated");
+            });
+
+            Case("A no-op re-import (new == old) classifies everything unchanged/skipped", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var report = ReimportDiff.Compute(oldNodes, oldNodes);
+                AssertEqual(0, report.Added.Count);
+                AssertEqual(0, report.Updated.Count);
+                AssertEqual(0, report.Deprecated.Count);
+                // The 3 generated nodes -> unchanged; the 2 hand edits -> skipped.
+                AssertEqual(3, report.Unchanged.Count);
+                AssertEqual(2, report.Skipped.Count);
+            });
+
+            Case("Diff is deterministic (byte-identical over two runs)", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var newNodes = ReimportCorpus.ReadNewNodes();
+                string a = ReimportDiff.SerializeReport(ReimportDiff.Compute(oldNodes, newNodes));
+                string b = ReimportDiff.SerializeReport(ReimportDiff.Compute(oldNodes, newNodes));
+                AssertEqual(a, b);
+            });
+
+            Case("ReimportReconciler drives the mutator: updates+adds+deprecates, hand edits untouched", () =>
+            {
+                var oldNodes = ReimportCorpus.ReadOldNodes();
+                var newNodes = ReimportCorpus.ReadNewNodes();
+                var mutator = new RecordingReimportMutator();
+                var report = ReimportReconciler.Apply(oldNodes, newNodes, mutator);
+
+                AssertEqual(1, mutator.Updated.Count);
+                AssertEqual("building.b", mutator.Updated[0]);
+                AssertEqual(1, mutator.Added.Count);
+                AssertEqual("prop.c", mutator.Added[0]);
+                AssertEqual(1, mutator.Deprecated.Count);
+                AssertEqual("prop.e", mutator.Deprecated[0]);
+                // Hand edits + unchanged nodes are never handed to the mutator.
+                AssertTrue(!mutator.Calls.Exists(c => c.EndsWith(":prop.d")), "hand edit prop.d untouched");
+                AssertTrue(!mutator.Calls.Exists(c => c.EndsWith(":prop.f")), "hand edit prop.f untouched");
+                AssertTrue(!mutator.Calls.Exists(c => c.EndsWith(":building.a")), "unchanged building.a untouched");
+                // The report returned is the same one that drove the mutator.
+                AssertEqual(1, report.Updated.Count);
+            });
+
+            Case("Reconciler with a null mutator is a pure dry run (report only)", () =>
+            {
+                var report = ReimportReconciler.Apply(ReimportCorpus.ReadOldNodes(), ReimportCorpus.ReadNewNodes(), null);
+                AssertEqual("prop.c", report.Added[0]);
+                AssertEqual("building.b", report.Updated[0]);
+                AssertEqual("prop.e", report.Deprecated[0]);
+            });
+        }
+
+        // ---- Binding Editor window logic (US-UB5) ---------------------------
+
+        private static void RunBindingEditorTests()
+        {
+            // A resolver: a project layer (building.* + npc.merchant.baker) layered
+            // over the placeholder pack, so the three statuses are all reachable.
+            BindingResolver EditorResolver() => new BindingResolver(new[]
+            {
+                Layer("project", BindingSourceKind.Project,
+                    new BindingRule("building.*", "Assets/MyBuilding.prefab"),
+                    new BindingRule("npc.merchant.baker", "Assets/Baker.prefab")),
+                PlaceholderPack.BuildLayer(),
+            });
+
+            Case("SuggestBindings scores by segment matches, sorts score desc then path asc", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                var assets = new List<AssetCandidate>
+                {
+                    new AssetCandidate("Assets/Props/Bakery_Commercial.prefab", "Bakery_Commercial",
+                        new List<string> { "building" }),          // building + commercial + bakery = 3
+                    new AssetCandidate("Assets/Props/Bakery.prefab", "Bakery", null),   // bakery = 1
+                    new AssetCandidate("Assets/Props/Shop_Commercial.prefab", "Shop", // commercial = 1
+                        new List<string> { "commercial" }),
+                    new AssetCandidate("Assets/Props/Tree.prefab", "Tree", null),       // 0 -> excluded
+                };
+                var hits = model.SuggestBindings("building.commercial.bakery", assets);
+                AssertEqual(3, hits.Count); // Tree excluded (score 0)
+                AssertEqual("Assets/Props/Bakery_Commercial.prefab", hits[0].Path);
+                AssertEqual(3, hits[0].Score);
+                // The two score-1 hits break the tie by path ascending.
+                AssertEqual("Assets/Props/Bakery.prefab", hits[1].Path);
+                AssertEqual("Assets/Props/Shop_Commercial.prefab", hits[2].Path);
+            });
+
+            Case("SuggestBindings on empty archetype / null assets is empty", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                AssertEqual(0, model.SuggestBindings("", new List<AssetCandidate>()).Count);
+                AssertEqual(0, model.SuggestBindings("building.house", null).Count);
+            });
+
+            Case("StatusFor distinguishes real / placeholder / unbound", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                // building.* is a real project rule.
+                AssertEqual(BindingStatus.Bound, model.StatusFor("building.commercial.bakery.medium"));
+                AssertEqual(BindingStatus.Bound, model.StatusFor("npc.merchant.baker"));
+                // npc.guard has no project rule -> falls to the placeholder npc.* tier.
+                AssertEqual(BindingStatus.Placeholder, model.StatusFor("npc.guard"));
+                AssertEqual(BindingStatus.Placeholder, model.StatusFor("item.sword"));
+            });
+
+            Case("Bound/unbound partition is deterministic + sorted (no placeholder tier)", () =>
+            {
+                // Project-only resolver so some keys are genuinely unbound.
+                var model = new BindingEditorModel(new BindingResolver(new[]
+                {
+                    Layer("project", BindingSourceKind.Project,
+                        new BindingRule("building.*", "Assets/MyBuilding.prefab")),
+                }));
+                var keys = new[] { "npc.b", "building.a", "item.c", "building.a" }; // dup building.a
+                var bound = model.BoundKeys(keys);
+                var unbound = model.UnboundKeys(keys);
+                AssertEqual(1, bound.Count);
+                AssertEqual("building.a", bound[0]);
+                AssertEqual(2, unbound.Count);
+                AssertEqual("item.c", unbound[0]); // sorted ordinal: item < npc
+                AssertEqual("npc.b", unbound[1]);
+            });
+
+            Case("BuildTaxonomyTree groups by taxonomy + annotates leaf status", () =>
+            {
+                var model = new BindingEditorModel(EditorResolver());
+                var tree = model.BuildTaxonomyTree(new[]
+                {
+                    "building.commercial.bakery",
+                    "building.residential.house",
+                    "npc.guard",
+                });
+                // Two roots, ordinal order.
+                var rootSegs = new List<string>(tree.Children.Keys);
+                AssertEqual(2, rootSegs.Count);
+                AssertEqual("building", rootSegs[0]);
+                AssertEqual("npc", rootSegs[1]);
+                // building is an intermediate node (not itself a used archetype).
+                var building = tree.Children["building"];
+                AssertTrue(!building.IsArchetype, "building is intermediate");
+                AssertEqual(2, building.Children.Count); // commercial + residential
+                // The bakery leaf is a used archetype, bound via the real project rule.
+                var bakery = building.Children["commercial"].Children["bakery"];
+                AssertTrue(bakery.IsArchetype, "bakery leaf is a used archetype");
+                AssertEqual(BindingStatus.Bound, bakery.Status);
+                AssertEqual("building.commercial.bakery", bakery.Path);
+                // npc.guard falls to the placeholder tier.
+                var guard = tree.Children["npc"].Children["guard"];
+                AssertEqual(BindingStatus.Placeholder, guard.Status);
+                AssertTrue(guard.IsPlaceholder, "npc.guard is a placeholder binding");
+            });
+
+            Case("Binding pack round-trips: export -> import -> export is identity", () =>
+            {
+                var layer = BindingEditorCorpus.BuildGoldenLayer();
+                string exported = BindingPack.Export(layer);
+                var reimported = BindingPack.Import(exported);
+                string reexported = BindingPack.Export(reimported);
+                AssertEqual(exported, reexported);
+
+                // The imported table is field-for-field identical (name, kind, rules).
+                AssertEqual(layer.Name, reimported.Name);
+                AssertEqual(layer.Kind, reimported.Kind);
+                AssertEqual(2, reimported.Rules.Count);
+                // Rules come back key-sorted; verify the bakery rule survived intact.
+                BindingRule bakery = null;
+                foreach (var r in reimported.Rules)
+                    if (r.Key == "building.commercial.bakery.medium") bakery = r;
+                AssertTrue(bakery != null, "bakery rule survives the round-trip");
+                AssertEqual("Assets/Bakery.prefab", bakery.AssetRef);
+                AssertEqual(FootprintAlignment.Center, bakery.FootprintAlign);
+                AssertVec3(new BindingVec3(1.5f, 1f, 1.5f), bakery.Scale, "bakery.scale");
+                AssertEqual(2, bakery.Tags.Count);
+                AssertEqual("oven", bakery.Tags[0]);
+                // The baker rule's socket + pivot survive.
+                BindingRule baker = null;
+                foreach (var r in reimported.Rules)
+                    if (r.Key == "npc.merchant.baker") baker = r;
+                AssertTrue(baker != null, "baker rule survives the round-trip");
+                AssertVec3(new BindingVec3(0f, 0.5f, 0f), baker.PivotOffset, "baker.pivot");
+                AssertEqual(1, baker.Sockets.Count);
+                AssertEqual("hat", baker.Sockets[0].Name);
+                AssertVec3(new BindingVec3(0f, 2f, 0f), baker.Sockets[0].LocalPosition, "hat.pos");
+            });
+
+            Case("Exported pack is byte-identical to the canonical golden", () =>
+            {
+                string golden = BindingEditorCorpus.ReadGoldenPackJson();
+                AssertTrue(golden != null, "golden-pack.json must load");
+                var layer = BindingEditorCorpus.BuildGoldenLayer();
+                AssertEqual(golden.Trim(), BindingPack.Export(layer));
+                // ...and importing the golden then re-exporting reproduces it.
+                AssertEqual(golden.Trim(), BindingPack.Export(BindingPack.Import(golden)));
+            });
+
+            Case("Importing malformed / empty pack JSON yields an empty layer (never throws)", () =>
+            {
+                AssertEqual(0, BindingPack.Import(null).Rules.Count);
+                AssertEqual(0, BindingPack.Import("").Rules.Count);
+                AssertEqual(0, BindingPack.Import("}{ not json").Rules.Count);
+            });
+        }
+
+        private static double Round3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);
+
+        /// <summary>A minimal two-building IR; <paramref name="reversed"/> lists them
+        /// in the opposite order to prove the manifest is order-insensitive.</summary>
+        private static JsonVal BuildTwoEntityIr(bool reversed)
+        {
+            JsonVal Building(string id, string role, double x, double z)
+            {
+                var b = JsonVal.Object();
+                b.Set("id", JsonVal.Str(id));
+                b.Set("role", JsonVal.Str(role));
+                var pos = JsonVal.Object();
+                pos.Set("x", JsonVal.Num(x));
+                pos.Set("z", JsonVal.Num(z));
+                b.Set("position", pos);
+                return b;
+            }
+            var a = Building("bld-a", "commercial", 10, 10);
+            var c = Building("bld-c", "residential", 20, 20);
+            var buildings = JsonVal.Arr();
+            if (reversed) { buildings.Add(c); buildings.Add(a); }
+            else { buildings.Add(a); buildings.Add(c); }
+            var entities = JsonVal.Object();
+            entities.Set("buildings", buildings);
+            var ir = JsonVal.Object();
+            ir.Set("entities", entities);
+            return ir;
+        }
+
+        private static void AssertVec3(BindingVec3 expected, BindingVec3 actual, string what)
+        {
+            AssertTrue(Math.Abs(expected.X - actual.X) < 0.001f, what + ".x");
+            AssertTrue(Math.Abs(expected.Y - actual.Y) < 0.001f, what + ".y");
+            AssertTrue(Math.Abs(expected.Z - actual.Z) < 0.001f, what + ".z");
         }
 
         // ---- Mini test framework --------------------------------------------

@@ -77,6 +77,49 @@
     <!-- The game adapter (US-UP4): the real-engine backing the template shell
          delegates to. UnityEngine-free, so it compiles + runs here. -->
     <Compile Include="../../packages/unity/Runtime/Prolog/PrologGameAdapter.cs" />
+    <!-- Asset binding layer (US-UB1): the pure, UnityEngine-free archetype-key
+         matcher + resolution core. The InsimulBindingTable ScriptableObject that
+         authors it is UnityEngine-coupled and thus NOT included (structural gate
+         only) — RunBindingResolverTests in Program.cs proves this core. -->
+    <Compile Include="../../packages/unity/Runtime/Binding/ArchetypeKey.cs" />
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingResolver.cs" />
+    <!-- Placeholder asset pack (US-UB2): the pure, UnityEngine-free recipe +
+         Placeholder-tier BindingLayer. The editor generator that materializes its
+         primitive prefabs (Editor/PlaceholderPackGenerator.cs) is UnityEngine-
+         coupled and thus NOT included (structural gate only) — RunPlaceholderPackTests
+         proves the coverage guarantee (every golden-world key resolves) over this. -->
+    <Compile Include="../../packages/unity/Runtime/Binding/PlaceholderPack.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/PlaceholderPackCorpus.cs" />
+    <!-- Editor-time scene generation (US-UB3): the pure placement core + the
+         UnityEngine-free pipeline orchestration (ISceneBuilder/ScenePipeline +
+         the RecordingSceneBuilder double). It parses the World IR through the
+         JsonVal model (already compiled for the save system) and resolves
+         bindings via the PlaceholderPack tier. The UnitySceneBuilder that
+         materializes GameObjects + the InsimulEntityId MonoBehaviour are
+         UnityEngine-coupled and thus NOT included (structural gate only) —
+         RunSceneGenTests proves the math + determinism + pipeline order. -->
+    <Compile Include="../../packages/unity/Runtime/Scene/SceneGenerator.cs" />
+    <Compile Include="../../packages/unity/Runtime/Scene/ISceneBuilder.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/SceneGenCorpus.cs" />
+    <!-- Re-import diff policy (US-UB4): the pure, UnityEngine-free reconciliation
+         core (ReimportDiff classification + serialization) + the apply-orchestration
+         seam (IReimportSceneMutator / ReimportReconciler + RecordingReimportMutator
+         double). The UnityEngine-coupled applier that walks the live scene tree
+         (Editor/InsimulReimport.cs) is structural-gate-only — RunReimportDiffTests
+         proves the policy + golden-report parity + hand-edit invariants over this. -->
+    <Compile Include="../../packages/unity/Runtime/Scene/ReimportDiff.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/ReimportCorpus.cs" />
+    <!-- Binding Editor window logic (US-UB5): the pure, UnityEngine-free suggestion
+         + taxonomy-grouping model (BindingEditorModel) and the portable binding-pack
+         serializer (BindingPack, over the same JsonVal/CanonicalJson core as the save
+         system). The EditorWindow that wires AssetDatabase + object pickers to these
+         (Editor/InsimulBindingEditorWindow.cs) is UnityEngine-coupled and thus NOT
+         included (structural gate only) — RunBindingEditorTests proves suggestion
+         ranking, taxonomy status, and pack round-trip / golden byte-parity over this. -->
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingPack.cs" />
+    <Compile Include="../../packages/unity/Runtime/Binding/BindingEditorModel.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/BindingEditorCorpus.cs" />
   </ItemGroup>
 
 </Project>
