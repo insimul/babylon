@@ -19,6 +19,33 @@ never as code.**
 - `radiant/*.json` — the radiant quest-generation corpus (see "Radiant case
   format" below). Pins `generateRadiantQuests` — the contract the future native
   `insimul_radiant_tick()` must match.
+- `ui/*.json` — the default-UI view-model corpus (US-GU1). `theme-tokens.json` is
+  the single-source-of-truth design token set every engine's theme maps;
+  `registry-cases.json` pins the panel-registry behavior (default lookup, creator
+  override precedence, missing-panel diagnostics); `loading-phases.json` pins the
+  loading-screen view-model (weighted-cumulative monotonic progress, phase label,
+  deterministic tip). Run by the TS view-models (`src/ui/__tests__/ui-corpus.test.ts`)
+  and the Godot headless leg (`packages/godot/addons/insimul/tests/ui_registry_test.gd`)
+  — the two can never disagree on the contract. Scene refs are opaque strings so
+  every engine runs the same cases.
+  US-GU2 adds `quest-journal-cases.json` (journal tab filtering + counts, tracker
+  HUD `max_tracked`, offer accept/decline, radiant `upsert` arrivals — lifecycle
+  mirrors the real quest-system signals) and `trade-cases.json` (inventory /
+  container transfer / merchant buy+sell, backed exclusively by `save.currentState`;
+  each case is an initial currentState slice + one op + expected result/quantities/
+  gold, with item + gold conservation as the invariant). Run by
+  `src/ui/__tests__/quest-trade-corpus.test.ts` and the Godot headless leg
+  (`packages/godot/addons/insimul/tests/quest_trade_test.gd`).
+  US-GU3 adds `chat-cases.json` (dialogue streaming: an ordered event stream —
+  greeting/begin/chunk/action/complete/fail — pinning the transcript, streaming
+  flag, triggered KB actions, completed-turn count, and the `save.conversations`
+  history projection), `pause-menu-cases.json` (module-bundle-gated tab visibility +
+  the open/active-tab reducer) and `save-slot-cases.json` (codec-reported slot
+  outcome → rendered row status/title/message/can_load/can_save, incl. the
+  corrupted-envelope messaging). Run by
+  `src/ui/__tests__/dialogue-menu-save-corpus.test.ts` (which also proves the real
+  SHA-256 corrupted-envelope chain via `SaveSlotModel.classifyEnvelope`) and the
+  Godot headless leg (`packages/godot/addons/insimul/tests/dialogue_menu_save_test.gd`).
 
 ## Prolog case format
 

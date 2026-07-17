@@ -108,3 +108,30 @@ export * from './editor/job-poller';
 // (reducer accumulator) collides with the proto/conversation `ConversationState` enum
 // re-exported above, so it is intentionally left out of the flat barrel — same pattern
 // as the collision-avoiding modules noted in CLAUDE.md (core-extraction).
+
+// ── Default-UI view-models (US-GU1) ────────────────────────────────────────
+// The engine-agnostic panel registry, loading-screen model, and notification
+// queue the native default-UI mirrors (Godot insimul_ui_registry.gd /
+// loading_screen_model.gd / insimul_notifications.gd) implement. Shared cases:
+// packages/core/conformance/ui/.
+export * from './ui/ui-registry';
+export * from './ui/loading-screen-model';
+export * from './ui/notifications';
+
+// ── Default-UI quest + trade view-models (US-GU2) ──────────────────────────
+// The quest journal/tracker/offer model and the currentState-backed trade model
+// (inventory/container/merchant) the native mirrors (Godot quest_journal_model.gd
+// / trade_model.gd) implement. Shared matrices:
+// packages/core/conformance/ui/{quest-journal-cases,trade-cases}.json.
+export * from './ui/quest-journal-model';
+export * from './ui/trade-model';
+
+// ── Default-UI dialogue + pause-menu + save-slot view-models (US-GU3) ──────
+// The streaming chat model (chunks/actions/history → save.conversations), the
+// module-bundle-gated pause-menu tab reducer, and the save/load slot model
+// (incl. corrupted-envelope messaging) the native mirrors (Godot chat_model.gd /
+// pause_menu_model.gd / save_slot_model.gd) implement. Shared matrices:
+// packages/core/conformance/ui/{chat-cases,pause-menu-cases,save-slot-cases}.json.
+export * from './ui/chat-model';
+export * from './ui/pause-menu-model';
+export * from './ui/save-slot-model';
