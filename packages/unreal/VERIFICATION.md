@@ -73,3 +73,62 @@ Get the subsystem via **Get Game Instance Subsystem → InsimulPrologSubsystem**
       `AsyncTask(ENamedThreads::AnyThread, …)`) logs an error from
       `LogInsimulProlog` and returns `false`/`""` **without** corrupting the KB —
       subsequent game-thread calls still work.
+
+---
+
+## US-XP4 — `UPrologEngine` adapter (game-template smoke)
+
+**Goal:** confirm the exported game template's `UPrologEngine` — now a thin
+adapter over `UInsimulPrologSubsystem` (the substring stub is retired) — drives
+the **real** engine end-to-end. See `templates/MIGRATION.md` for the behavior
+deltas this checklist exercises.
+
+### Setup
+
+- [ ] Same prerequisites as US-XP3 (libinsimul staged, `InsimulRuntime` enabled).
+- [ ] The exported game module (`InsimulExport`) compiles with both
+      `UPrologEngine` and `UInsimulPrologSubsystem` present.
+- [ ] PIE starts with no fatal `LogTemp` / `LogInsimulProlog` error.
+
+### Lifecycle & wiring
+
+- [ ] On PIE start, `UPrologEngine::LoadFromIR(worldJson)` logs
+      `PrologEngine loaded via real engine (…)` and **does not** log
+      `UInsimulPrologSubsystem unavailable`.
+- [ ] `LoadItemReasoningRules()` and `LoadHelperPredicates()` log success (rules
+      consulted, no `GetLastError` warning).
+
+### Real unification (the migration's whole point)
+
+- [ ] Assert `person(alice)` and a rule via `LoadFromIR` world data, then a query
+      method that depends on a **rule** (e.g. an `is_a/2` chain, or
+      `IsQuestComplete` whose `quest_complete/2` is rule-defined) returns `true`
+      where the old substring stub returned `false`.
+- [ ] `EvaluateCondition("2 >= 1")` returns `true` (arithmetic — impossible under
+      the stub).
+- [ ] `EvaluateCondition("nonexistent_pred(x)")` returns `false`.
+
+### Fact management & queries
+
+- [ ] After `InitializeInventory` with an item of quantity 3, `Query("has_item(player, X, N)")`
+      returns one solution binding `N=3`.
+- [ ] `WhoShouldTalkTo(npc)` / `GetPreferredTopics(npc)` return the expected
+      targets when the world KB defines `should_talk_to/2` / `prefers_topic/2`.
+- [ ] An `EventBus` item-collect event updates `has_item/3` (collect twice →
+      quantity accumulates; drop below 1 → `has(player, item)` no longer holds).
+
+### Save round-trip via Snapshot/Restore
+
+- [ ] Assert some gameplay facts, call `SnapshotToString()` → non-empty image;
+      store it as `GameSaveState.prologFacts`.
+- [ ] In a fresh session, `LoadFromIR(...)` then `RestoreFromString(image)`
+      returns `true` and the previously-asserted gameplay facts re-query
+      successfully.
+- [ ] Alternatively, `GetPlayerFacts()` → save array → `RestorePlayerFacts(array)`
+      after `LoadFromIR` re-establishes the same facts (item quantities included).
+
+### Graceful degradation
+
+- [ ] With `libinsimul` absent (subsystem unavailable), `LoadFromIR` logs the
+      "unavailable" error and adapter mutations no-op / queries return
+      empty-or-default **without** crashing PIE.
