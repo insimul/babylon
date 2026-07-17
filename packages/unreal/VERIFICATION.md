@@ -521,3 +521,52 @@ engine-specific streaming HTTP client (`FHttpModule` vs `UnityWebRequest` vs
 `HTTPRequest`) and the edit-mode audio-playback wall (shared across all three) differ,
 by design. Any load / send-guard / transcript / teardown difference found in the human
 pass is a bug — file it against US-XE4.
+
+## US-XU1 — Default-UI registry + theme + widget-generation preservation (Unreal editor required)
+
+**Automated cores are green before the human pass; the UMG/asset seam is
+editor-verified (autoMerge off).**
+
+### 0. Automated pre-checks
+
+- [ ] `npm run engines:unreal:ui` — the default-UI host gate is green (20 cases:
+      registry default/override/missing + the real WBP default map, the loading
+      view-model weighted-progress/monotonicity/label/completion/tips against
+      `conformance/ui/loading-phases.json`, and the theme-token table vs
+      `conformance/ui/theme-tokens.json`).
+- [ ] `npm run engines:check` — the structural syntax gate covers the new UE seams
+      (`UInsimulUIRegistry`, `UInsimulUITheme`) and the grep-guard confirms the
+      cores stay UE-free.
+
+### 1. Generation preserves widgets + registry + fonts
+
+- [ ] Run the export pipeline (or `Scripts/GenerateInsimulContent.py` manually) on a
+      project with the InsimulExport module built. Confirm `/Game/UI/WBP_*` are
+      created as before (dialogue, game menu, quest tracker, quest offer, intro, …)
+      with their bound child widgets named to match the C++ `BindWidget` properties.
+- [ ] Confirm `/Game/UI/DA_InsimulUIRegistry` exists and its **Panels** array binds
+      `dialogue`, `game_menu`, `loading_screen`, `quest_offer`, `quest_tracker` to the
+      matching `WBP_*` generated classes. Confirm `/Game/UI/DA_InsimulUITheme` exists
+      with the shared token defaults.
+- [ ] With a `Content/Fonts/` folder present, confirm fonts still import and the
+      created text widgets use them (CJK/Arabic/Devanagari renders glyphs, not tofu) —
+      the i18n font path is unchanged by this story.
+
+### 2. Registry override + loading screen
+
+- [ ] Point **Project Settings ▸ Insimul ▸ UI ▸ UIRegistry** at a custom
+      `UInsimulUIRegistry` (or add a `Panels` entry overriding, e.g., `dialogue`).
+      Confirm `ResolvePanelClass("dialogue")` returns the override class, and an
+      unknown key logs the `No panel registered for key` warning.
+- [ ] Drive a boot from the main menu and confirm the loading screen advances through
+      the phases (Starting up → Loading world → … → Ready) with a monotonically
+      rising bar and a per-phase tip, reaching 100% at **Ready**.
+
+### Deltas vs Unity/Godot
+
+**Target: zero on the registry + loading + token contract.** The three cores mirror
+the Godot leg (`insimul_ui_registry.gd` / `loading_screen_model.gd` /
+`insimul_ui_tokens.gd`) and the shared corpus case-for-case; only the concrete
+default map (WBP asset paths vs Godot `.tscn`) and the native theme representation
+(Slate vs Godot `Theme`) differ by design. Any resolution / progress / token
+divergence found in the human pass is a bug — file it against US-XU1.
