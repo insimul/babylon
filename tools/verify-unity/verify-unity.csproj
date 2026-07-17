@@ -35,6 +35,9 @@
     <!-- The wrapper under test, referenced in place (no vendoring). -->
     <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
     <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />
+    <!-- The game adapter (US-UP4): the real-engine backing the template shell
+         delegates to. UnityEngine-free, so it compiles + runs here. -->
+    <Compile Include="../../packages/unity/Runtime/Prolog/PrologGameAdapter.cs" />
   </ItemGroup>
 
 </Project>

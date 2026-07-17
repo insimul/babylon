@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using Insimul.Data;
+using Insimul.Prolog;
 
 namespace Insimul.Systems
 {
@@ -72,23 +73,28 @@ namespace Insimul.Systems
     }
 
     /// <summary>
-    /// Stub Prolog engine for Unity exports.
-    /// Mirrors GamePrologEngine.ts from the Babylon.js source.
+    /// Real Prolog engine for Unity exports (US-UP4).
     ///
-    /// Since Unity does not ship a native Prolog runtime, this implementation
-    /// stores the knowledge base as a string and provides basic fact lookup
-    /// by scanning asserted facts. For full Prolog unification and rule
-    /// evaluation, integrate a C# Prolog library (e.g., CSProlog) and
-    /// replace the stub query methods.
+    /// This used to be a ~1.5k-line substring-matching fact store. It is now a
+    /// thin MonoBehaviour shell that owns a <see cref="PrologGameAdapter"/> — the
+    /// engine-agnostic, UnityEngine-free backing in the Insimul.Runtime package
+    /// (Runtime/Prolog/) that runs against a real Prolog engine (libinsimul) with
+    /// genuine unification. All Prolog logic lives in the adapter; this shell only
+    /// carries the Unity glue: MonoBehaviour lifetime, Debug logging, GameEventBus
+    /// subscription, and the C# events other systems subscribe to.
+    ///
+    /// The class name and public method surface are preserved so scene/codegen
+    /// wiring keyed on the type keeps working. Behavioral differences vs the old
+    /// stub (substring matching → real unification) are enumerated in
+    /// templates/MIGRATION.md. Requires the Insimul.Runtime assembly and its
+    /// System.Text.Json Plugins DLL to be present (see Runtime/Plugins/README.md).
     /// </summary>
     public class PrologEngine : MonoBehaviour
     {
+        private PrologGameAdapter _adapter;
         private bool _initialized;
-        private readonly HashSet<string> _facts = new();
-        private readonly StringBuilder _knowledgeBase = new();
+
         private readonly List<string> _activeQuestIds = new();
-        private readonly Dictionary<string, int> _itemQuantities = new();
-        private readonly HashSet<string> _playerFacts = new();
 
         private Action<string, int> onObjectiveCompleted;
         private HashSet<string> completedObjectives = new HashSet<string>();
@@ -98,7 +104,13 @@ namespace Insimul.Systems
         public event Action<string> OnQuestCompleted;
 
         public bool IsInitialized => _initialized;
-        public int FactCount => _facts.Count;
+
+        /// <summary>
+        /// Number of player-asserted facts tracked for save serialization. Note:
+        /// with the real engine this counts player deltas, not the total clause
+        /// count of the whole KB (the ABI does not expose a clause count).
+        /// </summary>
+        public int FactCount => _adapter?.PlayerFactCount ?? 0;
 
         private Action _eventBusUnsubscribe;
         private GameEventBus _eventBusRef;
@@ -109,6 +121,12 @@ namespace Insimul.Systems
         }
 
         // ── Initialization ────────────────────────────────────────────────────
+
+        private PrologGameAdapter EnsureAdapter()
+        {
+            _adapter ??= new PrologGameAdapter();
+            return _adapter;
+        }
 
         /// <summary>
         /// Initialize the engine with individual data arrays (matching GamePrologEngine.ts signature).
@@ -123,17 +141,15 @@ namespace Insimul.Systems
             InsimulTruthData[] truths,
             string content = null)
         {
-            _facts.Clear();
-            _knowledgeBase.Clear();
-            _itemQuantities.Clear();
-            _playerFacts.Clear();
+            // Fresh KB: dispose any prior adapter so re-init starts clean.
+            _adapter?.Dispose();
+            _adapter = new PrologGameAdapter();
 
-            // Load pre-generated Prolog content if available
+            // Load pre-generated Prolog content if available (facts AND rules —
+            // the real engine consults the whole program, unlike the old stub
+            // which parsed only fact lines and dropped rules).
             if (!string.IsNullOrEmpty(content))
-            {
-                _knowledgeBase.AppendLine(content);
-                ParseFactsFromContent(content);
-            }
+                _adapter.Consult(content);
 
             // Assert character facts
             if (characters != null)
@@ -181,10 +197,7 @@ namespace Insimul.Systems
                 foreach (var r in rules)
                 {
                     if (!string.IsNullOrEmpty(r.content))
-                    {
-                        _knowledgeBase.AppendLine(r.content);
-                        ParseFactsFromContent(r.content);
-                    }
+                        _adapter.Consult(r.content);
                 }
             }
 
@@ -194,10 +207,7 @@ namespace Insimul.Systems
                 foreach (var a in actions)
                 {
                     if (!string.IsNullOrEmpty(a.content))
-                    {
-                        _knowledgeBase.AppendLine(a.content);
-                        ParseFactsFromContent(a.content);
-                    }
+                        _adapter.Consult(a.content);
                 }
             }
 
@@ -207,10 +217,7 @@ namespace Insimul.Systems
                 foreach (var q in quests)
                 {
                     if (!string.IsNullOrEmpty(q.content))
-                    {
-                        _knowledgeBase.AppendLine(q.content);
-                        ParseFactsFromContent(q.content);
-                    }
+                        _adapter.Consult(q.content);
                 }
             }
 
@@ -220,15 +227,12 @@ namespace Insimul.Systems
                 foreach (var t in truths)
                 {
                     if (!string.IsNullOrEmpty(t.content))
-                    {
-                        _knowledgeBase.AppendLine(t.content);
-                        ParseFactsFromContent(t.content);
-                    }
+                        _adapter.Consult(t.content);
                 }
             }
 
             _initialized = true;
-            Debug.Log($"[Insimul] PrologEngine initialized with {_facts.Count} facts");
+            Debug.Log($"[Insimul] PrologEngine initialized ({_adapter.PlayerFactCount} player facts tracked)");
         }
 
         /// <summary>
@@ -271,7 +275,6 @@ namespace Insimul.Systems
                 var qty = item.quantity > 0 ? item.quantity : 1;
                 AssertFact($"has(player, {name})");
                 AssertFact($"has_item(player, {name}, {qty})");
-                _itemQuantities[name] = (_itemQuantities.GetValueOrDefault(name, 0)) + qty;
 
                 if (item.type != default)
                     AssertFact($"item_type({name}, {Sanitize(item.type.ToString())})");
@@ -328,8 +331,7 @@ has_item_of_type(Player, Type) :- has(Player, Item), item_is_a(Item, Type).
 % Check if player has at least N of an item
 has_at_least(Player, Item, N) :- has_item(Player, Item, Qty), Qty >= N.
 ";
-            _knowledgeBase.AppendLine(rules);
-            ParseFactsFromContent(rules);
+            _adapter.Consult(rules);
             Debug.Log("[Insimul] PrologEngine loaded item IS-A reasoning rules");
         }
 
@@ -379,8 +381,7 @@ skill_tier_name(10, master).
 % Skill level comparison
 skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= MinLevel.
 ";
-            _knowledgeBase.AppendLine(rules);
-            ParseFactsFromContent(rules);
+            _adapter.Consult(rules);
             Debug.Log("[Insimul] PrologEngine loaded gameplay helper predicates");
         }
 
@@ -395,10 +396,11 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
 
             var playerId = Sanitize(state.playerCharacterId);
 
-            // Retract old dynamic state
-            RetractPattern("energy", playerId);
-            RetractPattern("at_location", playerId);
-            RetractPattern("nearby_npc", playerId);
+            // Retract old dynamic state (real retract needs a well-formed term, so
+            // fill the value positions with anonymous variables).
+            RetractAll($"energy({playerId}, _)");
+            RetractAll($"at_location({playerId}, _)");
+            RetractAll($"nearby_npc({playerId}, _)");
 
             // Assert current state
             AssertFact($"energy({playerId}, {state.playerEnergy:F1})");
@@ -424,27 +426,8 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             if (!_initialized)
                 return new ActionCheckResult { allowed = true };
 
-            var actionAtom = Sanitize(actionId);
-            var actorAtom = Sanitize(actorId);
-
-            string query;
-            if (!string.IsNullOrEmpty(targetId))
-                query = $"can_perform({actorAtom}, {actionAtom}, {Sanitize(targetId)})";
-            else
-                query = $"can_perform({actorAtom}, {actionAtom})";
-
-            if (HasFact(query))
-                return new ActionCheckResult { allowed = true };
-
-            // If no can_perform fact exists at all, allow by default (graceful degradation)
-            if (!HasAnyFactWithPrefix("can_perform("))
-                return new ActionCheckResult { allowed = true };
-
-            return new ActionCheckResult
-            {
-                allowed = false,
-                reason = $"Prerequisites not met for action: {actionId}"
-            };
+            var r = _adapter.CanPerformAction(actionId, actorId, targetId);
+            return new ActionCheckResult { allowed = r.Allowed, reason = r.Reason };
         }
 
         // ── Quest Checks ──────────────────────────────────────────────────────
@@ -455,14 +438,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool IsQuestAvailable(string questId, string playerId)
         {
             if (!_initialized) return true;
-
-            var fact = $"quest_available({Sanitize(playerId)}, {Sanitize(questId)})";
-            if (HasFact(fact)) return true;
-
-            // If no quest_available facts exist, allow by default
-            if (!HasAnyFactWithPrefix("quest_available(")) return true;
-
-            return false;
+            return _adapter.IsQuestAvailable(questId, playerId);
         }
 
         /// <summary>
@@ -471,7 +447,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool IsQuestComplete(string questId, string playerId)
         {
             if (!_initialized) return false;
-            return HasFact($"quest_complete({Sanitize(playerId)}, {Sanitize(questId)})");
+            return _adapter.IsQuestComplete(questId, playerId);
         }
 
         /// <summary>
@@ -480,7 +456,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool IsStageComplete(string questId, string stageId, string playerId)
         {
             if (!_initialized) return false;
-            return HasFact($"stage_complete({Sanitize(playerId)}, {Sanitize(questId)}, {Sanitize(stageId)})");
+            return _adapter.IsStageComplete(questId, stageId, playerId);
         }
 
         /// <summary>
@@ -490,7 +466,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool EvaluateCondition(string prologGoal)
         {
             if (!_initialized) return true;
-            return HasFact(NormalizeFact(prologGoal));
+            return _adapter.EvaluateCondition(prologGoal);
         }
 
         /// <summary>
@@ -512,30 +488,14 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         // ── Rule Queries ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// Find all applicable rules for an actor.
-        /// Stub: scans facts for rule_applies predicates matching the actor.
+        /// Find all applicable rules for an actor via <c>rule_applies(Rule, Actor)</c>.
+        /// (Real unification: the actor must appear in the second argument, where
+        /// the old substring scan matched the actor in any position.)
         /// </summary>
         public List<string> GetApplicableRules(string actorId)
         {
             if (!_initialized) return new List<string>();
-
-            var actorAtom = Sanitize(actorId);
-            var prefix = "rule_applies(";
-            var results = new List<string>();
-
-            foreach (var fact in _facts)
-            {
-                if (!fact.StartsWith(prefix)) continue;
-                if (fact.Contains($", {actorAtom},") || fact.Contains($", {actorAtom})"))
-                {
-                    var inner = fact.Substring(prefix.Length);
-                    var commaIdx = inner.IndexOf(',');
-                    if (commaIdx > 0)
-                        results.Add(inner.Substring(0, commaIdx).Trim());
-                }
-            }
-
-            return results;
+            return _adapter.QueryColumn($"rule_applies(Rule, {Sanitize(actorId)})", "Rule");
         }
 
         // ── Fact Management ───────────────────────────────────────────────────
@@ -545,9 +505,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         /// </summary>
         public void AssertFact(string fact)
         {
-            var normalized = NormalizeFact(fact);
-            _facts.Add(normalized);
-            _knowledgeBase.AppendLine($"{normalized}.");
+            EnsureAdapter().AssertFact(fact);
         }
 
         /// <summary>
@@ -555,60 +513,46 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         /// </summary>
         public void RetractFact(string fact)
         {
-            var normalized = NormalizeFact(fact);
-            _facts.Remove(normalized);
+            if (_adapter == null) return;
+            _adapter.RetractFact(fact);
         }
 
         /// <summary>
-        /// Run a query against the fact store.
-        /// Stub: performs exact-match lookup against asserted facts.
-        /// Returns a list of result dictionaries (empty for stub).
-        /// For full Prolog unification, integrate a C# Prolog library.
+        /// Run a query against the knowledge base with real unification.
+        /// Returns one dictionary of variable → value bindings per solution
+        /// (empty list if the goal fails or the predicate is undeclared).
         /// </summary>
         public List<Dictionary<string, object>> Query(string goal)
         {
             if (!_initialized) return new List<Dictionary<string, object>>();
-
-            var normalized = NormalizeFact(goal);
-            if (HasFact(normalized))
-            {
-                return new List<Dictionary<string, object>>
-                {
-                    new Dictionary<string, object> { { "_match", true } }
-                };
-            }
-
-            return new List<Dictionary<string, object>>();
+            return _adapter.Query(goal);
         }
 
         /// <summary>
-        /// Get engine stats for debugging.
+        /// Get engine stats for debugging. ruleCount is not exposed by the native
+        /// ABI, so it is reported as 0; factCount is the tracked player-fact count.
         /// </summary>
         public (int factCount, int ruleCount) GetStats()
         {
-            int ruleCount = 0;
-            foreach (var line in _knowledgeBase.ToString().Split('\n'))
-            {
-                if (line.Contains(":-")) ruleCount++;
-            }
-            return (_facts.Count, ruleCount);
+            return (_adapter?.PlayerFactCount ?? 0, 0);
         }
 
         /// <summary>
-        /// Export the current knowledge base as a Prolog text string.
-        /// Deprecated: Use GetPlayerFacts() for save/load instead.
+        /// Export the current player facts as a Prolog text string.
+        /// Deprecated: Use SnapshotState()/GetPlayerFacts() for save/load instead.
         /// </summary>
-        [System.Obsolete("Use GetPlayerFacts() for save/load instead of ExportKnowledgeBase().")]
+        [System.Obsolete("Use SnapshotState() (or GetPlayerFacts()) for save/load instead of ExportKnowledgeBase().")]
         public string ExportKnowledgeBase()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("%% Insimul Prolog Knowledge Base Export");
+            sb.AppendLine("%% Insimul Prolog Knowledge Base Export (player facts)");
             sb.AppendLine($"%% Exported at: {DateTime.UtcNow:O}");
-            sb.AppendLine($"%% Facts: {_facts.Count}");
-            sb.AppendLine();
 
-            foreach (var fact in _facts.OrderBy(f => f))
-                sb.AppendLine($"{fact}.");
+            if (_adapter != null)
+            {
+                foreach (var fact in _adapter.GetPlayerFacts().OrderBy(f => f))
+                    sb.AppendLine(fact.EndsWith(".") ? fact : fact + ".");
+            }
 
             return sb.ToString();
         }
@@ -621,40 +565,36 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         /// </summary>
         public string[] GetPlayerFacts()
         {
-            return _playerFacts.ToArray();
+            return _adapter?.GetPlayerFacts() ?? Array.Empty<string>();
         }
 
         /// <summary>
-        /// Restore previously saved player facts. Re-asserts each fact and
-        /// rebuilds itemQuantities from has_item facts.
+        /// Restore previously saved player facts. Re-asserts each fact into the KB.
+        /// (has_item quantities are now the facts themselves — no separate rebuild.)
         /// </summary>
         public void RestorePlayerFacts(string[] facts)
         {
             if (facts == null) return;
-
-            foreach (var fact in facts)
-            {
-                var normalized = NormalizeFact(fact);
-                if (string.IsNullOrEmpty(normalized)) continue;
-
-                AssertFact(normalized);
-                _playerFacts.Add(normalized.EndsWith(".") ? normalized : normalized + ".");
-
-                // Rebuild itemQuantities from has_item(player, ItemName, Qty) facts
-                if (normalized.StartsWith("has_item(player, "))
-                {
-                    var inner = normalized.Substring("has_item(player, ".Length).TrimEnd(')');
-                    var parts = inner.Split(',');
-                    if (parts.Length >= 2)
-                    {
-                        var itemName = parts[0].Trim();
-                        if (int.TryParse(parts[1].Trim(), out int qty))
-                            _itemQuantities[itemName] = qty;
-                    }
-                }
-            }
-
+            EnsureAdapter().RestorePlayerFacts(facts);
             Debug.Log($"[Insimul] PrologEngine restored {facts.Length} player facts");
+        }
+
+        /// <summary>
+        /// Serialize the full KB (world + player facts + rules) to an opaque string.
+        /// This is the real-engine save path that replaces the old string-list
+        /// rebuild — pair with <see cref="RestoreState"/> for an exact round-trip.
+        /// </summary>
+        public string SnapshotState()
+        {
+            return _adapter?.SnapshotState() ?? string.Empty;
+        }
+
+        /// <summary>Restore full KB state from a <see cref="SnapshotState"/> string.</summary>
+        public void RestoreState(string snapshot)
+        {
+            if (string.IsNullOrEmpty(snapshot)) return;
+            EnsureAdapter().RestoreState(snapshot);
+            Debug.Log("[Insimul] PrologEngine restored KB from snapshot");
         }
 
         /// <summary>
@@ -669,6 +609,8 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             var state = JsonUtility.FromJson<GameSaveState>(saveStateJson);
             if (state == null) return;
 
+            EnsureAdapter();
+
             // Restore inventory
             if (state.inventory != null)
             {
@@ -678,7 +620,6 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                     var qty = item.quantity > 0 ? item.quantity : 1;
                     AssertPlayerFact($"has(player, {name})");
                     AssertPlayerFact($"has_item(player, {name}, {qty})");
-                    _itemQuantities[name] = qty;
 
                     if (!string.IsNullOrEmpty(item.type))
                         AssertPlayerFact($"item_type({name}, {Sanitize(item.type)})");
@@ -739,12 +680,12 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
 
         /// <summary>
         /// Determine who an NPC should talk to based on personality and relationships.
-        /// Stub: scans should_talk_to facts.
+        /// Queries should_talk_to(npc, X).
         /// </summary>
         public List<string> WhoShouldTalkTo(string npcId)
         {
             if (!_initialized) return new List<string>();
-            return ScanBinaryFact("should_talk_to", Sanitize(npcId));
+            return _adapter.QueryColumn($"should_talk_to({Sanitize(npcId)}, X)", "X");
         }
 
         /// <summary>
@@ -753,7 +694,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public List<string> GetPreferredTopics(string npcId)
         {
             if (!_initialized) return new List<string>();
-            return ScanBinaryFact("prefers_topic", Sanitize(npcId));
+            return _adapter.QueryColumn($"prefers_topic({Sanitize(npcId)}, X)", "X");
         }
 
         /// <summary>
@@ -762,7 +703,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public string GetConflictStyle(string npcId)
         {
             if (!_initialized) return null;
-            var results = ScanBinaryFact("conflict_style", Sanitize(npcId));
+            var results = _adapter.QueryColumn($"conflict_style({Sanitize(npcId)}, X)", "X");
             return results.Count > 0 ? results[0] : null;
         }
 
@@ -772,7 +713,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool WantsToSocialize(string npcId)
         {
             if (!_initialized) return false;
-            return HasFact($"wants_to_socialize({Sanitize(npcId)})");
+            return _adapter.Holds($"wants_to_socialize({Sanitize(npcId)})");
         }
 
         /// <summary>
@@ -781,7 +722,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool IsGrieving(string npcId)
         {
             if (!_initialized) return false;
-            return HasFact($"is_grieving({Sanitize(npcId)})");
+            return _adapter.Holds($"is_grieving({Sanitize(npcId)})");
         }
 
         /// <summary>
@@ -791,7 +732,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool IsFirstMeeting(string npcId, string playerId)
         {
             if (!_initialized) return true;
-            return !HasFact($"has_mental_model({Sanitize(npcId)}, {Sanitize(playerId)})");
+            return !_adapter.Holds($"has_mental_model({Sanitize(npcId)}, {Sanitize(playerId)})");
         }
 
         /// <summary>
@@ -800,17 +741,19 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public List<string> WhoToAvoid(string npcId)
         {
             if (!_initialized) return new List<string>();
-            return ScanBinaryFact("should_avoid", Sanitize(npcId));
+            return _adapter.QueryColumn($"should_avoid({Sanitize(npcId)}, X)", "X");
         }
 
         /// <summary>
         /// Check if an NPC is willing to share knowledge with another.
+        /// Allows by default if no willing_to_share rules are loaded.
         /// </summary>
         public bool IsWillingToShare(string npcId, string targetId)
         {
             if (!_initialized) return true;
-            return HasFact($"willing_to_share({Sanitize(npcId)}, {Sanitize(targetId)})") ||
-                   !HasAnyFactWithPrefix("willing_to_share(");
+            bool holds = _adapter.TryEvaluate(
+                $"willing_to_share({Sanitize(npcId)}, {Sanitize(targetId)})", out bool undeclared);
+            return undeclared || holds;
         }
 
         // ── NPC State Updates ─────────────────────────────────────────────────
@@ -823,7 +766,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         {
             if (!_initialized) return;
             var id = Sanitize(npcId);
-            RetractPattern("personality", id);
+            RetractAll($"personality({id}, _, _)");
             AssertFact($"personality({id}, openness, {openness:F2})");
             AssertFact($"personality({id}, conscientiousness, {conscientiousness:F2})");
             AssertFact($"personality({id}, extroversion, {extroversion:F2})");
@@ -839,9 +782,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         {
             if (!_initialized) return;
             var id = Sanitize(npcId);
-            RetractPattern("mood", id);
-            RetractPattern("stress_level", id);
-            RetractPattern("social_desire", id);
+            RetractAll($"mood({id}, _)");
+            RetractAll($"stress_level({id}, _)");
+            RetractAll($"social_desire({id}, _)");
 
             if (!string.IsNullOrEmpty(mood))
                 AssertFact($"mood({id}, {Sanitize(mood)})");
@@ -864,11 +807,11 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             var id1 = Sanitize(npc1Id);
             var id2 = Sanitize(npc2Id);
 
-            RetractPattern("relationship_charge", id1, id2);
-            RetractPattern("relationship_trust", id1, id2);
-            RetractPattern("conversation_count", id1, id2);
-            RetractPattern("friends", id1, id2);
-            RetractPattern("enemies", id1, id2);
+            RetractAll($"relationship_charge({id1}, {id2}, _)");
+            RetractAll($"relationship_trust({id1}, {id2}, _)");
+            RetractAll($"conversation_count({id1}, {id2}, _)");
+            RetractAll($"friends({id1}, {id2})");
+            RetractAll($"enemies({id1}, {id2})");
 
             if (charge.HasValue)
                 AssertFact($"relationship_charge({id1}, {id2}, {charge.Value:F2})");
@@ -989,7 +932,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                         qty = de.quantity > 0 ? de.quantity : 1;
                     }
                     UpdateItemQuantityTracked(itemName, -qty);
-                    var remaining = _itemQuantities.GetValueOrDefault(itemName, 0);
+                    var remaining = GetItemQuantity(itemName);
                     if (remaining <= 0)
                         RetractPlayerFact($"has(player, {itemName})");
                     break;
@@ -998,7 +941,7 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                 {
                     var name = Sanitize(e.itemName);
                     UpdateItemQuantityTracked(name, -1);
-                    var remaining = _itemQuantities.GetValueOrDefault(name, 0);
+                    var remaining = GetItemQuantity(name);
                     if (remaining <= 0)
                         RetractPlayerFact($"has(player, {name})");
                     break;
@@ -1028,7 +971,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                 }
                 case RomanceStageChangedEvent e:
                 {
-                    RetractPlayerFactByPattern("romance_stage", "player", Sanitize(e.npcId));
+                    RetractPlayerFactByPattern(
+                        $"romance_stage(player, {Sanitize(e.npcId)}, _)",
+                        $"romance_stage(player, {Sanitize(e.npcId)}");
                     AssertPlayerFact($"romance_stage(player, {Sanitize(e.npcId)}, {Sanitize(e.toStage)})");
                     AssertPlayerFact($"romance_history(player, {Sanitize(e.npcId)}, {Sanitize(e.fromStage)}, {Sanitize(e.toStage)})");
                     // Emit create_truth event
@@ -1054,7 +999,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                     AssertPlayerFact($"has_state({Sanitize(e.characterId)}, {Sanitize(e.stateType)})");
                     break;
                 case StateExpiredTruthEvent e:
-                    RetractPlayerFactByPattern("has_state", Sanitize(e.characterId), Sanitize(e.stateType));
+                    RetractPlayerFactByPattern(
+                        $"has_state({Sanitize(e.characterId)}, {Sanitize(e.stateType)})",
+                        $"has_state({Sanitize(e.characterId)}, {Sanitize(e.stateType)}");
                     break;
                 case PuzzleFailedEvent e:
                     AssertPlayerFact($"puzzle_failed(player, {Sanitize(e.puzzleId)}, {e.attempts})");
@@ -1064,7 +1011,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                     break;
                 case QuestAbandonedEvent e:
                     AssertPlayerFact($"quest_abandoned(player, {Sanitize(e.questId)})");
-                    RetractPlayerFactByPattern("quest_active", "player", Sanitize(e.questId));
+                    RetractPlayerFactByPattern(
+                        $"quest_active(player, {Sanitize(e.questId)})",
+                        $"quest_active(player, {Sanitize(e.questId)}");
                     break;
                 case ConversationalActionCompletedEvent e:
                     AssertPlayerFact($"conversational_action(player, {Sanitize(e.npcId)}, {Sanitize(e.action)}, {Sanitize(e.questId)})");
@@ -1119,7 +1068,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                     break;
                 case ConversationTurnCountedEvent e:
                 {
-                    RetractPlayerFactByPattern("npc_conversation_turns", "player", Sanitize(e.npcId));
+                    RetractPlayerFactByPattern(
+                        $"npc_conversation_turns(player, {Sanitize(e.npcId)}, _)",
+                        $"npc_conversation_turns(player, {Sanitize(e.npcId)}");
                     AssertPlayerFact($"npc_conversation_turns(player, {Sanitize(e.npcId)}, {e.total})");
                     break;
                 }
@@ -1138,33 +1089,24 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         // ── Volition & Romance Queries ────────────────────────────────────────
 
         /// <summary>
-        /// Evaluate volition rules for an NPC. Returns scored actions sorted by score descending.
-        /// Stub: scans volition_score facts.
+        /// Evaluate volition rules for an NPC via volition_score(npc, Action, Target, Score).
+        /// Returns scored actions sorted by score descending.
         /// </summary>
         public List<(string actionId, string targetId, float score)> EvaluateVolitionRules(string npcId)
         {
-            if (!_initialized) return new List<(string, string, float)>();
-
-            var npcAtom = Sanitize(npcId);
-            var prefix = $"volition_score({npcAtom}, ";
             var results = new List<(string actionId, string targetId, float score)>();
+            if (!_initialized) return results;
 
-            foreach (var fact in _facts)
+            var rows = _adapter.Query($"volition_score({Sanitize(npcId)}, Action, Target, Score)");
+            foreach (var row in rows)
             {
-                if (!fact.StartsWith(prefix)) continue;
-                // Parse volition_score(npcId, action, target, score)
-                var inner = fact.Substring(prefix.Length);
-                var parts = inner.TrimEnd(')').Split(',');
-                if (parts.Length >= 3)
-                {
-                    var action = parts[0].Trim();
-                    var target = parts[1].Trim();
-                    float.TryParse(parts[2].Trim(), out float score);
-                    results.Add((action, target, score));
-                }
+                var action = row.TryGetValue("Action", out var a) ? AsAtom(a) : string.Empty;
+                var target = row.TryGetValue("Target", out var t) ? AsAtom(t) : string.Empty;
+                var score = row.TryGetValue("Score", out var s) ? AsFloat(s) : 0f;
+                results.Add((action, target, score));
             }
 
-            results.Sort((a, b) => b.score.CompareTo(a.score));
+            results.Sort((x, y) => y.score.CompareTo(x.score));
             return results;
         }
 
@@ -1175,18 +1117,8 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public string GetRomanceStage(string npcId)
         {
             if (!_initialized) return null;
-            var results = ScanBinaryFact("romance_stage", "player");
-            var npcAtom = Sanitize(npcId);
-            // romance_stage(player, npcId, stage) — need to find the one with matching npcId
-            var prefix = $"romance_stage(player, {npcAtom}, ";
-            foreach (var fact in _facts)
-            {
-                if (fact.StartsWith(prefix) && fact.EndsWith(")"))
-                {
-                    return fact.Substring(prefix.Length, fact.Length - prefix.Length - 1).Trim();
-                }
-            }
-            return null;
+            var results = _adapter.QueryColumn($"romance_stage(player, {Sanitize(npcId)}, Stage)", "Stage");
+            return results.Count > 0 ? results[0] : null;
         }
 
         /// <summary>
@@ -1196,11 +1128,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         public bool CanPerformRomanceAction(string npcId, string actionType)
         {
             if (!_initialized) return true;
-
-            var pattern = $"can_romance_action(player, {Sanitize(npcId)}, {Sanitize(actionType)})";
-            // If no romance rules loaded, allow by default (graceful degradation)
-            if (!HasAnyFactWithPrefix("can_romance_action(")) return true;
-            return HasFact(pattern);
+            bool holds = _adapter.TryEvaluate(
+                $"can_romance_action(player, {Sanitize(npcId)}, {Sanitize(actionType)})", out bool undeclared);
+            return undeclared || holds;
         }
 
         // ── Reconciliation & Rewards ─────────────────────────────────────────
@@ -1220,23 +1150,15 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                 var sanitizedId = Sanitize(questId);
 
                 // Check objectives
-                var objectiveFacts = FindFacts($"quest_objective({sanitizedId},");
-                foreach (var fact in objectiveFacts)
+                foreach (var idxStr in _adapter.QueryColumn($"quest_objective({sanitizedId}, Idx)", "Idx"))
                 {
-                    var parts = fact.Split(',');
-                    if (parts.Length < 2) continue;
-                    if (!int.TryParse(parts[1].Trim().TrimEnd(')').Trim(), out int idx)) continue;
-
-                    if (HasFact($"objective_complete(player, {sanitizedId}, {idx})"))
-                    {
+                    if (!int.TryParse(idxStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int idx)) continue;
+                    if (_adapter.Holds($"objective_complete(player, {sanitizedId}, {idx})"))
                         objectives.Add((questId, idx));
-                    }
                 }
 
                 if (IsQuestComplete(questId, "player"))
-                {
                     quests.Add(questId);
-                }
             }
 
             return (quests, objectives);
@@ -1250,17 +1172,12 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             var results = new List<(string, int)>();
             if (!_initialized) return results;
 
-            var facts = FindFacts($"quest_bonus_reward(player, {Sanitize(questId)},");
-            foreach (var fact in facts)
+            var rows = _adapter.Query($"quest_bonus_reward(player, {Sanitize(questId)}, Type, Value)");
+            foreach (var row in rows)
             {
-                // Parse quest_bonus_reward(player, questId, Type, Value)
-                var parts = fact.Split(',');
-                if (parts.Length >= 4)
-                {
-                    var type = parts[2].Trim();
-                    int.TryParse(parts[3].Trim().TrimEnd(')'), out int value);
-                    results.Add((type, value));
-                }
+                var type = row.TryGetValue("Type", out var t) ? AsAtom(t) : string.Empty;
+                var value = row.TryGetValue("Value", out var v) ? AsInt(v) : 0;
+                results.Add((type, value));
             }
 
             return results;
@@ -1276,11 +1193,9 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             _eventBusUnsubscribe?.Invoke();
             _eventBusUnsubscribe = null;
             _eventBusRef = null;
-            _facts.Clear();
-            _knowledgeBase.Clear();
+            _adapter?.Dispose();
+            _adapter = null;
             _activeQuestIds.Clear();
-            _itemQuantities.Clear();
-            _playerFacts.Clear();
             completedObjectives.Clear();
             completedQuests.Clear();
             onObjectiveCompleted = null;
@@ -1319,20 +1234,15 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
         private void CheckObjectiveCompletion(string questId)
         {
             var sanitizedId = Sanitize(questId);
-            var objectiveFacts = FindFacts($"quest_objective({sanitizedId},");
 
-            foreach (var fact in objectiveFacts)
+            foreach (var idxStr in _adapter.QueryColumn($"quest_objective({sanitizedId}, Idx)", "Idx"))
             {
-                var parts = fact.Split(',');
-                if (parts.Length < 2) continue;
-
-                if (!int.TryParse(parts[1].Trim().TrimEnd(')').Trim(), out int idx)) continue;
+                if (!int.TryParse(idxStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int idx)) continue;
 
                 var key = $"{questId}:{idx}";
                 if (completedObjectives.Contains(key)) continue;
 
-                var completePattern = $"objective_complete(player, {sanitizedId}, {idx})";
-                if (HasFact(completePattern))
+                if (_adapter.Holds($"objective_complete(player, {sanitizedId}, {idx})"))
                 {
                     completedObjectives.Add(key);
                     onObjectiveCompleted?.Invoke(questId, idx);
@@ -1340,57 +1250,56 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             }
         }
 
-        /// <summary>
-        /// Assert a fact and track it as a player fact for save/load.
-        /// </summary>
+        /// <summary>Assert a fact and track it as a player fact for save/load.</summary>
         private void AssertPlayerFact(string fact)
         {
-            AssertFact(fact);
-            var normalized = NormalizeFact(fact);
-            _playerFacts.Add(normalized.EndsWith(".") ? normalized : normalized + ".");
+            EnsureAdapter().AssertPlayerFact(fact);
         }
 
-        /// <summary>
-        /// Retract a fact and remove it from player fact tracking.
-        /// </summary>
+        /// <summary>Retract a fact and remove it from player fact tracking.</summary>
         private void RetractPlayerFact(string fact)
         {
-            RetractFact(fact);
-            var normalized = NormalizeFact(fact);
-            _playerFacts.Remove(normalized + ".");
-            _playerFacts.Remove(normalized);
+            if (_adapter == null) return;
+            _adapter.RetractPlayerFact(fact);
         }
 
-        /// <summary>
-        /// Retract facts by pattern and remove matching entries from player fact tracking.
-        /// </summary>
-        private void RetractPlayerFactByPattern(string predicate, string firstArg, string secondArg = null)
+        /// <summary>Retract all clauses matching a term-with-variables and drop matching player facts.</summary>
+        private void RetractPlayerFactByPattern(string retractTerm, string trackPrefix)
         {
-            RetractPattern(predicate, firstArg, secondArg);
-
-            var prefix = secondArg != null
-                ? $"{predicate}({firstArg}, {secondArg}"
-                : $"{predicate}({firstArg}";
-
-            _playerFacts.RemoveWhere(f => NormalizeFact(f).StartsWith(prefix));
+            if (_adapter == null) return;
+            _adapter.RetractPlayerFactByPattern(retractTerm, trackPrefix);
         }
 
-        /// <summary>
-        /// Update item quantity and track changes as player facts.
-        /// </summary>
+        private void RetractAll(string termWithVars)
+        {
+            EnsureAdapter().RetractAll(termWithVars);
+        }
+
+        /// <summary>Current has_item(player, itemName, Qty) quantity, or 0.</summary>
+        private int GetItemQuantity(string itemName)
+        {
+            if (_adapter == null) return 0;
+            var rows = _adapter.Query($"has_item(player, {itemName}, Qty)");
+            foreach (var row in rows)
+            {
+                if (row.TryGetValue("Qty", out var v))
+                    return AsInt(v);
+            }
+            return 0;
+        }
+
+        /// <summary>Set the player's has_item quantity, retracting the old fact first.</summary>
         private void UpdateItemQuantityTracked(string itemName, int delta)
         {
-            var oldQty = _itemQuantities.GetValueOrDefault(itemName, 0);
+            var oldQty = GetItemQuantity(itemName);
             var newQty = Math.Max(0, oldQty + delta);
-            _itemQuantities[itemName] = newQty;
-            RetractPlayerFactByPattern("has_item", "player", itemName);
+            RetractPlayerFactByPattern(
+                $"has_item(player, {itemName}, _)",
+                $"has_item(player, {itemName}");
             if (newQty > 0)
                 AssertPlayerFact($"has_item(player, {itemName}, {newQty})");
         }
 
-        /// <summary>
-        /// Assert item taxonomy facts and track as player facts.
-        /// </summary>
         private void AssertItemTaxonomyTracked(string itemName, string category, string material, string baseType, string rarity)
         {
             if (!string.IsNullOrEmpty(category))
@@ -1407,16 +1316,6 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
             }
             if (!string.IsNullOrEmpty(rarity))
                 AssertPlayerFact($"item_rarity({itemName}, {Sanitize(rarity)})");
-        }
-
-        private void UpdateItemQuantity(string itemName, int delta)
-        {
-            var oldQty = _itemQuantities.GetValueOrDefault(itemName, 0);
-            var newQty = Math.Max(0, oldQty + delta);
-            _itemQuantities[itemName] = newQty;
-            RetractPattern("has_item", "player", itemName);
-            if (newQty > 0)
-                AssertFact($"has_item(player, {itemName}, {newQty})");
         }
 
         private void AssertItemTaxonomy(string itemName, string category, string material, string baseType, string rarity)
@@ -1437,103 +1336,43 @@ skill_gte(Actor, Skill, MinLevel) :- has_skill(Actor, Skill, Level), Level >= Mi
                 AssertFact($"item_rarity({itemName}, {Sanitize(rarity)})");
         }
 
-        /// <summary>
-        /// Scan for binary facts like predicate(firstArg, X) and return all X values.
-        /// </summary>
-        private List<string> ScanBinaryFact(string predicate, string firstArg)
+        // Value coercion for query bindings (int/float/atom) coming back from the adapter.
+        private static int AsInt(object v)
         {
-            var prefix = $"{predicate}({firstArg}, ";
-            var results = new List<string>();
-            foreach (var fact in _facts)
+            switch (v)
             {
-                if (fact.StartsWith(prefix) && fact.EndsWith(")"))
-                {
-                    var value = fact.Substring(prefix.Length, fact.Length - prefix.Length - 1).Trim();
-                    if (!string.IsNullOrEmpty(value))
-                        results.Add(value);
-                }
-            }
-            return results;
-        }
-
-        private bool HasFact(string fact)
-        {
-            return _facts.Contains(fact);
-        }
-
-        private bool HasAnyFactWithPrefix(string prefix)
-        {
-            foreach (var fact in _facts)
-            {
-                if (fact.StartsWith(prefix))
-                    return true;
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Find all facts matching a given prefix.
-        /// </summary>
-        private List<string> FindFacts(string prefix)
-        {
-            var results = new List<string>();
-            foreach (var fact in _facts)
-            {
-                if (fact.StartsWith(prefix))
-                    results.Add(fact);
-            }
-            return results;
-        }
-
-        private void RetractPattern(string predicate, string firstArg, string secondArg = null)
-        {
-            var prefix = secondArg != null
-                ? $"{predicate}({firstArg}, {secondArg}"
-                : $"{predicate}({firstArg}";
-
-            _facts.RemoveWhere(f => f.StartsWith(prefix));
-        }
-
-        private void ParseFactsFromContent(string content)
-        {
-            if (string.IsNullOrEmpty(content)) return;
-
-            foreach (var line in content.Split('\n'))
-            {
-                var trimmed = line.Trim();
-                if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("%")) continue;
-                if (trimmed.Contains(":-")) continue;
-                if (trimmed.EndsWith("."))
-                {
-                    var fact = trimmed.Substring(0, trimmed.Length - 1).Trim();
-                    if (!string.IsNullOrEmpty(fact))
-                        _facts.Add(fact);
-                }
+                case long l: return (int)l;
+                case int i: return i;
+                case double d: return (int)d;
+                case float f: return (int)f;
+                case string s when int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int r): return r;
+                default: return 0;
             }
         }
 
-        private static string NormalizeFact(string fact)
+        private static float AsFloat(object v)
         {
-            var trimmed = fact.Trim();
-            if (trimmed.EndsWith("."))
-                trimmed = trimmed.Substring(0, trimmed.Length - 1).Trim();
-            return trimmed;
+            switch (v)
+            {
+                case double d: return (float)d;
+                case float f: return f;
+                case long l: return l;
+                case int i: return i;
+                case string s when float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float r): return r;
+                default: return 0f;
+            }
         }
 
-        private static string Sanitize(string str)
+        private static string AsAtom(object v)
         {
-            if (string.IsNullOrEmpty(str)) return "_empty";
-            var result = str.ToLowerInvariant();
-            result = Regex.Replace(result, @"[^a-z0-9_]", "_");
-            result = Regex.Replace(result, @"^([0-9])", "_$1");
-            result = Regex.Replace(result, @"_+", "_");
-            result = result.TrimEnd('_');
-            return string.IsNullOrEmpty(result) ? "_empty" : result;
+            if (v is string s) return s;
+            if (v is IFormattable f) return f.ToString(null, CultureInfo.InvariantCulture);
+            return v?.ToString() ?? string.Empty;
         }
 
-        private static string Escape(string str)
-        {
-            return str.Replace("\\", "\\\\").Replace("'", "\\'");
-        }
+        // Atom encoding delegates to the adapter — the single source of truth so
+        // save files stay consistent between the shell and the engine backing.
+        private static string Sanitize(string str) => PrologGameAdapter.Sanitize(str);
+        private static string Escape(string str) => PrologGameAdapter.Escape(str);
     }
 }

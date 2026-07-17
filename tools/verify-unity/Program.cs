@@ -28,6 +28,7 @@ namespace Insimul.Verify
             Section("Pure (no native library)");
             RunParseBindingSetTests();
             RunVersionHandshakeTests();
+            RunAdapterPureTests();
 
             if (skipNative)
             {
@@ -39,6 +40,7 @@ namespace Insimul.Verify
             try
             {
                 RunNativeTests();
+                RunAdapterNativeTests();
                 RunConformanceCorpus();
             }
             catch (DllNotFoundException ex)
@@ -310,6 +312,152 @@ namespace Insimul.Verify
                 other.Join();
                 AssertTrue(captured is InvalidOperationException,
                     $"expected InvalidOperationException off-thread, got {captured?.GetType().Name ?? "none"}");
+            });
+        }
+
+        // ---- Prolog game adapter (US-UP4) -----------------------------------
+
+        // Pure: the atom encoders are the single source of truth for fact/atom
+        // encoding, so they are tested with no native library.
+        private static void RunAdapterPureTests()
+        {
+            Case("adapter Sanitize: lowercases + slugs non-atom chars", () =>
+            {
+                AssertEqual("find_the_sword", PrologGameAdapter.Sanitize("Find the Sword!"));
+                AssertEqual("iron_axe", PrologGameAdapter.Sanitize("Iron  Axe"));
+            });
+
+            Case("adapter Sanitize: leading digit gets underscore, empty => _empty", () =>
+            {
+                AssertEqual("_1st_quest", PrologGameAdapter.Sanitize("1st Quest"));
+                AssertEqual("_empty", PrologGameAdapter.Sanitize(""));
+                AssertEqual("_empty", PrologGameAdapter.Sanitize("!!!"));
+            });
+
+            Case("adapter Escape: backslash + single-quote", () =>
+            {
+                AssertEqual("it\\'s", PrologGameAdapter.Escape("it's"));
+                AssertEqual("a\\\\b", PrologGameAdapter.Escape("a\\b"));
+            });
+
+            Case("adapter NormalizeFact: trims + strips one trailing period", () =>
+            {
+                AssertEqual("foo(a)", PrologGameAdapter.NormalizeFact("  foo(a). "));
+                AssertEqual("foo(a)", PrologGameAdapter.NormalizeFact("foo(a)"));
+                AssertEqual("", PrologGameAdapter.NormalizeFact(null));
+            });
+        }
+
+        // Native: real unification through libinsimul (the whole point of US-UP4).
+        private static void RunAdapterNativeTests()
+        {
+            Section("Prolog game adapter (US-UP4, native)");
+
+            Case("adapter Query: real unification enumerates solutions", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("color(red). color(green). color(blue).");
+                var vals = a.QueryColumn("color(C)", "C");
+                vals.Sort();
+                AssertEqual(3, vals.Count);
+                AssertEqual("blue", vals[0]);
+                AssertEqual("green", vals[1]);
+                AssertEqual("red", vals[2]);
+            });
+
+            Case("adapter QueryColumn: distinct removes duplicate projections", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("likes(sam, tea). likes(bob, tea). likes(ann, coffee).");
+                var drinks = a.QueryColumn("likes(_, D)", "D");
+                drinks.Sort();
+                AssertEqual(2, drinks.Count); // tea deduped
+                AssertEqual("coffee", drinks[0]);
+                AssertEqual("tea", drinks[1]);
+            });
+
+            Case("adapter rules participate in resolution", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("item_type(sword_a, sword). item_category(sword_a, weapon).");
+                a.Consult("item_is_a(I, C) :- item_category(I, C). item_is_a(I, T) :- item_type(I, T).");
+                AssertTrue(a.Holds("item_is_a(sword_a, weapon)"), "category IS-A should hold");
+                AssertTrue(a.Holds("item_is_a(sword_a, sword)"), "type IS-A should hold");
+                AssertTrue(!a.Holds("item_is_a(sword_a, potion)"), "unrelated IS-A should not hold");
+            });
+
+            Case("adapter CanPerformAction: undeclared predicate => allowed (graceful)", () =>
+            {
+                using var a = new PrologGameAdapter();
+                // No can_perform rules loaded at all.
+                var r = a.CanPerformAction("open_door", "player");
+                AssertTrue(r.Allowed, "undeclared can_perform should allow by default");
+            });
+
+            Case("adapter CanPerformAction: declared but unmet => denied", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("can_perform(player, wave).");
+                var ok = a.CanPerformAction("wave", "player");
+                AssertTrue(ok.Allowed, "matching can_perform should allow");
+                var no = a.CanPerformAction("fly", "player");
+                AssertTrue(!no.Allowed, "unmet prerequisite should deny");
+                AssertTrue(no.Reason != null && no.Reason.Contains("fly"), "deny reason names the action");
+            });
+
+            Case("adapter RetractAll: removes every matching clause", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertFact("personality(bob, openness, 0.5)");
+                a.AssertFact("personality(bob, neuroticism, 0.2)");
+                int removed = a.RetractAll("personality(bob, _, _)");
+                AssertEqual(2, removed);
+                AssertTrue(!a.Holds("personality(bob, openness, 0.5)"), "all personality clauses gone");
+            });
+
+            Case("adapter player-fact tracking + save round-trip via RestorePlayerFacts", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertFact("world_fact(town)");          // NOT a player fact
+                a.AssertPlayerFact("has(player, torch)");
+                a.AssertPlayerFact("has_item(player, torch, 3)");
+                var saved = a.GetPlayerFacts();
+                AssertEqual(2, saved.Length); // world_fact excluded
+
+                using var b = new PrologGameAdapter();
+                b.RestorePlayerFacts(saved);
+                AssertTrue(b.Holds("has(player, torch)"), "restored has fact");
+                AssertTrue(b.Holds("has_item(player, torch, 3)"), "restored quantity fact");
+            });
+
+            Case("adapter item-quantity update retracts old has_item", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertPlayerFact("has_item(player, apple, 2)");
+                a.RetractPlayerFactByPattern("has_item(player, apple, _)", "has_item(player, apple");
+                a.AssertPlayerFact("has_item(player, apple, 5)");
+                var qtys = a.QueryColumn("has_item(player, apple, Q)", "Q");
+                AssertEqual(1, qtys.Count); // exactly one has_item clause remains
+                AssertEqual("5", qtys[0]);
+            });
+
+            Case("adapter SnapshotState / RestoreState round-trips full KB", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertFact("quest_active(player, q1)");
+                string snap = a.SnapshotState();
+                a.RetractFact("quest_active(player, q1)");
+                AssertTrue(!a.Holds("quest_active(player, q1)"), "retracted before restore");
+                a.RestoreState(snap);
+                AssertTrue(a.Holds("quest_active(player, q1)"), "restore brings the fact back");
+            });
+
+            Case("adapter use after dispose throws", () =>
+            {
+                var a = new PrologGameAdapter();
+                a.Dispose();
+                a.Dispose(); // idempotent
+                AssertThrows<ObjectDisposedException>(() => a.AssertFact("x(1)"));
             });
         }
 

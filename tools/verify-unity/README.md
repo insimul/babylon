@@ -43,6 +43,15 @@ It then puts the library on the platform loader path (`DYLD_LIBRARY_PATH` /
   round-trip; **disposal safety** (double-dispose; query iterator after KB
   dispose throws `ObjectDisposedException`; method-after-dispose throws); and
   **thread affinity** (cross-thread use throws `InvalidOperationException`).
+- **Pure (game adapter, US-UP4)** — `PrologGameAdapter` atom encoders
+  (`Sanitize`/`Escape`/`NormalizeFact`), the single source of truth for fact
+  encoding. No native library.
+- **Native (game adapter, US-UP4)** — the real-engine backing the retired
+  template stub delegates to: real unification via `Query`/`QueryColumn`, rule
+  resolution, `CanPerformAction` graceful degradation (undeclared predicate →
+  allowed), `RetractAll`, player-fact tracking + `GetPlayerFacts`/
+  `RestorePlayerFacts` round-trip, `SnapshotState`/`RestoreState`, and
+  dispose-safety.
 - **Conformance corpus (US-UP2)** — every
   `packages/core/conformance/prolog/*.json` case run through the real engine and
   compared to `expected` as an unordered multiset, via the shared runner

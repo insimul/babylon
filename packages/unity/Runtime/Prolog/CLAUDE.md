@@ -31,6 +31,34 @@ engine-agnostic core of the Unity native-Prolog work (US-UP1…UP4).
   throws `InvalidOperationException` on cross-thread use. libinsimul is
   single-threaded per KB.
 
+## Game adapter (US-UP4)
+
+`PrologGameAdapter.cs` is the real-engine backing for the game template's Prolog
+surface. It owns an `InsimulProlog` KB and exposes the game-facing methods
+(`AssertFact`/`Query`/`QueryColumn`/`CanPerformAction`/quest checks/save
+round-trip) with genuine unification, replacing the retired substring fact-store
+stub (`templates/scripts/systems/PrologEngine.cs`, now a thin MonoBehaviour shell
+that delegates here). Also UnityEngine-free, so `tools/verify-unity/` compiles
+and tests it host-side. Key conventions:
+
+- **Atom encoders are the single source of truth**: `Sanitize` / `Escape` /
+  `NormalizeFact` are `public static` here and the shell calls straight through —
+  do not re-implement them in the template.
+- **Graceful degradation**: `Query` / `Holds` / `TryEvaluate` catch
+  `InsimulPrologException` and treat it as "no solutions" (an undeclared
+  predicate's existence_error). `TryEvaluate(goal, out undeclared)` exposes the
+  distinction so callers can allow-by-default when a rule set was never loaded
+  (e.g. `CanPerformAction`). **Assumption**: this relies on libinsimul raising on
+  an unknown predicate (ISO `unknown=error`); if it silently fails instead, the
+  "undeclared => allowed" adapter test flags it on CI.
+- **`RetractAll(term)`** loops the native retract until nothing matches, so it
+  removes ALL clauses unifying with a term-with-`_` regardless of whether the ABI
+  retract is `retract/1` or `retractall/1`. Callers pass a well-formed term with
+  anonymous vars for value positions (`personality(bob, _, _)`).
+- Save: `SnapshotState()`/`RestoreState()` are the full-KB native round-trip;
+  `GetPlayerFacts()`/`RestorePlayerFacts()` remain for the legacy `prologFacts`
+  string-list save. See `templates/MIGRATION.md`.
+
 ## Version handshake (US-UP3)
 
 `InsimulProlog` carries a `const ExpectedNativeSemver` (the ABI this wrapper was
