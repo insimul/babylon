@@ -186,3 +186,43 @@ required.
 - [ ] Let the token expire (or revoke it) and Refresh: the window shows the
       **Session expired — re-authenticate** warning (the `NeedsReauth` state), and
       re-authenticating in Project Settings restores the list on the next Refresh.
+
+## 6. Generation Console — jobs with live progress (US-UE3, Unity editor + backend required)
+
+The console's whole job lifecycle (start → queued → progress → complete/failed →
+sync prompt), the entity-count diff parsing, cancellation, and premature-close
+handling live in the UnityEngine-free `InsimulGenerationConsoleModel`, unit-tested
+headless over a RoutingTransport + a scripted `FakeJobStream`
+(`GenerationConsoleTests`, EditMode). Progress is delivered by **POLLING** the
+`getGenerationJob` status endpoint (not edit-mode SSE) — a poll survives a domain
+reload; see the model header for the rationale. This is the **human pass** for the
+UnityEditor-coupled seam only a real editor + backend can exercise: the
+`UnityWebRequestJobPollStream` HTTP poll driven off `EditorApplication.update`, and
+the domain-reload safety of the window's OnEnable/OnDisable pump wiring. A running
+backend with generation-job support and at least one world on the account is
+required.
+
+- [ ] With the session authenticated (Project Settings ▸ Insimul), open **Insimul ▸
+      Generation Console**. Enter a **World id** (copy it from the World Browser),
+      pick a **Generator** (Regenerate settlements / Generate characters / Generate
+      quests), and click **Run**.
+- [ ] The **Status** advances Queued → Running with a live **progress bar** and a
+      phase label, without freezing the editor (the poll runs off
+      `EditorApplication.update`, one non-blocking request at a time).
+- [ ] On completion the status reads **Completed** and the results line shows the
+      entity diff (`+A added / ~U updated / -R removed`), and a **Sync IR now…**
+      button appears.
+- [ ] Click **Sync IR now…** — the **World Browser** opens so the generated changes
+      can be pulled in through the same (dry-run-then-apply) import path §5 covers.
+- [ ] Start another job and click **Cancel** mid-run: the status reads **Canceled**,
+      the progress stops updating, and no further polling occurs (the server job may
+      still finish — that is expected; the editor just stops tracking it).
+- [ ] **Domain-reload safety:** start a job, then force a recompile (edit any script)
+      or **enter Play mode** while it is Running. Confirm the editor does not throw,
+      the console does not keep polling a dead job after the reload (no repeated
+      network activity in the Profiler / no orphaned update loop), and re-opening the
+      window starts clean. This exercises the OnDisable → `EditorApplication.update -=`
+      + `model.Dispose()` (stream abort) path.
+- [ ] Run a job, then let the token expire / revoke it: the poll surfaces the failure
+      as **Job failed: session expired (401)**, and the next World Browser refresh
+      shows the **Session expired — re-authenticate** warning.
