@@ -20,6 +20,17 @@
     "url": "https://insimul.com"
   },
   "license": "MIT",
+  "scripts": {
+    "release:dry-run": "node scripts/release/pack-upm.mjs"
+  },
+  "files": [
+    "Runtime",
+    "Editor",
+    "Samples~",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {},
   "samples": [
     {
       "displayName": "Basic Conversation",

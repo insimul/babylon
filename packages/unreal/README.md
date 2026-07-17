@@ -255,3 +255,37 @@ For games with their own interaction system, bind your interaction event to call
 | `/api/worlds/{worldId}/characters` | GET | Fetch characters for spawner |
 | `/api/conversation/export/{worldId}` | GET | Export world data for offline mode |
 | `/health` | GET | Server health check |
+
+## Export pipeline: what gets copied and substituted
+
+Everything under `templates/` is a **game-template tree** the Insimul platform export
+pipeline (`insimul-platform/scripts/copy-templates.js`, resolved through
+`server/services/game-export/template-paths.ts`) copies **verbatim** into a generated
+Unreal game project when a creator exports a world for this engine. The platform then
+substitutes `{{UPPER_SNAKE_CASE}}` placeholder tokens in the text files with values
+derived from the exported world (world name, genre, counts, palette colors,
+player/combat tuning, etc.).
+
+- **The contract is machine-checked.** `templates/TEMPLATE_MANIFEST.json` is the
+  authoritative list of every file the pipeline copies and the exact set of
+  placeholders each file bears. Root `npm run engines:templates` is the drift guard:
+  it fails if the manifest and the tree disagree, if a placeholder-bearing file is
+  unlisted, or if any template file reaches into another engine package. Regenerate
+  after editing templates with `node scripts/engines/validate-templates.mjs --write`.
+- **Placeholder syntax:** `{{TOKEN}}` where `TOKEN` is upper snake case (e.g.
+  `{{WORLD_NAME}}`, `{{PLAYER_INITIAL_HEALTH}}`, `{{ROAD_COLOR_R}}`). See the
+  manifest's top-level `placeholders` array for the full set this package uses. Note
+  the `templates/` tree is distinct from the plugin `Source/` module documented above;
+  only `templates/` is consumed by the export pipeline.
+- **Dependency rule:** template files depend only on (a) this package, (b) generated
+  code, and (c) exported world-data JSON — never on `packages/unity` or
+  `packages/godot`. The guard enforces the no-cross-engine-reach-in rule.
+
+## Releasing
+
+`node scripts/release/build-plugin-zip.mjs` stages the plugin into `dist/Insimul/`
+(the `.uplugin` at the root plus `Source/`, excluding `templates/` and build
+intermediates), zips it to `dist/Insimul-<version>.zip` in FAB/Marketplace layout,
+and asserts the file set. It does **not** publish. See the repo-root
+`docs/RELEASING.md` for the full version-bump + submission flow (`VERSIONS.json` is
+the single version source).
