@@ -25,6 +25,8 @@ using Insimul.Save;
 using Insimul.Save.TestSupport;
 using Insimul.Scene;
 using Insimul.Scene.TestSupport;
+using Insimul.UI;
+using Insimul.UI.TestSupport;
 using Insimul.World;
 using Insimul.World.TestSupport;
 
@@ -53,6 +55,16 @@ namespace Insimul.Verify
             RunSceneGenTests();
             RunReimportDiffTests();
             RunBindingEditorTests();
+            RunUiRegistryTests();
+            RunLoadingScreenTests();
+            RunNotificationTests();
+            RunThemeTokenTests();
+            RunQuestJournalTests();
+            RunQuestFeedTests();
+            RunTradeTests();
+            RunChatTests();
+            RunPauseMenuTests();
+            RunSaveSlotTests();
 
             if (skipNative)
             {
@@ -2019,6 +2031,829 @@ namespace Insimul.Verify
                 AssertEqual(0, BindingPack.Import("").Rules.Count);
                 AssertEqual(0, BindingPack.Import("}{ not json").Rules.Count);
             });
+        }
+
+        // ---- Default UI (US-UU1) --------------------------------------------
+
+        private static void RunUiRegistryTests()
+        {
+            Section("Default UI — panel registry (US-UU1)");
+
+            Case("Shipped default map resolves every corpus panel key", () =>
+            {
+                var keys = UiCorpus.LoadPanelKeys();
+                AssertTrue(keys.Count > 0, "registry-cases.json → panel_keys must load");
+                var registry = new InsimulUIRegistry();
+                foreach (string key in keys)
+                    AssertTrue(registry.Has(key), $"default map missing panel '{key}'");
+            });
+
+            var cases = UiCorpus.LoadRegistryCases();
+            AssertTrue(cases.Count > 0, "registry-cases.json must load");
+            foreach (RegistryCase c in cases)
+            {
+                Case($"registry: {c.Name}", () =>
+                {
+                    var registry = new InsimulUIRegistry(c.Defaults);
+                    registry.ApplyOverrides(c.Overrides);
+                    string scene = registry.SceneRef(c.Resolve);
+                    AssertEqual(c.ExpectedScene, scene);
+                    AssertEqual(c.ExpectedOverridden, registry.IsOverridden(c.Resolve));
+                    // A missing key must record a diagnostic; a resolved key must not.
+                    AssertEqual(c.ExpectedMissing, registry.HasDiagnostics());
+                    if (c.ExpectedMissing)
+                    {
+                        var diags = registry.Diagnostics();
+                        AssertEqual("missing_panel", diags[diags.Count - 1].Kind);
+                        AssertEqual(c.Resolve, diags[diags.Count - 1].Key);
+                    }
+                });
+            }
+        }
+
+        private static void RunLoadingScreenTests()
+        {
+            Section("Default UI — loading screen view-model (US-UU1)");
+
+            var phases = UiCorpus.LoadPhases();
+            var tips = UiCorpus.LoadTips();
+            AssertTrue(phases.Count > 0, "loading-phases.json → phases must load");
+
+            Case("Shipped default phase table matches the corpus", () =>
+            {
+                AssertEqual(phases.Count, InsimulLoadingScreenModel.DefaultPhases.Count);
+                for (int i = 0; i < phases.Count; i++)
+                {
+                    AssertEqual(phases[i].Key, InsimulLoadingScreenModel.DefaultPhases[i].Key);
+                    AssertEqual(phases[i].Label, InsimulLoadingScreenModel.DefaultPhases[i].Label);
+                    AssertEqual(phases[i].Weight, InsimulLoadingScreenModel.DefaultPhases[i].Weight);
+                }
+                AssertEqual(tips.Count, InsimulLoadingScreenModel.DefaultTips.Count);
+                for (int i = 0; i < tips.Count; i++)
+                    AssertEqual(tips[i], InsimulLoadingScreenModel.DefaultTips[i]);
+            });
+
+            var cases = UiCorpus.LoadLoadingCases();
+            AssertTrue(cases.Count > 0, "loading-phases.json → cases must load");
+            foreach (LoadingCase c in cases)
+            {
+                Case($"loading: {c.Name}", () =>
+                {
+                    var model = new InsimulLoadingScreenModel(phases, tips);
+                    foreach (LoadingStep s in c.Steps)
+                    {
+                        model.Advance(s.Advance);
+                        AssertTrue(Math.Abs(model.Progress() - s.ExpectedProgress) < 0.0001f,
+                            $"phase '{s.Advance}': progress expected {s.ExpectedProgress}, got {model.Progress()}");
+                        AssertEqual(s.ExpectedLabel, model.Label());
+                        AssertEqual(s.ExpectedComplete, model.IsComplete());
+                    }
+                });
+            }
+
+            Case("Deterministic per-phase tip wraps the tip pool", () =>
+            {
+                var model = new InsimulLoadingScreenModel(phases, tips);
+                model.Advance("init");
+                AssertEqual(tips[0], model.Tip());
+                model.Advance("systems"); // index 4 -> 4 % tips.Count
+                AssertEqual(tips[4 % tips.Count], model.Tip());
+            });
+        }
+
+        private static void RunNotificationTests()
+        {
+            Section("Default UI — notification queue (US-UU1)");
+
+            Case("Push assigns ids and maps kind -> token color", () =>
+            {
+                var n = new InsimulNotifications();
+                int id1 = n.Push("hello");
+                int id2 = n.Push("done", NotificationKind.Success);
+                AssertEqual(2, n.Count);
+                AssertTrue(id2 != id1, "ids are unique");
+                var vis = n.Visible();
+                AssertEqual("accent", vis[0].Color);   // Info -> accent
+                AssertEqual("success", vis[1].Color);
+                AssertEqual("warning", KindColorOf(NotificationKind.Warning));
+                AssertEqual("danger", KindColorOf(NotificationKind.Danger));
+            });
+
+            Case("Tick ages notifications out; returns true only when the set changes", () =>
+            {
+                var n = new InsimulNotifications();
+                n.Push("a", NotificationKind.Info, 4f);
+                n.Push("b", NotificationKind.Info, 2f);
+                AssertTrue(!n.Tick(1f), "nothing expired yet");
+                AssertEqual(2, n.Count);
+                AssertTrue(n.Tick(1.5f), "b (2s) expired at t=2.5");
+                AssertEqual(1, n.Count);
+                AssertEqual("a", n.Visible()[0].Text);
+            });
+
+            Case("Dismiss removes early; unknown id is a no-op", () =>
+            {
+                var n = new InsimulNotifications();
+                int id = n.Push("x");
+                AssertTrue(n.Dismiss(id), "known id removed");
+                AssertEqual(0, n.Count);
+                AssertTrue(!n.Dismiss(9999), "unknown id is a no-op");
+            });
+        }
+
+        private static string KindColorOf(NotificationKind kind) =>
+            InsimulNotifications.KindColor[kind];
+
+        private static void RunThemeTokenTests()
+        {
+            Section("Default UI — theme-token parity (US-UU1)");
+
+            Case("Color tokens match theme-tokens.json exactly", () =>
+            {
+                var colors = UiCorpus.LoadThemeColors();
+                AssertTrue(colors.Count > 0, "theme-tokens.json → colors must load");
+                AssertEqual(colors.Count, InsimulUITheme.Colors.Count);
+                foreach (var kv in colors)
+                {
+                    AssertTrue(InsimulUITheme.Colors.TryGetValue(kv.Key, out string mine),
+                        $"missing color token '{kv.Key}'");
+                    AssertEqual(kv.Value, mine);
+                }
+            });
+
+            Case("Numeric tokens (spacing/radius/font_size) match theme-tokens.json", () =>
+            {
+                AssertNumericTokens(UiCorpus.LoadThemeInts("spacing"), InsimulUITheme.Spacing, "spacing");
+                AssertNumericTokens(UiCorpus.LoadThemeInts("radius"), InsimulUITheme.Radius, "radius");
+                AssertNumericTokens(UiCorpus.LoadThemeInts("font_size"), InsimulUITheme.FontSize, "font_size");
+            });
+
+            Case("Hex parser yields the expected RGBA (incl. alpha)", () =>
+            {
+                ThemeColor accent = InsimulUITheme.Color("accent"); // #5b8cff
+                AssertEqual((byte)0x5b, accent.R);
+                AssertEqual((byte)0x8c, accent.G);
+                AssertEqual((byte)0xff, accent.B);
+                AssertEqual((byte)0xff, accent.A);
+                ThemeColor overlay = InsimulUITheme.Color("overlay"); // #0a0b10cc
+                AssertEqual((byte)0xcc, overlay.A);
+                AssertThrows<FormatException>(() => InsimulUITheme.ParseHex("#12"));
+            });
+        }
+
+        private static void AssertNumericTokens(
+            IReadOnlyDictionary<string, int> expected,
+            IReadOnlyDictionary<string, int> actual,
+            string group)
+        {
+            AssertTrue(expected.Count > 0, $"theme-tokens.json → {group} must load");
+            AssertEqual(expected.Count, actual.Count);
+            foreach (var kv in expected)
+            {
+                AssertTrue(actual.TryGetValue(kv.Key, out int mine), $"missing {group} token '{kv.Key}'");
+                AssertEqual(kv.Value, mine);
+            }
+        }
+
+        private static void RunQuestJournalTests()
+        {
+            Section("Default UI — quest journal / tracker / offer view-model (US-UU2)");
+
+            var cases = UiCorpus.LoadQuestJournalCases();
+            AssertTrue(cases.Count > 0, "quest-journal-cases.json must load");
+            foreach (QuestJournalCase c in cases)
+            {
+                Case($"quest-journal: {c.Name}", () =>
+                {
+                    var model = new InsimulQuestJournalModel(c.MaxTracked);
+                    var seeds = new List<QuestEntry>();
+                    foreach (QuestSeed s in c.Quests) seeds.Add(ToEntry(s));
+                    model.SetQuests(seeds);
+
+                    foreach (QuestStep step in c.Steps)
+                    {
+                        bool ok = ApplyQuestStep(model, step);
+                        if (step.HasExpectedOk)
+                            AssertEqual(step.ExpectedOk, ok);
+                        if (step.ExpectedFilteredIds != null)
+                            AssertSequence(step.ExpectedFilteredIds, model.FilteredIds(),
+                                $"{c.Name}/{step.Op}: filtered ids");
+                        if (step.ExpectedTrackedIds != null)
+                            AssertSequence(step.ExpectedTrackedIds, model.TrackedIds(),
+                                $"{c.Name}/{step.Op}: tracked ids");
+                    }
+
+                    var counts = model.Counts();
+                    AssertEqual(c.ExpectedCounts["all"], counts.All);
+                    AssertEqual(c.ExpectedCounts["active"], counts.Active);
+                    AssertEqual(c.ExpectedCounts["completed"], counts.Completed);
+                    AssertEqual(c.ExpectedCounts["available"], counts.Available);
+                });
+            }
+        }
+
+        private static bool ApplyQuestStep(InsimulQuestJournalModel model, QuestStep step)
+        {
+            switch (step.Op)
+            {
+                case "set_filter": model.SetFilter(step.Arg); return true;
+                case "accept": return model.Accept(step.Arg);
+                case "decline": return model.Decline(step.Arg);
+                case "complete": return model.Complete(step.Arg);
+                case "track": return model.Track(step.Arg);
+                case "untrack": return model.Untrack(step.Arg);
+                case "upsert": model.Upsert(ToEntry(step.Entry)); return true;
+                default: throw new Exception($"unknown quest step op '{step.Op}'");
+            }
+        }
+
+        private static QuestEntry ToEntry(QuestSeed s) => new QuestEntry
+        {
+            Id = s.Id,
+            Title = s.Title,
+            Status = s.Status,
+            Difficulty = s.Difficulty,
+            IsRadiant = s.IsRadiant,
+        };
+
+        private static void AssertSequence(IReadOnlyList<string> expected, IReadOnlyList<string> actual, string what)
+        {
+            AssertEqual(expected.Count, actual.Count);
+            for (int i = 0; i < expected.Count; i++)
+                AssertTrue(expected[i] == actual[i], $"{what}: [{i}] expected '{expected[i]}', got '{actual[i]}'");
+        }
+
+        private static void RunQuestFeedTests()
+        {
+            Section("Default UI — quest feed: runtime-event subscription (US-UU2)");
+
+            Case("Tracker updates on quest-system events without polling (accept/complete)", () =>
+            {
+                var runtime = new InsimulQuestRuntime();
+                var feed = new InsimulQuestFeed();
+                int repaints = 0;
+                feed.Changed += () => repaints++;
+                feed.Attach(runtime);
+
+                // OnQuestAccepted fires from RegisterQuest — the feed folds it in with NO
+                // poll (nothing reads the model on a frame; only the event drives it).
+                runtime.RegisterQuest(
+                    "quest(q_fetch, 'Fetch the Herbs', errand, easy, active).\n" +
+                    "quest_objective(q_fetch, 0, talk_to(npc_marie, 1)).\n" +
+                    "quest_objective(q_fetch, 1, visit_location(market)).\n" +
+                    "quest_completion(q_fetch, all_objectives_complete).");
+                AssertTrue(repaints >= 1, "OnQuestAccepted repainted the model");
+                AssertEqual("active", feed.Model.Get("q_fetch").Status);
+                AssertEqual(2, feed.Model.Get("q_fetch").Objectives.Count);
+
+                // Track it for the HUD, then complete via the KB — the feed auto-untracks.
+                AssertTrue(feed.Model.Track("q_fetch"), "active quest is trackable");
+                AssertSequence(new[] { "q_fetch" }, feed.Model.TrackedIds(), "tracked before complete");
+
+                // Objective ticks arrive as OnObjectiveCompleted signals.
+                runtime.AssertFact("talked_to", "player", "npc_marie");
+                runtime.EvaluateQuest("q_fetch");
+                var (done1, total1) = feed.Model.ObjectiveProgress("q_fetch");
+                AssertEqual(1, done1);
+                AssertEqual(2, total1);
+
+                runtime.AssertFact("visited", "player", "market");
+                runtime.EvaluateQuest("q_fetch"); // 2nd objective + all-objectives completion
+                var (done2, total2) = feed.Model.ObjectiveProgress("q_fetch");
+                AssertEqual(2, done2);
+                AssertEqual(2, total2);
+                AssertEqual("completed", feed.Model.Get("q_fetch").Status);
+                AssertSequence(Array.Empty<string>(), feed.Model.TrackedIds(), "auto-untracked on completion");
+
+                // Detach stops the subscription (no leak / no further repaints).
+                int before = repaints;
+                feed.Detach();
+                runtime.RegisterQuest("quest(q_other, 'Other', errand, easy, active).");
+                AssertEqual(before, repaints);
+                AssertTrue(feed.Model.Get("q_other") == null, "detached feed ignores new events");
+            });
+
+            Case("Radiant arrival appears as an available, radiant-flagged quest", () =>
+            {
+                var runtime = new InsimulQuestRuntime();
+                var feed = new InsimulQuestFeed();
+                feed.Attach(runtime);
+
+                const string program =
+                    "radiant_template(rt_fetch, [category(fetch), title('Gather Herbs for {giver}'), quest_type(gathering), difficulty(2)]).\n" +
+                    "radiant_precondition(rt_fetch, giver, character_occupation(Giver, herbalist)).\n" +
+                    "radiant_precondition(rt_fetch, item, item_category(Item, herb)).\n" +
+                    "radiant_objective(rt_fetch, collect(Item, 5)).\n" +
+                    "radiant_reward(rt_fetch, experience, 25).\n" +
+                    "radiant_cooldown(rt_fetch, 3600).";
+                const string conj = "character_occupation(Giver, herbalist), item_category(Item, herb)";
+                var solver = new StubRadiantSolver().On(conj, "{\"Giver\":\"anne\",\"Item\":\"sage\"}");
+
+                runtime.RunRadiantTick(program, solver,
+                    new RadiantOptions { Seed = RadiantSeed.Of("contract"), Now = 1000 });
+
+                var r = feed.Model.Get("radiant_rt_fetch_1000");
+                AssertTrue(r != null, "radiant quest folded into the model");
+                AssertEqual("available", r.Status);
+                AssertTrue(r.IsRadiant, "flagged as a radiant arrival");
+                feed.Model.SetFilter("available");
+                AssertSequence(new[] { "radiant_rt_fetch_1000" }, feed.Model.FilteredIds(), "shows under Available");
+            });
+        }
+
+        private static void RunTradeTests()
+        {
+            Section("Default UI — trade view-model: inventory / container / merchant (US-UU3)");
+
+            var cases = UiCorpus.LoadTradeCases();
+            AssertTrue(cases.Count > 0, "trade-cases.json must load");
+            foreach (TradeCase c in cases)
+            {
+                Case($"trade: {c.Name}", () =>
+                {
+                    JsonVal state = JsonVal.Parse(c.StateJson);
+                    var model = new InsimulTradeModel(state);
+
+                    TradeResult r = ApplyTradeOp(model, c);
+                    AssertEqual(c.ExpectedOk, r.Ok);
+                    if (!string.IsNullOrEmpty(c.ExpectedReason))
+                        AssertEqual(c.ExpectedReason, r.Reason);
+                    if (c.HasExpectedMoved)
+                        AssertEqual(c.ExpectedMoved, r.Moved);
+                    if (c.HasExpectedPlayerGold)
+                        AssertEqual(c.ExpectedPlayerGold, model.PlayerGold());
+                    if (c.HasExpectedMerchantGold)
+                        AssertEqual(c.ExpectedMerchantGold, model.MerchantGold(c.OpMerchant));
+                    if (c.ExpectedPlayerItems != null)
+                        AssertItemQuantities(c.ExpectedPlayerItems, model.PlayerItems(), $"{c.Name}: player items");
+                    if (c.ExpectedContainerItems != null)
+                        AssertItemQuantities(c.ExpectedContainerItems, model.ContainerItems(c.OpContainer), $"{c.Name}: container items");
+                    if (c.ExpectedMerchantItems != null)
+                        AssertItemQuantities(c.ExpectedMerchantItems, model.MerchantItems(c.OpMerchant), $"{c.Name}: merchant items");
+                });
+            }
+
+            Case("Stack splitting: a partial take clamps and leaves the remainder in the container", () =>
+            {
+                JsonVal state = JsonVal.Parse(
+                    "{\"player\":{\"gold\":0,\"inventory\":[]}," +
+                    "\"containers\":{\"containers\":{\"chest\":{\"items\":[{\"itemId\":\"arrow\",\"quantity\":20,\"value\":1}]}}}," +
+                    "\"npcs\":{\"merchantStates\":{}}}");
+                var model = new InsimulTradeModel(state);
+                AssertEqual(7, model.TakeFromContainer("chest", "arrow", 7).Moved);
+                AssertEqual(7, model.PlayerQuantity("arrow"));
+                AssertItemQuantities(new Dictionary<string, int> { { "arrow", 13 } }, model.ContainerItems("chest"), "split: container remainder");
+                // Taking the rest empties the container stack.
+                AssertEqual(13, model.TakeFromContainer("chest", "arrow", 0).Moved);
+                AssertEqual(20, model.PlayerQuantity("arrow"));
+                AssertItemQuantities(new Dictionary<string, int>(), model.ContainerItems("chest"), "split: container drained");
+            });
+
+            Case("Gold bounds + conservation: buy then sell conserves player+merchant gold", () =>
+            {
+                JsonVal state = JsonVal.Parse(
+                    "{\"player\":{\"gold\":100,\"inventory\":[]}," +
+                    "\"containers\":{\"containers\":{}}," +
+                    "\"npcs\":{\"merchantStates\":{\"shop\":{\"goldReserve\":100,\"items\":[{\"itemId\":\"potion\",\"quantity\":5,\"value\":10}]}}}}");
+                var model = new InsimulTradeModel(state);
+                int total = model.PlayerGold() + model.MerchantGold("shop"); // 200
+
+                // Can't overspend: 11 potions * 10 > 100 gold -> rejected, nothing moves.
+                var over = model.Buy("shop", "potion", 11);
+                AssertTrue(!over.Ok && over.Reason == "out_of_stock", "over-stock buy rejected before gold check");
+                AssertEqual(100, model.PlayerGold());
+
+                AssertTrue(model.Buy("shop", "potion", 3).Ok, "affordable buy");
+                AssertEqual(70, model.PlayerGold());
+                AssertEqual(130, model.MerchantGold("shop"));
+                AssertEqual(total, model.PlayerGold() + model.MerchantGold("shop")); // conserved
+
+                AssertTrue(model.Sell("shop", "potion", 1).Ok, "sell one back");
+                AssertEqual(80, model.PlayerGold());
+                AssertEqual(120, model.MerchantGold("shop"));
+                AssertEqual(total, model.PlayerGold() + model.MerchantGold("shop")); // still conserved
+            });
+
+            Case("State-location invariant: all item state lives in currentState (no private store)", () =>
+            {
+                JsonVal state = JsonVal.Parse(
+                    "{\"player\":{\"gold\":50,\"inventory\":[]}," +
+                    "\"containers\":{\"containers\":{\"chest\":{\"items\":[{\"itemId\":\"gem\",\"quantity\":2,\"value\":100}]}}}," +
+                    "\"npcs\":{\"merchantStates\":{}}}");
+                var model = new InsimulTradeModel(state);
+                model.TakeAllFromContainer("chest");
+
+                // The model's read accessor returns the SAME JsonVal reference the save
+                // holds — proof it keeps no copy of its own.
+                state.TryGet("player", out var player);
+                player.TryGet("inventory", out var savedInventory);
+                AssertTrue(ReferenceEquals(savedInventory, model.PlayerItems()),
+                    "PlayerItems() must be the live currentState.player.inventory reference");
+                AssertItemQuantities(new Dictionary<string, int> { { "gem", 2 } }, savedInventory, "invariant: read straight off save state");
+            });
+
+            Case("Persistence round-trip: trades survive a save serialize -> load cycle", () =>
+            {
+                var save = new InsimulSaveSystem();
+                save.NewGame("{\"world\":{\"id\":\"w1\"}}", new InsimulSaveSystem.NewGameOptions { Id = "s1", WorldId = "w1" });
+
+                // Seed a fresh save's currentState with a merchant + player gold, then trade.
+                save.SaveFile.TryGet("currentState", out var cs);
+                cs.TryGet("player", out var pl);
+                pl.Set("gold", JsonVal.Int(100));
+                cs.TryGet("npcs", out var npcs);
+                var merchants = JsonVal.Object();
+                var shop = JsonVal.Object();
+                shop.Set("goldReserve", JsonVal.Int(100));
+                var shopItems = JsonVal.Arr();
+                var potion = JsonVal.Object();
+                potion.Set("itemId", JsonVal.Str("potion"));
+                potion.Set("quantity", JsonVal.Int(5));
+                potion.Set("value", JsonVal.Int(10));
+                shopItems.Add(potion);
+                shop.Set("items", shopItems);
+                merchants.Set("shop", shop);
+                npcs.Set("merchantStates", merchants);
+
+                var model = new InsimulTradeModel(cs);
+                AssertTrue(model.Buy("shop", "potion", 3).Ok, "buy through the live save state");
+                AssertEqual(70, model.PlayerGold());
+
+                // Serialize the whole save and load it back — the trade must persist.
+                string json = save.SerializeCanonical();
+                var reloaded = new InsimulSaveSystem();
+                reloaded.Load(json);
+                reloaded.SaveFile.TryGet("currentState", out var cs2);
+                var model2 = new InsimulTradeModel(cs2);
+                AssertEqual(70, model2.PlayerGold());
+                AssertEqual(130, model2.MerchantGold("shop"));
+                AssertEqual(3, model2.PlayerQuantity("potion"));
+                AssertItemQuantities(new Dictionary<string, int> { { "potion", 2 } }, model2.MerchantItems("shop"), "round-trip: merchant stock");
+            });
+        }
+
+        private static void RunChatTests()
+        {
+            Section("Default UI — chat/dialogue view-model: streaming SDK (US-UU4)");
+
+            var cases = UiCorpus.LoadChatCases();
+            AssertTrue(cases.Count > 0, "chat-cases.json must load");
+            foreach (ChatCase c in cases)
+            {
+                Case($"chat: {c.Name}", () =>
+                {
+                    var model = new InsimulChatModel(c.CharacterId, c.CharacterName);
+                    ReplayChat(model, c);
+
+                    // Transcript (role / text / error flag), oldest first.
+                    IReadOnlyList<ChatMessage> msgs = model.MessageList();
+                    AssertEqual(c.ExpectedMessages.Count, msgs.Count);
+                    for (int i = 0; i < c.ExpectedMessages.Count; i++)
+                    {
+                        ChatExpectedMessage e = c.ExpectedMessages[i];
+                        AssertEqual(e.Role, InsimulChatModel.RoleName(msgs[i].Role));
+                        AssertEqual(e.Text, msgs[i].Text);
+                        AssertEqual(e.Error, msgs[i].Error);
+                    }
+
+                    AssertEqual(c.ExpectedStreaming, model.IsStreaming());
+                    AssertEqual(c.ExpectedTurnCount, model.CompletedTurnCount());
+                    AssertEqual(c.ExpectedLastNpcText, model.LastNpcText());
+
+                    // Triggered actions (name / args / factToAssert).
+                    IReadOnlyList<ChatAction> acts = model.ActionList();
+                    AssertEqual(c.ExpectedActions.Count, acts.Count);
+                    for (int i = 0; i < c.ExpectedActions.Count; i++)
+                    {
+                        ChatExpectedAction e = c.ExpectedActions[i];
+                        AssertEqual(e.Name, acts[i].Name);
+                        AssertEqual(e.FactToAssert, acts[i].FactToAssert);
+                        AssertSequence(e.Args ?? new List<string>(), new List<string>(acts[i].Args), $"{c.Name}: action args");
+                    }
+
+                    // History projection into save.conversations shape (role / content).
+                    ChatHistory hist = model.History();
+                    AssertEqual(c.ExpectedHistoryTurns.Count, hist.RecentTurns.Count);
+                    for (int i = 0; i < c.ExpectedHistoryTurns.Count; i++)
+                    {
+                        ChatExpectedTurn e = c.ExpectedHistoryTurns[i];
+                        AssertEqual(e.Role, InsimulChatModel.RoleName(hist.RecentTurns[i].Role));
+                        AssertEqual(e.Content, hist.RecentTurns[i].Content);
+                    }
+                });
+            }
+
+            Case("Chunk assembly + interruption + error recovery over the mocked SDK", () =>
+            {
+                var model = new InsimulChatModel("npc1", "Aldric");
+                AssertTrue(model.BeginUserTurn("  Hello  "), "opens a turn (trimming the input)");
+                AssertEqual("Hello", model.MessageList()[0].Text);
+                model.AppendChunk("Good ");
+                model.AppendChunk("day.");
+                AssertEqual("Good day.", model.StreamingText());
+                // A second begin while streaming is rejected (interruption guard).
+                AssertTrue(!model.BeginUserTurn("Second"), "second begin rejected while streaming");
+                // Error recovery: fail renders an error bubble, drops the turn, and re-opens.
+                AssertTrue(model.FailTurn("connection lost"), "fail closes the in-flight turn");
+                AssertEqual("[Error: connection lost]", model.MessageList()[1].Text);
+                AssertTrue(model.MessageList()[1].Error, "error bubble flagged");
+                AssertEqual(0, model.CompletedTurnCount());
+                AssertTrue(!model.IsStreaming(), "no longer streaming after fail");
+                // Recovered: a fresh turn completes normally after the error.
+                AssertTrue(model.BeginUserTurn("Again?"), "can open a new turn after an error");
+                model.AppendChunk("All good now.");
+                AssertTrue(model.CompleteTurn(), "completes");
+                AssertEqual("All good now.", model.LastNpcText());
+                AssertEqual(1, model.CompletedTurnCount());
+            });
+
+            Case("Action triggers assert facts through the real KB path (integration)", () =>
+            {
+                var runtime = new InsimulQuestRuntime();
+                var model = new InsimulChatModel("smith", "Bram");
+                // Panel-supplied fact sink = the real quest-runtime KB path.
+                int applied = 0;
+                void ApplyPending()
+                {
+                    IReadOnlyList<ChatAction> a = model.ActionList();
+                    while (applied < a.Count)
+                    {
+                        if (!string.IsNullOrEmpty(a[applied].FactToAssert))
+                            AssertTrue(runtime.AssertClause(a[applied].FactToAssert), "fact clause parses + asserts");
+                        applied++;
+                    }
+                }
+
+                AssertTrue(model.BeginUserTurn("Can I have the sword?"), "opens turn");
+                model.AppendChunk("Here, take it.");
+                model.TriggerAction(new ChatAction("give_item", new[] { "sword" }, "has_item(player,sword)"));
+                ApplyPending();
+                model.CompleteTurn();
+
+                // The fact landed in the real KB (queryable via the runtime).
+                AssertTrue(runtime.HasFact("has_item", "player", "sword"), "action fact present in the KB");
+                AssertTrue(!runtime.HasFact("has_item", "player", "shield"), "unrelated fact absent");
+            });
+
+            Case("History lands in save.conversations (round-trip through the save system)", () =>
+            {
+                var model = new InsimulChatModel("npc1", "Aldric");
+                model.Greeting("Well met, traveler.");
+                model.BeginUserTurn("Hello");
+                model.AppendChunk("Good day to you.");
+                model.CompleteTurn();
+
+                var save = new InsimulSaveSystem();
+                save.NewGame("{\"world\":{\"id\":\"w1\"}}", new InsimulSaveSystem.NewGameOptions { Id = "s1", WorldId = "w1" });
+
+                // Append the ConversationSummary projection into save.conversations.
+                save.SaveFile.TryGet("conversations", out var conversations);
+                conversations.Add(model.History("2026-07-17T00:00:00.000Z").ToConversationSummary(model.CharacterId, model.CharacterName));
+
+                // Serialize the whole save and load it back — the history must persist.
+                var reloaded = new InsimulSaveSystem();
+                reloaded.Load(save.SerializeCanonical());
+                reloaded.SaveFile.TryGet("conversations", out var convs2);
+                AssertEqual(1, convs2.Items.Count);
+                JsonVal summary = convs2.Items[0];
+                AssertEqual("npc1", summary.TryGet("characterId", out var cid) ? cid.Str : "");
+                AssertTrue(summary.TryGet("totalTurnCount", out var ttc) && (int)ttc.Number == 1, "totalTurnCount round-trips");
+                summary.TryGet("recentTurns", out var turns);
+                AssertEqual(3, turns.Items.Count);
+                AssertEqual("npc", turns.Items[0].TryGet("role", out var r0) ? r0.Str : "");
+                AssertEqual("Well met, traveler.", turns.Items[0].TryGet("content", out var c0) ? c0.Str : "");
+                AssertEqual("player", turns.Items[1].TryGet("role", out var r1) ? r1.Str : "");
+                AssertEqual("Hello", turns.Items[1].TryGet("content", out var c1) ? c1.Str : "");
+                AssertEqual("Good day to you.", turns.Items[2].TryGet("content", out var c2) ? c2.Str : "");
+            });
+        }
+
+        private static void RunPauseMenuTests()
+        {
+            Section("Default UI — pause menu: tab-gating view-model (US-UU5)");
+
+            var cases = UiCorpus.LoadPauseMenuCases();
+            AssertTrue(cases.Count > 0, "pause-menu-cases.json must load");
+            foreach (PauseMenuCase c in cases)
+            {
+                Case($"pause-menu: {c.Name}", () =>
+                {
+                    List<MenuTabDef> tabs = null;
+                    if (c.Tabs != null)
+                    {
+                        tabs = new List<MenuTabDef>();
+                        foreach (PauseMenuTabDef t in c.Tabs)
+                            tabs.Add(new MenuTabDef(t.Key, t.Label, t.Requires?.ToArray() ?? new string[0]));
+                    }
+                    var model = new InsimulPauseMenuModel(c.EnabledModules, tabs);
+
+                    AssertSequence(c.ExpectedVisibleKeys, model.VisibleKeys(), $"{c.Name}: visible keys");
+
+                    foreach (PauseMenuStep s in c.Steps)
+                    {
+                        switch (s.Op)
+                        {
+                            case "open": model.OpenMenu(string.IsNullOrEmpty(s.Tab) ? null : s.Tab); break;
+                            case "close": model.CloseMenu(); break;
+                            case "toggle": model.Toggle(); break;
+                            case "set_active":
+                            {
+                                bool ok = model.SetActive(s.Key);
+                                if (s.HasExpectedOk) AssertEqual(s.ExpectedOk, ok);
+                                break;
+                            }
+                            case "expect_active": AssertEqual(s.Key, model.ActiveTab()); break;
+                            case "expect_open": AssertEqual(s.Value, model.IsOpen()); break;
+                            default: throw new Exception($"unknown pause-menu step op '{s.Op}'");
+                        }
+                    }
+                });
+            }
+
+            // AC1: genre-bundle fixtures show different tab sets (rpg vs strategy vs
+            // language-learning — the IR's genre bundle drives tab visibility).
+            Case("Genre-bundle gating: rpg, strategy, and language-learning show different tabs", () =>
+            {
+                var rpg = InsimulPauseMenuModel.ForGenre("rpg").VisibleKeys();
+                var strategy = InsimulPauseMenuModel.ForGenre("strategy").VisibleKeys();
+                var learning = InsimulPauseMenuModel.ForGenre("language-learning").VisibleKeys();
+
+                // rpg: character/vocabulary/skills/analytics but NOT assessment.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "character", "vocabulary", "skills", "analytics", "settings", "save" },
+                    rpg, "rpg tabs");
+                // strategy: proficiency only among the gated tabs -> character shows, the rest hide.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "character", "settings", "save" },
+                    strategy, "strategy tabs");
+                // language-learning: every gated tab including assessment.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "character", "vocabulary", "skills", "analytics", "assessment", "settings", "save" },
+                    learning, "language-learning tabs");
+
+                AssertTrue(rpg.Count != strategy.Count, "rpg and strategy differ");
+                AssertTrue(learning.Contains("assessment"), "language-learning shows assessment");
+                AssertTrue(!rpg.Contains("assessment"), "rpg hides assessment");
+                AssertTrue(!strategy.Contains("vocabulary"), "strategy hides vocabulary");
+
+                // An unknown genre enables no modules -> only the ungated core tabs.
+                AssertSequence(
+                    new List<string> { "resume", "journal", "inventory", "map", "settings", "save" },
+                    InsimulPauseMenuModel.ForGenre("no-such-genre").VisibleKeys(), "unknown genre tabs");
+            });
+        }
+
+        private static void RunSaveSlotTests()
+        {
+            Section("Default UI — save/load slot view-model (US-UU5)");
+
+            var cases = UiCorpus.LoadSaveSlotCases();
+            AssertTrue(cases.Count > 0, "save-slot-cases.json must load");
+            foreach (SaveSlotCase c in cases)
+            {
+                Case($"save-slot: {c.Name}", () =>
+                {
+                    var seeds = new List<SlotLoadResult>();
+                    foreach (SaveSlotSeed s in c.Slots)
+                        seeds.Add(new SlotLoadResult(s.Index, s.Outcome, ToSummary(s.Summary)));
+                    var model = new InsimulSaveSlotModel(seeds);
+
+                    List<SlotView> rows = model.Slots();
+                    AssertEqual(c.Expected.Count, rows.Count);
+                    for (int i = 0; i < c.Expected.Count; i++)
+                    {
+                        SaveSlotExpectedRow e = c.Expected[i];
+                        AssertEqual(e.Index, rows[i].Index);
+                        AssertEqual(e.Status, rows[i].Status);
+                        AssertEqual(e.Title, rows[i].Title);
+                        AssertEqual(e.Message, rows[i].Message);
+                        AssertEqual(e.CanLoad, rows[i].CanLoad);
+                        AssertEqual(e.CanSave, rows[i].CanSave);
+                    }
+                    AssertEqual(c.ExpectedHasLoadable, model.HasAnyLoadable());
+                });
+            }
+
+            // AC2: corrupted-envelope handling proven through the REAL integrity chain
+            // (SHA-256) via ClassifyEnvelope over InsimulSaveSystem.ValidateEnvelope.
+            Case("ClassifyEnvelope: healthy save -> ok; tampered -> corrupted (integrity_mismatch)", () =>
+            {
+                const string worldSnapshot = "{\"world\":{\"id\":\"w1\",\"name\":\"W\"},\"settlements\":[],\"characters\":[]}";
+                var save = new InsimulSaveSystem();
+                save.NewGame(worldSnapshot, new NewGameOptions { Id = "s", WorldId = "w1" });
+                string good = save.BuildEnvelopeJson("1.0.0", "2026-01-01T00:00:00.000Z");
+
+                var okRes = InsimulSaveSlotModel.ClassifyEnvelope(0, good);
+                AssertEqual("ok", okRes.Outcome);
+
+                // Tamper with the payload -> the SHA-256 chain rejects it.
+                string tampered = good.Replace("\"totalPlaytime\":0", "\"totalPlaytime\":9999");
+                AssertTrue(tampered != good, "tamper applied");
+                var badRes = InsimulSaveSlotModel.ClassifyEnvelope(1, tampered);
+                AssertEqual("integrity_mismatch", badRes.Outcome);
+
+                // Wrong format + empty candidate map to the right outcomes.
+                AssertEqual("invalid_format",
+                    InsimulSaveSlotModel.ClassifyEnvelope(2, "{\"format\":\"nope\",\"saveFile\":{},\"integrity\":\"x\"}").Outcome);
+                AssertEqual("empty", InsimulSaveSlotModel.ClassifyEnvelope(3, null).Outcome);
+
+                // A model built from these renders the corrupted MESSAGING + gates loading.
+                var model = new InsimulSaveSlotModel(new List<SlotLoadResult> { okRes, badRes });
+                AssertTrue(model.HasAnyLoadable(), "the healthy slot is loadable");
+                SlotView corrupted = model.Slot(1);
+                AssertEqual("corrupted", corrupted.Status);
+                AssertEqual("Save file integrity check failed — file may be corrupted or tampered.", corrupted.Message);
+                AssertTrue(!corrupted.CanLoad && corrupted.CanSave, "corrupted: cannot load, can overwrite");
+            });
+        }
+
+        private static SlotSummary ToSummary(SaveSlotSummarySeed s)
+        {
+            if (s == null) return null;
+            return new SlotSummary
+            {
+                PlayerName = s.PlayerName,
+                HasLevel = s.HasLevel,
+                Level = s.Level,
+                LocationName = s.LocationName,
+                HasGold = s.HasGold,
+                Gold = s.Gold,
+                SavedAt = s.SavedAt,
+            };
+        }
+
+        /// <summary>Replay a chat case's ordered event stream against the model, asserting
+        /// each begin/complete/fail's expected_ok when the case pins it.</summary>
+        private static void ReplayChat(InsimulChatModel model, ChatCase c)
+        {
+            foreach (ChatEvent e in c.Events)
+            {
+                switch (e.Op)
+                {
+                    case "greeting":
+                        model.Greeting(e.Text);
+                        break;
+                    case "begin":
+                    {
+                        bool ok = model.BeginUserTurn(e.Text);
+                        if (e.HasExpectedOk) AssertEqual(e.ExpectedOk, ok);
+                        break;
+                    }
+                    case "chunk":
+                        model.AppendChunk(e.Text);
+                        break;
+                    case "action":
+                        model.TriggerAction(new ChatAction(e.Name, e.Args, e.Fact));
+                        break;
+                    case "complete":
+                    {
+                        bool ok = model.CompleteTurn(e.HasFullText ? e.FullText : null);
+                        if (e.HasExpectedOk) AssertEqual(e.ExpectedOk, ok);
+                        break;
+                    }
+                    case "fail":
+                    {
+                        bool ok = model.FailTurn(e.Error);
+                        if (e.HasExpectedOk) AssertEqual(e.ExpectedOk, ok);
+                        break;
+                    }
+                    default:
+                        throw new Exception($"unknown chat event op '{e.Op}'");
+                }
+            }
+        }
+
+        private static TradeResult ApplyTradeOp(InsimulTradeModel model, TradeCase c)
+        {
+            int qty = c.HasOpQty ? c.OpQty : 0;
+            switch (c.OpKind)
+            {
+                case "take": return model.TakeFromContainer(c.OpContainer, c.OpItem, qty);
+                case "take_all": return model.TakeAllFromContainer(c.OpContainer);
+                case "buy": return model.Buy(c.OpMerchant, c.OpItem, qty);
+                case "sell": return model.Sell(c.OpMerchant, c.OpItem, qty);
+                default: throw new Exception($"unknown trade op kind '{c.OpKind}'");
+            }
+        }
+
+        /// <summary>Assert a JsonVal item array holds EXACTLY the expected
+        /// {itemId: quantity} multiset (order-insensitive; extra/missing stacks fail).</summary>
+        private static void AssertItemQuantities(Dictionary<string, int> expected, JsonVal items, string what)
+        {
+            var actual = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (JsonVal s in items.Items)
+            {
+                string id = s.TryGet("itemId", out var idv) ? idv.Str : "";
+                int qty = s.TryGet("quantity", out var qv) && qv.Kind == JsonKind.Number ? (int)qv.Number : 0;
+                actual[id] = qty;
+            }
+            AssertEqual(expected.Count, actual.Count);
+            foreach (var kv in expected)
+            {
+                AssertTrue(actual.TryGetValue(kv.Key, out int got),
+                    $"{what}: expected item '{kv.Key}' present");
+                AssertTrue(got == kv.Value, $"{what}: '{kv.Key}' expected {kv.Value}, got {got}");
+            }
         }
 
         private static double Round3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);

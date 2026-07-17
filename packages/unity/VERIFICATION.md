@@ -261,3 +261,147 @@ not (Play mode only) — see the README ▸ Conversation Tester window mode cons
 - [ ] Let the token expire / revoke it and send: the reply surfaces as a
       **Conversation error: session expired (401)**, and the next World Browser refresh
       shows the **Session expired — re-authenticate** warning.
+
+## 8. Quest journal / tracker / offer panels (US-UU2, Unity editor + Play mode)
+
+The journal filtering + counts, the bounded tracker set + objective ticks, and the
+offer accept/decline transitions are UnityEngine-free and host-tested
+(`tools/verify-unity`, `RunQuestJournalTests` against the shared corpus
+`packages/core/conformance/ui/quest-journal-cases.json`, and `RunQuestFeedTests`
+which drives the real `InsimulQuestRuntime` end-to-end — accept, objective ticks,
+completion/auto-untrack, radiant arrival — proving the panels update on the runtime
+signals, **not** by per-frame polling). This is the **human pass** for the UGUI seam
+a real editor + Play mode exercises (the `InsimulQuestJournal` / `InsimulQuestTracker`
+/ `InsimulQuestOfferPanel` MonoBehaviours resolving through the `InsimulUIManager`
+registry). A world with at least one active quest and a radiant template pack is
+required.
+
+- [ ] Enter Play mode with a world loaded. Open the **Quest Journal** panel (via the
+      pause menu's Quests tab / the panel key `quest_journal`). The active quests are
+      listed, and the **All / Active / Completed / Available** tabs partition the set
+      with correct count badges.
+- [ ] Click a quest's **Track** toggle. It appears in the on-screen **Quest Tracker**
+      HUD immediately (no visible delay / no flicker) with a ★ marker in the journal.
+      Track past the cap (default 3) — the extra track is refused and the HUD stays
+      bounded.
+- [ ] Progress an objective in-world (e.g. talk to the target NPC / visit the target
+      location). The tracker's objective tick (**(1/2)** → **(2/2)**) advances the
+      moment the quest system fires, without opening/closing the panel to refresh.
+- [ ] Complete the final objective: the quest moves to the **Completed** tab, drops
+      out of the tracker HUD automatically, and a completion notification toast shows.
+- [ ] Talk to a quest giver (or wait for a radiant tick) so an offer appears. The
+      **Quest Offer** dialog shows the title + description with **Accept / Decline**.
+      **Accept** → the quest shows as **Active** in the journal (and is trackable);
+      **Decline** → the offer is dismissed and does not appear in any tab.
+- [ ] Confirm a **radiant** arrival shows under the **Available** tab flagged as
+      radiant, and accepting it behaves identically to a hand-authored quest.
+- [ ] **No-polling check:** with the panels open and idle (no quest transitions), the
+      Profiler shows the quest panels doing no per-frame list rebuilds — repaints
+      happen only on the `InsimulQuestFeed.Changed` signal.
+
+## 9. Inventory / container transfer / merchant panels (US-UU3, Unity editor + Play mode)
+
+All stack math — inventory grouping, container take / take-all, merchant buy / sell
+with gold + stock bounds and stack splitting — lives in the UnityEngine-free
+`InsimulTradeModel`, host-tested (`tools/verify-unity`, `RunTradeTests` against the
+shared corpus `packages/core/conformance/ui/trade-cases.json`, plus stack-splitting,
+gold-bounds/conservation, the **state-location invariant** — every read is the live
+`save.currentState` reference, the model keeps no private store — and a **save
+serialize → load round-trip**). The model mutates `currentState` in place
+(`player.gold`/`player.inventory`, `containers.containers[id].items`,
+`npcs.merchantStates[id].{goldReserve,items}`); items **move** between stacks and a
+merchant trade **conserves gold** (player + merchant total constant). This is the
+**human pass** for the UGUI seam (`InsimulInventoryPanel` / `InsimulContainerPanel` /
+`InsimulMerchantPanel`, resolving through the `InsimulUIManager` registry keys
+`inventory` / `container` / `merchant`). A world with a lootable container and an
+NPC merchant is required.
+
+- [ ] Enter Play mode with a world loaded. Open the **Inventory** panel (`inventory`).
+      Items are listed grouped by category with rarity tint and equip-slot markers;
+      the counts match the player's `currentState.player.inventory`.
+- [ ] Open a **container** (`container`). Its stacks show on the left, the
+      player inventory on the right. **Take** a partial stack (e.g. 7 of 20) — the
+      taken amount lands in inventory and the **remainder stays** in the container.
+      **Take All** empties the container into the inventory.
+- [ ] Talk to a **merchant** (`merchant`). Merchant stock + your inventory show
+      side by side with per-item prices and both gold totals. **Buy** an affordable
+      item: your gold drops by price×qty, the merchant's gold rises by the same, and
+      the item moves to your inventory (stacking onto an existing stack).
+- [ ] Attempt to **buy** something you can't afford / that's out of stock — the trade
+      is refused with no gold or item change. **Sell** an item back: gold flows from
+      the merchant to you; selling when the merchant can't afford it is refused.
+- [ ] **Persistence check:** after a few trades, **save**, quit to menu, and
+      **Continue**. Gold totals, inventory stacks, container contents, and merchant
+      stock are exactly as you left them (no item created or lost across the save).
+
+## 10. Dialogue panel — streaming SDK, actions, history (US-UU4, Unity editor + Play mode)
+
+The transcript / streaming / action / history contract lives in the UnityEngine-free
+`InsimulChatModel`, host-tested (`tools/verify-unity`, `RunChatTests` against the
+shared corpus `packages/core/conformance/ui/chat-cases.json`, plus chunk-assembly /
+interruption / error-recovery, **action triggers through the real KB path**
+(`InsimulQuestRuntime.AssertClause` → `HasFact`), and a **history round-trip** into
+`save.conversations` through a save serialize → load). A player line opens a turn,
+response chunks accumulate into the in-flight NPC bubble, a stream error renders an
+error bubble and **drops** that turn from history, and `complete` settles it. This is
+the **human pass** for the UGUI seam (`InsimulChatPanel`, resolving through the
+`InsimulUIManager` registry key `dialogue`) plus the engine-coupled hooks that can only be
+seen live: streaming text, TTS playback, and `InsimulLipSync` visemes fed from the
+settled NPC line. A world with a talkable NPC and the conversation SDK configured is
+required.
+
+- [ ] Enter Play mode with a world loaded. Talk to an NPC — the **dialogue** panel
+      opens with the NPC's name in the header and its greeting (if any) as the first
+      bubble.
+- [ ] Type a message and send. The NPC reply **streams in token-by-token** into a
+      single growing bubble (not one bubble per chunk); the input is disabled until
+      the turn completes.
+- [ ] On completion, **TTS speaks** the settled line and the speaker's **lip-sync**
+      visemes track it. Sending a second line while the NPC is still streaming is
+      **ignored** (no interleaved turn).
+- [ ] Trigger a **dialogue action** (e.g. the NPC gives an item). The corresponding
+      Prolog fact is asserted into the KB — verify the downstream effect (inventory /
+      quest objective) reflects it.
+- [ ] Force a **stream error** (disconnect the SDK mid-reply). An **error bubble**
+      appears, the turn is **not** counted, and a fresh message afterwards streams
+      normally (recovery).
+- [ ] **Persistence check:** after a conversation, **save**, quit, and **Continue**
+      (or inspect the save). The exchange is in `save.conversations` as a
+      ConversationSummary (`recentTurns` role/content + `totalTurnCount`); in-flight /
+      errored turns are excluded.
+
+## 11. Unified pause menu + main menu + save/load (US-UU5, Unity editor + Play mode)
+
+The GameMenuSystem equivalent. Tab-gating lives in the UnityEngine-free
+`InsimulPauseMenuModel` (module-bundle-gated tabs — ungated core tabs
+resume/journal/inventory/map/settings/save always show; character/vocabulary/skills/
+analytics/assessment gate on their feature module, driven off the IR's genre bundle via
+`ForGenre`), host-tested (`tools/verify-unity`, `RunPauseMenuTests` against the shared
+corpus `packages/core/conformance/ui/pause-menu-cases.json` + rpg/strategy/
+language-learning genre fixtures showing **different** tab sets). The save/load slot
+projection lives in the UnityEngine-free `InsimulSaveSlotModel` (outcome → row: empty /
+ok-with-summary / corrupted-with-messaging; `HasAnyLoadable` gates main-menu Continue),
+host-tested (`RunSaveSlotTests` against `save-slot-cases.json` + a **ClassifyEnvelope**
+path over the real SHA-256 integrity chain — a tampered envelope renders "Corrupted
+Save … integrity check failed" and cannot be loaded). This is the **human pass** for the
+UGUI seams (`InsimulPauseMenu` resolving through registry keys `pause_menu`/`game_menu`,
+`InsimulMainMenu` → `main_menu`, `InsimulSaveLoadPanel` → `save_load`) plus the
+engine-coupled bits only seen live: `Time.timeScale` pausing, cursor capture, ESC toggle.
+
+- [ ] Press **ESC** in Play mode. The pause overlay opens, the game **pauses**
+      (`Time.timeScale = 0`), the cursor unlocks, and the first visible tab is active.
+      Press ESC again — it closes and the game resumes.
+- [ ] Load a world whose genre bundle is **rpg**: the menu shows Character / Vocabulary /
+      Skills / Analytics but **not** Assessment. Load a **strategy** bundle: only
+      Character shows among the gated tabs. Load a **language-learning** bundle: every
+      gated tab (incl. Assessment) shows.
+- [ ] Open the **Save / Load** panel. Each slot renders its status: an **empty** slot
+      ("Empty Slot", Load disabled), a **healthy** slot (`Name · Lv N · Location`, "Saved
+      <time>", Load enabled), and a **corrupted** slot ("Corrupted Save" + the integrity
+      message, Load disabled but Save/overwrite enabled).
+- [ ] From the **main menu**, with no save present, **Continue** and **Load** are
+      disabled. After saving at least once, both enable (`HasAnyLoadable`).
+- [ ] **Full loop:** main menu → **New Game** → play → ESC → **Save** to a slot → **Quit**
+      to the main menu → **Continue**. The world + quest/inventory/conversation state
+      restore from the slot. Corrupt the save file on disk, reopen Save/Load — the slot
+      shows **Corrupted Save** with the integrity-failure message and cannot be loaded.

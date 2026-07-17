@@ -120,6 +120,52 @@
     <Compile Include="../../packages/unity/Runtime/Binding/BindingPack.cs" />
     <Compile Include="../../packages/unity/Runtime/Binding/BindingEditorModel.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/BindingEditorCorpus.cs" />
+    <!-- Default-UI view-models (US-UU1): the pure, UnityEngine-free cores — the
+         panel registry (default map / creator override / diagnostics), the
+         weighted-phase loading-screen model, the notification queue, and the
+         design-token set. The UGUI-coupled views + catalog/manager/theme
+         ScriptableObjects (Runtime/UI/InsimulUI{Manager,Catalog,ThemeAsset}.cs,
+         InsimulLoadingScreen.cs, InsimulNotificationCenter.cs) are structural-gate-
+         only. RunUiRegistry/LoadingScreen/Notification/ThemeToken tests in
+         Program.cs drive these against the shared corpus
+         (packages/core/conformance/ui/*.json). -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulUIRegistry.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulLoadingScreenModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulNotifications.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulUITheme.cs" />
+    <!-- Quest journal / tracker / offer view-models (US-UU2): the pure,
+         UnityEngine-free journal/tracker/offer model + the runtime-event feed that
+         drives it off the KB-backed InsimulQuestRuntime signals (no polling). The
+         UGUI views (Runtime/UI/InsimulQuest{Journal,Tracker,OfferPanel}.cs) are
+         structural-gate-only. RunQuestJournal/QuestFeed tests in Program.cs drive
+         these against the shared corpus (quest-journal-cases.json) + a live runtime. -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulQuestJournalModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulQuestFeed.cs" />
+    <!-- Trade view-model (US-UU3): the pure inventory / container-transfer /
+         merchant model, backed EXCLUSIVELY by save.currentState (JsonVal). The UGUI
+         views (Runtime/UI/InsimulInventoryPanel/ContainerPanel/MerchantPanel.cs) are
+         structural-gate-only. RunTradeTests in Program.cs drives it against the shared
+         corpus (trade-cases.json) + a save serialize/load round-trip. -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulTradeModel.cs" />
+    <!-- Dialogue / chat streaming view-model (US-UU4): the pure, UnityEngine-free
+         chat model (transcript / streaming / action / history contract) driving the
+         ChatPanel/DialogueUI seam over the conversation SDK. The UGUI view
+         (Runtime/UI/InsimulChatPanel.cs) is structural-gate-only. RunChatTests in
+         Program.cs drives it against the shared corpus (chat-cases.json) + integration
+         tests (action facts through the real KB path, history round-trip to
+         save.conversations). -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulChatModel.cs" />
+    <!-- Unified pause menu + main menu + save/load view-models (US-UU5): the pure,
+         UnityEngine-free tab-gating model (module-bundle-gated tabs, driven off the
+         genre bundle) + the save/load slot model (outcome→row projection +
+         corrupted-envelope messaging, with a ClassifyEnvelope path over the real
+         SHA-256 integrity chain). The UGUI views (Runtime/UI/InsimulPauseMenu/
+         MainMenu/SaveLoadPanel.cs) are structural-gate-only. RunPauseMenu/SaveSlot
+         tests in Program.cs drive these against the shared corpus (pause-menu-cases.json,
+         save-slot-cases.json) + a real envelope validate/tamper. -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulPauseMenuModel.cs" />
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulSaveSlotModel.cs" />
+    <Compile Include="../../packages/unity/Tests/Editor/UiCorpus.cs" />
   </ItemGroup>
 
 </Project>

@@ -78,6 +78,15 @@ namespace Insimul.Save
             _items.Add(item ?? Null());
         }
 
+        /// <summary>Remove the array element at <paramref name="index"/> (in place,
+        /// preserving order). Lets callers mutate a live array they hold a reference
+        /// to — used by the trade model to drop an emptied item stack.</summary>
+        public void RemoveAt(int index)
+        {
+            if (Kind != JsonKind.Array) throw new InvalidOperationException("RemoveAt on a non-array JsonVal");
+            _items.RemoveAt(index);
+        }
+
         /// <summary>Set (insert or overwrite) an object member, preserving first-seen order.</summary>
         public void Set(string key, JsonVal value)
         {

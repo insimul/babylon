@@ -93,6 +93,27 @@ namespace Insimul.Quest
             _kb.Assert(new PrologFact(predicate, args));
         }
 
+        /// <summary>Assert a ground fact clause string (e.g. <c>has_item(player,sword)</c>,
+        /// optional trailing period) into the KB. This is the real KB path a dialogue
+        /// action trigger takes (InsimulChatModel records the fact; the panel forwards
+        /// it here). Returns false when the clause can't be parsed as a ground fact.</summary>
+        public bool AssertClause(string clause)
+        {
+            if (!TryParseGroundFact(clause, out var fact)) return false;
+            _kb.Assert(fact);
+            return true;
+        }
+
+        /// <summary>True if the KB holds a ground fact with this predicate + exact atom
+        /// args — the query companion to <see cref="AssertClause"/> (used to verify a
+        /// dialogue action landed).</summary>
+        public bool HasFact(string predicate, params string[] atomArgs)
+        {
+            var args = new PrologArg[atomArgs != null ? atomArgs.Length : 0];
+            for (int i = 0; i < args.Length; i++) args[i] = PrologArg.Atom(atomArgs[i]);
+            return _kb.Has(predicate, args);
+        }
+
         /// <summary>Re-evaluate one registered quest against the KB, broadcasting the
         /// template delegates for any NEW objective/quest transition.</summary>
         public QuestTransition EvaluateQuest(string questId)
