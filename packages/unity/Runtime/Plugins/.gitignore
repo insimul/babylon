@@ -1,0 +1,9 @@
+# Native libinsimul binaries are FETCHED, not committed (US-UP3).
+# scripts/fetch-native.sh populates these folders from an insimul-native build.
+# The generated Unity .meta files are also editor-produced and not committed.
+#
+# Everything here is ignored EXCEPT this .gitignore and the README.
+
+*
+!.gitignore
+!README.md

@@ -1,0 +1,558 @@
+// Program.cs — dependency-free verification harness for the Unity Prolog
+// wrapper (US-UP1). No test framework: a tiny assert/case runner keeps the
+// project buildable on a bare .NET SDK. Exit code 0 = all green.
+//
+// The native tests require a loadable libinsimul (run.sh builds it and sets the
+// loader path). The pure tests (ParseBindingSet) run with no native library.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Insimul.Prolog;
+using Insimul.Prolog.Conformance;
+
+namespace Insimul.Verify
+{
+    internal static class Program
+    {
+        private static int _passed;
+        private static int _failed;
+
+        private static int Main(string[] args)
+        {
+            bool skipNative = args.Contains("--pure-only");
+
+            Section("Pure (no native library)");
+            RunParseBindingSetTests();
+            RunVersionHandshakeTests();
+            RunAdapterPureTests();
+
+            if (skipNative)
+            {
+                Console.WriteLine("\n(--pure-only: skipping native tests)");
+                return Report();
+            }
+
+            Section("Native (requires libinsimul on the loader path)");
+            try
+            {
+                RunNativeTests();
+                RunAdapterNativeTests();
+                RunConformanceCorpus();
+            }
+            catch (DllNotFoundException ex)
+            {
+                Console.WriteLine($"\nFATAL: libinsimul not found on the loader path: {ex.Message}");
+                Console.WriteLine("Run via tools/verify-unity/run.sh, which builds it and sets DYLD/LD_LIBRARY_PATH.");
+                return 2;
+            }
+
+            return Report();
+        }
+
+        // ---- Pure tests ------------------------------------------------------
+
+        private static void RunParseBindingSetTests()
+        {
+            Case("ParseBindingSet: empty object => empty map", () =>
+            {
+                var b = InsimulProlog.ParseBindingSet("{}");
+                AssertEqual(0, b.Count);
+            });
+
+            Case("ParseBindingSet: atom binds as string", () =>
+            {
+                var b = InsimulProlog.ParseBindingSet("{\"X\":\"sword\"}");
+                AssertEqual(1, b.Count);
+                AssertEqual("sword", b["X"].GetString());
+            });
+
+            Case("ParseBindingSet: integer binds as number", () =>
+            {
+                var b = InsimulProlog.ParseBindingSet("{\"N\":42}");
+                AssertEqual(JsonValueKind.Number, b["N"].ValueKind);
+                AssertEqual(42, b["N"].GetInt32());
+            });
+
+            Case("ParseBindingSet: multiple vars", () =>
+            {
+                var b = InsimulProlog.ParseBindingSet("{\"Item\":\"key\",\"Qty\":3}");
+                AssertEqual("key", b["Item"].GetString());
+                AssertEqual(3, b["Qty"].GetInt32());
+            });
+
+            Case("ParseBindingSet: null/empty => empty map", () =>
+            {
+                AssertEqual(0, InsimulProlog.ParseBindingSet(null).Count);
+                AssertEqual(0, InsimulProlog.ParseBindingSet("").Count);
+            });
+
+            Case("ParseBindingSet: malformed JSON throws InsimulPrologException", () =>
+            {
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseBindingSet("{not json"));
+            });
+
+            Case("ParseBindingSet: non-object JSON throws InsimulPrologException", () =>
+            {
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseBindingSet("[1,2,3]"));
+            });
+        }
+
+        // ---- Version handshake (US-UP3) -------------------------------------
+
+        // Pure (no native library): the version comparison takes the native stamp
+        // as an argument, so the compatible AND mismatch paths are exercised with
+        // MOCKED stamps — no libinsimul required.
+        private static void RunVersionHandshakeTests()
+        {
+            Case("ParseSemver: MAJOR.MINOR.PATCH", () =>
+            {
+                var v = InsimulProlog.ParseSemver("1.2.3");
+                AssertEqual(1, v.Major);
+                AssertEqual(2, v.Minor);
+                AssertEqual(3, v.Patch);
+            });
+
+            Case("ParseSemver: tolerates leading v and pre-release/build metadata", () =>
+            {
+                AssertEqual("0.1.0", InsimulProlog.ParseSemver("v0.1.0").ToString());
+                AssertEqual("0.1.0", InsimulProlog.ParseSemver("0.1.0-rc.1+build.5").ToString());
+            });
+
+            Case("ParseSemver: malformed throws InsimulPrologException", () =>
+            {
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseSemver("1.2"));
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseSemver("1.x.0"));
+                AssertThrows<InsimulPrologException>(() => InsimulProlog.ParseSemver(""));
+            });
+
+            Case("CheckNativeVersion: exact match is compatible", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("0.1.0", "0.1.0");
+                AssertTrue(c.Compatible, "exact match should be compatible");
+                AssertEqual("0.1.0", c.ActualSemver);
+            });
+
+            Case("CheckNativeVersion: differing PATCH is compatible", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("0.1.7", "0.1.0");
+                AssertTrue(c.Compatible, "patch drift should stay compatible");
+            });
+
+            Case("CheckNativeVersion: MINOR drift is a mismatch", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("0.2.0", "0.1.0");
+                AssertTrue(!c.Compatible, "minor drift should be incompatible");
+                AssertTrue(c.Message.Contains("0.2.0") && c.Message.Contains("0.1.0"),
+                    "mismatch message should name both versions");
+            });
+
+            Case("CheckNativeVersion: MAJOR drift is a mismatch", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("1.1.0", "0.1.0");
+                AssertTrue(!c.Compatible, "major drift should be incompatible");
+            });
+
+            Case("CheckNativeVersion: unparseable actual is a mismatch (not a throw)", () =>
+            {
+                var c = InsimulProlog.CheckNativeVersion("garbage", "0.1.0");
+                AssertTrue(!c.Compatible, "unparseable native version is incompatible");
+                AssertTrue(c.Message.Contains("garbage"), "message should surface the bad stamp");
+            });
+
+            Case("ExpectedNativeSemver is a well-formed semver", () =>
+            {
+                var v = InsimulProlog.ParseSemver(InsimulProlog.ExpectedNativeSemver);
+                AssertTrue(v.Major >= 0 && v.Minor >= 0 && v.Patch >= 0, "expected semver should parse");
+            });
+        }
+
+        // ---- Native tests ----------------------------------------------------
+
+        private static void RunNativeTests()
+        {
+            Case("version: non-empty semver", () =>
+            {
+                string v = InsimulProlog.NativeVersion;
+                AssertTrue(!string.IsNullOrWhiteSpace(v), "version should be non-empty");
+                Console.WriteLine($"      libinsimul {v}");
+            });
+
+            Case("VerifyNativeVersion: loaded library is ABI-compatible", () =>
+            {
+                // This reads the REAL native version. If the locally built
+                // libinsimul drifts from ExpectedNativeSemver on MAJOR.MINOR, this
+                // fails loudly — the handshake doing its job. Bump
+                // ExpectedNativeSemver (and re-fetch) to reconcile.
+                var check = InsimulProlog.VerifyNativeVersion();
+                AssertTrue(check.Compatible, check.Message);
+                Console.WriteLine($"      {check.Message}");
+            });
+
+            Case("consult + query: single solution with binding", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Consult("likes(sam, prolog).");
+                var sols = pl.Query("likes(sam, X)").ToList();
+                AssertEqual(1, sols.Count);
+                AssertEqual("prolog", sols[0]["X"].GetString());
+            });
+
+            Case("ground query that succeeds => one empty binding set", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Consult("fact(a).");
+                var sols = pl.Query("fact(a)").ToList();
+                AssertEqual(1, sols.Count);
+                AssertEqual(0, sols[0].Count);
+                AssertTrue(pl.Holds("fact(a)"), "Holds should be true");
+            });
+
+            Case("query that fails => zero solutions", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Consult("fact(a).");
+                AssertEqual(0, pl.Query("fact(b)").Count());
+                AssertTrue(!pl.Holds("fact(b)"), "Holds should be false");
+            });
+
+            Case("multiple solutions enumerate lazily", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Consult("color(red). color(green). color(blue).");
+                var vals = pl.Query("color(C)").Select(s => s["C"].GetString()).OrderBy(x => x).ToList();
+                AssertEqual(3, vals.Count);
+                AssertEqual("blue", vals[0]);
+                AssertEqual("green", vals[1]);
+                AssertEqual("red", vals[2]);
+            });
+
+            Case("rules unify (grandparent)", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Consult(
+                    "parent(tom, bob). parent(bob, ann). " +
+                    "grandparent(X, Z) :- parent(X, Y), parent(Y, Z).");
+                var sols = pl.Query("grandparent(tom, G)").ToList();
+                AssertEqual(1, sols.Count);
+                AssertEqual("ann", sols[0]["G"].GetString());
+            });
+
+            Case("assert then query", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Assert("owns(player, torch)");
+                AssertTrue(pl.Holds("owns(player, torch)"), "asserted fact should hold");
+            });
+
+            Case("retract removes a matching clause", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Assert("owns(player, torch)");
+                bool removed = pl.Retract("owns(player, torch)");
+                AssertTrue(removed, "retract should report a removal");
+                AssertTrue(!pl.Holds("owns(player, torch)"), "fact should be gone");
+            });
+
+            Case("snapshot then restore round-trips state", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Assert("score(10)");
+                string snap = pl.Snapshot();
+                pl.Retract("score(10)");
+                AssertTrue(!pl.Holds("score(10)"), "retracted before restore");
+                pl.Restore(snap);
+                AssertTrue(pl.Holds("score(10)"), "restore should bring the fact back");
+            });
+
+            // ---- Disposal / lifetime ----
+
+            Case("double-dispose is safe", () =>
+            {
+                var pl = new InsimulProlog();
+                pl.Assert("x(1)");
+                pl.Dispose();
+                pl.Dispose(); // must not throw or crash
+            });
+
+            Case("query iterator after KB dispose throws ObjectDisposedException", () =>
+            {
+                var pl = new InsimulProlog();
+                pl.Consult("n(1). n(2). n(3).");
+                var it = pl.Query("n(X)").GetEnumerator();
+                AssertTrue(it.MoveNext(), "first solution available");
+                pl.Dispose(); // closes the live iterator, destroys the KB
+                AssertThrows<ObjectDisposedException>(() => it.MoveNext());
+            });
+
+            Case("method use after dispose throws ObjectDisposedException", () =>
+            {
+                var pl = new InsimulProlog();
+                pl.Dispose();
+                AssertThrows<ObjectDisposedException>(() => pl.Assert("y(1)"));
+                AssertThrows<ObjectDisposedException>(() => pl.Query("y(X)").ToList());
+            });
+
+            // ---- Thread affinity ----
+
+            Case("cross-thread use throws InvalidOperationException", () =>
+            {
+                using var pl = new InsimulProlog();
+                pl.Assert("t(1)");
+                Exception captured = null;
+                var other = new Thread(() =>
+                {
+                    try { pl.Query("t(X)").ToList(); }
+                    catch (Exception e) { captured = e; }
+                });
+                other.Start();
+                other.Join();
+                AssertTrue(captured is InvalidOperationException,
+                    $"expected InvalidOperationException off-thread, got {captured?.GetType().Name ?? "none"}");
+            });
+        }
+
+        // ---- Prolog game adapter (US-UP4) -----------------------------------
+
+        // Pure: the atom encoders are the single source of truth for fact/atom
+        // encoding, so they are tested with no native library.
+        private static void RunAdapterPureTests()
+        {
+            Case("adapter Sanitize: lowercases + slugs non-atom chars", () =>
+            {
+                AssertEqual("find_the_sword", PrologGameAdapter.Sanitize("Find the Sword!"));
+                AssertEqual("iron_axe", PrologGameAdapter.Sanitize("Iron  Axe"));
+            });
+
+            Case("adapter Sanitize: leading digit gets underscore, empty => _empty", () =>
+            {
+                AssertEqual("_1st_quest", PrologGameAdapter.Sanitize("1st Quest"));
+                AssertEqual("_empty", PrologGameAdapter.Sanitize(""));
+                AssertEqual("_empty", PrologGameAdapter.Sanitize("!!!"));
+            });
+
+            Case("adapter Escape: backslash + single-quote", () =>
+            {
+                AssertEqual("it\\'s", PrologGameAdapter.Escape("it's"));
+                AssertEqual("a\\\\b", PrologGameAdapter.Escape("a\\b"));
+            });
+
+            Case("adapter NormalizeFact: trims + strips one trailing period", () =>
+            {
+                AssertEqual("foo(a)", PrologGameAdapter.NormalizeFact("  foo(a). "));
+                AssertEqual("foo(a)", PrologGameAdapter.NormalizeFact("foo(a)"));
+                AssertEqual("", PrologGameAdapter.NormalizeFact(null));
+            });
+        }
+
+        // Native: real unification through libinsimul (the whole point of US-UP4).
+        private static void RunAdapterNativeTests()
+        {
+            Section("Prolog game adapter (US-UP4, native)");
+
+            Case("adapter Query: real unification enumerates solutions", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("color(red). color(green). color(blue).");
+                var vals = a.QueryColumn("color(C)", "C");
+                vals.Sort();
+                AssertEqual(3, vals.Count);
+                AssertEqual("blue", vals[0]);
+                AssertEqual("green", vals[1]);
+                AssertEqual("red", vals[2]);
+            });
+
+            Case("adapter QueryColumn: distinct removes duplicate projections", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("likes(sam, tea). likes(bob, tea). likes(ann, coffee).");
+                var drinks = a.QueryColumn("likes(_, D)", "D");
+                drinks.Sort();
+                AssertEqual(2, drinks.Count); // tea deduped
+                AssertEqual("coffee", drinks[0]);
+                AssertEqual("tea", drinks[1]);
+            });
+
+            Case("adapter rules participate in resolution", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("item_type(sword_a, sword). item_category(sword_a, weapon).");
+                a.Consult("item_is_a(I, C) :- item_category(I, C). item_is_a(I, T) :- item_type(I, T).");
+                AssertTrue(a.Holds("item_is_a(sword_a, weapon)"), "category IS-A should hold");
+                AssertTrue(a.Holds("item_is_a(sword_a, sword)"), "type IS-A should hold");
+                AssertTrue(!a.Holds("item_is_a(sword_a, potion)"), "unrelated IS-A should not hold");
+            });
+
+            Case("adapter CanPerformAction: undeclared predicate => allowed (graceful)", () =>
+            {
+                using var a = new PrologGameAdapter();
+                // No can_perform rules loaded at all.
+                var r = a.CanPerformAction("open_door", "player");
+                AssertTrue(r.Allowed, "undeclared can_perform should allow by default");
+            });
+
+            Case("adapter CanPerformAction: declared but unmet => denied", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.Consult("can_perform(player, wave).");
+                var ok = a.CanPerformAction("wave", "player");
+                AssertTrue(ok.Allowed, "matching can_perform should allow");
+                var no = a.CanPerformAction("fly", "player");
+                AssertTrue(!no.Allowed, "unmet prerequisite should deny");
+                AssertTrue(no.Reason != null && no.Reason.Contains("fly"), "deny reason names the action");
+            });
+
+            Case("adapter RetractAll: removes every matching clause", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertFact("personality(bob, openness, 0.5)");
+                a.AssertFact("personality(bob, neuroticism, 0.2)");
+                int removed = a.RetractAll("personality(bob, _, _)");
+                AssertEqual(2, removed);
+                AssertTrue(!a.Holds("personality(bob, openness, 0.5)"), "all personality clauses gone");
+            });
+
+            Case("adapter player-fact tracking + save round-trip via RestorePlayerFacts", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertFact("world_fact(town)");          // NOT a player fact
+                a.AssertPlayerFact("has(player, torch)");
+                a.AssertPlayerFact("has_item(player, torch, 3)");
+                var saved = a.GetPlayerFacts();
+                AssertEqual(2, saved.Length); // world_fact excluded
+
+                using var b = new PrologGameAdapter();
+                b.RestorePlayerFacts(saved);
+                AssertTrue(b.Holds("has(player, torch)"), "restored has fact");
+                AssertTrue(b.Holds("has_item(player, torch, 3)"), "restored quantity fact");
+            });
+
+            Case("adapter item-quantity update retracts old has_item", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertPlayerFact("has_item(player, apple, 2)");
+                a.RetractPlayerFactByPattern("has_item(player, apple, _)", "has_item(player, apple");
+                a.AssertPlayerFact("has_item(player, apple, 5)");
+                var qtys = a.QueryColumn("has_item(player, apple, Q)", "Q");
+                AssertEqual(1, qtys.Count); // exactly one has_item clause remains
+                AssertEqual("5", qtys[0]);
+            });
+
+            Case("adapter SnapshotState / RestoreState round-trips full KB", () =>
+            {
+                using var a = new PrologGameAdapter();
+                a.AssertFact("quest_active(player, q1)");
+                string snap = a.SnapshotState();
+                a.RetractFact("quest_active(player, q1)");
+                AssertTrue(!a.Holds("quest_active(player, q1)"), "retracted before restore");
+                a.RestoreState(snap);
+                AssertTrue(a.Holds("quest_active(player, q1)"), "restore brings the fact back");
+            });
+
+            Case("adapter use after dispose throws", () =>
+            {
+                var a = new PrologGameAdapter();
+                a.Dispose();
+                a.Dispose(); // idempotent
+                AssertThrows<ObjectDisposedException>(() => a.AssertFact("x(1)"));
+            });
+        }
+
+        // ---- Conformance corpus (US-UP2) ------------------------------------
+
+        // Runs the shared, framework-agnostic corpus runner (ConformanceCorpus) over
+        // every packages/core/conformance/prolog/*.json case through the real native
+        // engine. This is the authoritative host-side parity gate — the same JSON the
+        // tau-prolog TS suite and the Unity EditMode assembly consume.
+        private static void RunConformanceCorpus()
+        {
+            Section("Conformance corpus (packages/core/conformance/prolog)");
+
+            string root = ConformanceCorpus.LocateCorpusRoot();
+            if (root == null)
+            {
+                _failed++;
+                Console.WriteLine("  FAIL  corpus directory not found " +
+                                  "(set INSIMUL_CONFORMANCE_DIR to the conformance root)");
+                return;
+            }
+
+            var cases = ConformanceCorpus.LoadPrologCorpus(root);
+            if (cases.Count == 0)
+            {
+                _failed++;
+                Console.WriteLine($"  FAIL  no corpus cases loaded from {root}");
+                return;
+            }
+
+            Console.WriteLine($"      {cases.Count} case(s) from {root}");
+            foreach (CorpusCase c in cases)
+            {
+                Case($"[{c.File}] {c.Name}", () =>
+                {
+                    var actual = ConformanceCorpus.RunCase(c);
+                    AssertTrue(
+                        ConformanceCorpus.SameSolutionSet(actual, c.Expected),
+                        $"expected {ConformanceCorpus.Describe(c.Expected)} " +
+                        $"but got {ConformanceCorpus.Describe(actual)}");
+                });
+            }
+
+            // Radiant: skipped until libinsimul exposes a radiant tick (tracked TODO).
+            string radiantNote = ConformanceCorpus.RadiantCorpusPresent(root)
+                ? "radiant corpus present but " + ConformanceCorpus.RadiantSkipReason
+                : "no radiant corpus; " + ConformanceCorpus.RadiantSkipReason;
+            Console.WriteLine($"  SKIP  {radiantNote}");
+        }
+
+        // ---- Mini test framework --------------------------------------------
+
+        private static void Section(string name) => Console.WriteLine($"\n=== {name} ===");
+
+        private static void Case(string name, Action body)
+        {
+            try
+            {
+                body();
+                _passed++;
+                Console.WriteLine($"  PASS  {name}");
+            }
+            catch (Exception ex)
+            {
+                _failed++;
+                Console.WriteLine($"  FAIL  {name}\n        {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static int Report()
+        {
+            Console.WriteLine($"\n{_passed} passed, {_failed} failed");
+            return _failed == 0 ? 0 : 1;
+        }
+
+        private static void AssertTrue(bool cond, string msg)
+        {
+            if (!cond) throw new Exception($"assertion failed: {msg}");
+        }
+
+        private static void AssertEqual<T>(T expected, T actual)
+        {
+            if (!EqualityComparer<T>.Default.Equals(expected, actual))
+                throw new Exception($"expected [{expected}] but got [{actual}]");
+        }
+
+        private static void AssertThrows<TException>(Action body) where TException : Exception
+        {
+            try { body(); }
+            catch (TException) { return; }
+            catch (Exception ex)
+            {
+                throw new Exception($"expected {typeof(TException).Name} but got {ex.GetType().Name}: {ex.Message}");
+            }
+            throw new Exception($"expected {typeof(TException).Name} but nothing was thrown");
+        }
+    }
+}

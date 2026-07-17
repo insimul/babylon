@@ -212,6 +212,88 @@ and asserts its layout — SDK sources only, no `templates/` tree — then print
 OpenUPM readiness checklist. It does **not** publish. See the repo-root
 `docs/RELEASING.md` for the full version-bump + publish flow (`VERSIONS.json` is
 the single version source).
+## Native library (libinsimul)
+
+The real Prolog engine (`Runtime/Prolog/InsimulProlog.cs`) P/Invokes the native
+**libinsimul** library. Those binaries are **fetched, not committed** — see
+`Runtime/Plugins/README.md` for the full layout and import-settings table.
+
+### Fetch the binaries
+
+```bash
+packages/unity/scripts/fetch-native.sh                       # ../insimul-native/dist
+packages/unity/scripts/fetch-native.sh --dist /path/to/dist  # explicit dist root
+packages/unity/scripts/fetch-native.sh --url  https://…/dist.tar.gz
+```
+
+The script drops each platform's library into `Runtime/Plugins/{macOS,Windows/*,
+Linux/*}/`, `lipo`-combines the two macOS slices into one universal2 dylib, and
+cross-checks the fetched `VERSION` against the wrapper's expected ABI (warning
+loudly on drift).
+
+### Per-platform import settings
+
+`.meta` files can't be hand-authored for fetched binaries, so
+`Editor/InsimulNativeImporter.cs` (an `AssetPostprocessor`) derives the
+`PluginImporter` platform/CPU/editor flags from each binary's folder on import.
+Re-apply manually with **Insimul > Reimport Native Plugins**.
+
+| Folder                | Platform             | CPU                    | Editor |
+|-----------------------|----------------------|------------------------|--------|
+| `macOS/`              | Standalone macOS     | x64+ARM64 (universal2) | ✔ on macOS |
+| `Windows/x86_64/`     | Standalone Windows64 | x86_64                 | ✔ on Windows |
+| `Windows/arm64/`      | Standalone Windows64 | ARM64                  | — |
+| `Linux/x86_64/`       | Standalone Linux64   | x86_64                 | ✔ on Linux |
+| `Linux/arm64/`        | Standalone Linux64   | ARM64                  | — |
+
+### Version handshake
+
+`InsimulProlog.ExpectedNativeSemver` records the ABI this wrapper was built
+against. Call `InsimulProlog.VerifyNativeVersion()` once at startup — it throws
+`InsimulPrologException` on a MAJOR.MINOR mismatch (a differing PATCH is
+compatible), so a stale or wrong native binary fails loudly instead of silently
+corrupting marshaling.
+
+### IL2CPP
+
+The C ABI is **poll-only** (no callbacks), so the wrapper is IL2CPP-safe with no
+`[MonoPInvokeCallback]`. Keep the `DllImport` base name `insimul` a compile-time
+constant. `System.Text.Json.dll` (+ transitive deps) must be present in a
+`Plugins/` folder for the asmdef to compile and for IL2CPP to link it — a human
+drop-in, not fetched by the script. See `Runtime/Plugins/README.md` for details.
+
+## Native Prolog conformance tests
+
+The SDK ships a real Prolog engine (`Runtime/Prolog/InsimulProlog.cs`, backed by
+the native `libinsimul` library — see `Runtime/Plugins/README.md`). Its behaviour
+is pinned by a language-neutral golden corpus at
+`packages/core/conformance/prolog/*.json` (41 cases across unification,
+backtracking, lists, negation, arithmetic, assert/retract, and gameplay
+predicates). The **same JSON** is the cross-engine parity gate for the TypeScript
+`tau-prolog` engine, so any divergence is caught here rather than in gameplay.
+
+Two harnesses run the identical loading + comparison logic
+(`Tests/Editor/ConformanceCorpus.cs`, compared as an **unordered multiset** per
+`conformance/README.md`):
+
+- **Host / CI (authoritative):** `tools/verify-unity/run.sh` builds `libinsimul`,
+  puts it on the loader path, and runs all corpus cases under `dotnet` — no Unity
+  editor required.
+- **In-editor (EditMode):** the `Insimul.Tests.Editor` assembly
+  (`Tests/Editor/`) exposes each case as an NUnit test via **Window > General >
+  Test Runner > EditMode**. Requirements to run in-editor:
+  1. The native library present under `Runtime/Plugins/…` (`scripts/fetch-native.sh`).
+  2. `System.Text.Json.dll` (+ transitive deps) dropped into a `Plugins/` folder —
+     the same DLL the runtime asmdef needs (see `Runtime/Prolog/CLAUDE.md`).
+  3. The corpus reachable on disk. When the package is installed outside the
+     monorepo, point `INSIMUL_CONFORMANCE_DIR` at the conformance root; otherwise
+     the corpus test reports *Inconclusive* (ignored) rather than failing.
+
+**Radiant conformance is skipped** in both harnesses: the native ABI
+(`insimul-native/include/insimul.h`) exposes no radiant tick yet. This is tracked
+as an explicitly-ignored test (`RadiantConformance_SkippedUntilNativeTick`) and a
+`SKIP` line in the host harness; enable it when the libinsimul radiant story lands
+a tick entry point.
 
 ## License
 

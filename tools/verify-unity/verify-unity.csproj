@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dependency-free net8 console harness for the Unity Prolog wrapper.
+
+    It compiles the pure C# under packages/unity/Runtime/Prolog/ (which has NO
+    UnityEngine references, by design) directly via <Compile Include> and
+    exercises it against a locally built libinsimul dylib. This lets US-UP1/2/3
+    logic be verified on a plain .NET SDK machine with NO Unity editor present
+    (autoMerge is off; Unity-specific glue is human-verified separately).
+
+    Run with tools/verify-unity/run.sh, which builds libinsimul first and puts
+    the dylib on the loader path.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>verify-unity</AssemblyName>
+    <RootNamespace>Insimul.Verify</RootNamespace>
+    <!-- Keep the runtime source as the single source of truth — do not copy. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <!-- The shared, framework-agnostic conformance runner (US-UP2), referenced in
+         place from the Unity EditMode test folder. The NUnit wrapper beside it
+         (ConformanceCorpusTests.cs) is deliberately NOT included here so this
+         harness never needs nunit.framework. -->
+    <Compile Include="../../packages/unity/Tests/Editor/ConformanceCorpus.cs" />
+    <!-- The wrapper under test, referenced in place (no vendoring). -->
+    <Compile Include="../../packages/unity/Runtime/Prolog/InsimulProlog.cs" />
+    <Compile Include="../../packages/unity/Runtime/Prolog/NativeMethods.cs" />
+    <!-- The game adapter (US-UP4): the real-engine backing the template shell
+         delegates to. UnityEngine-free, so it compiles + runs here. -->
+    <Compile Include="../../packages/unity/Runtime/Prolog/PrologGameAdapter.cs" />
+  </ItemGroup>
+
+</Project>

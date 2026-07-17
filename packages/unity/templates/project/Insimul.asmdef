@@ -4,7 +4,8 @@
   "references": [
     "Unity.InputSystem",
     "Unity.TextMeshPro",
-    "Unity.AI.Navigation"
+    "Unity.AI.Navigation",
+    "Insimul.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
