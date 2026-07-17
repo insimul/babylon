@@ -46,8 +46,22 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/gdextension/test/run_host_tests.sh
 	echo "== godot: conformance corpus (US-GP2) =="
 	bash packages/godot/gdextension/test/run_conformance.sh
+	echo "== godot: portable save-system host tests (US-GC2) =="
+	bash packages/godot/gdextension/test/run_save_tests.sh
+	echo "== godot: portable quest-system host tests (US-GC3) =="
+	bash packages/godot/gdextension/test/run_quest_tests.sh
+	echo "== godot: startup-orchestrator host tests (US-GC4, full loop) =="
+	bash packages/godot/gdextension/test/run_bootstrap_tests.sh
 	echo "== godot: GDScript structural lint (US-GP3, godot --check-only stand-in) =="
 	python3 packages/godot/gdextension/tests/gdscript_structural_lint.py
+	echo "== godot: world-source headless test (US-GC1, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/tests/run_world_source_headless.sh
+	echo "== godot: save-system headless test (US-GC2, skips without a godot binary/extension) =="
+	bash packages/godot/addons/insimul/tests/run_save_system_headless.sh
+	echo "== godot: quest-system headless test (US-GC3, skips without a godot binary/extension) =="
+	bash packages/godot/addons/insimul/tests/run_quest_system_headless.sh
+	echo "== godot: runtime-bootstrap headless test (US-GC4, skips without a godot binary/extension) =="
+	bash packages/godot/addons/insimul/tests/run_runtime_bootstrap_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi
