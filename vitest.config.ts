@@ -31,6 +31,8 @@ export default defineConfig({
       // @insimul/core vitest suites (US-CE4 schema/drift tests, etc.). The legacy
       // tau-engine.test.ts harness under packages/core/src/prolog is excluded below.
       'packages/core/src/**/*.test.ts',
+      // Native-tree static syntax gate regression tests (US-EP3).
+      'tools/**/*.test.mjs',
     ],
     // These *.test.ts files are legacy tsx harnesses (run via `npx tsx <file>`, no
     // describe/it), NOT vitest suites — excluding them keeps `vitest run` green.

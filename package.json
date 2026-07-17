@@ -25,6 +25,7 @@
     "check": "tsc -p tsconfig.check.json",
     "engines:manifests": "node scripts/engines/validate-manifests.mjs",
     "engines:templates": "node scripts/engines/validate-templates.mjs",
+    "engines:check": "node tools/engines-check.mjs",
     "test": "vitest run",
     "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell"
   },
