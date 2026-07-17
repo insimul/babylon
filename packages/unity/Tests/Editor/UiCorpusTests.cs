@@ -13,6 +13,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using Insimul.Quest;
+using Insimul.Save;
 using Insimul.UI;
 using Insimul.UI.TestSupport;
 
@@ -200,6 +201,106 @@ namespace Insimul.Prolog.Tests.Editor
             runtime.RegisterQuest("quest(q_other, 'Other', errand, easy, active).");
             Assert.That(repaints, Is.EqualTo(before), "detached feed ignores events");
             Assert.That(feed.Model.Get("q_other"), Is.Null);
+        }
+
+        // ── Trade: inventory / container / merchant (US-UU3) ──────────────────
+
+        private static IEnumerable<TradeCase> TradeCases() => UiCorpus.LoadTradeCases();
+
+        [Test]
+        [TestCaseSource(nameof(TradeCases))]
+        public void TradeCase(TradeCase c)
+        {
+            JsonVal state = JsonVal.Parse(c.StateJson);
+            var model = new InsimulTradeModel(state);
+            TradeResult r = ApplyTradeOp(model, c);
+
+            Assert.That(r.Ok, Is.EqualTo(c.ExpectedOk), $"{c}: ok");
+            if (!string.IsNullOrEmpty(c.ExpectedReason))
+                Assert.That(r.Reason, Is.EqualTo(c.ExpectedReason), $"{c}: reason");
+            if (c.HasExpectedMoved) Assert.That(r.Moved, Is.EqualTo(c.ExpectedMoved), $"{c}: moved");
+            if (c.HasExpectedPlayerGold) Assert.That(model.PlayerGold(), Is.EqualTo(c.ExpectedPlayerGold), $"{c}: player gold");
+            if (c.HasExpectedMerchantGold) Assert.That(model.MerchantGold(c.OpMerchant), Is.EqualTo(c.ExpectedMerchantGold), $"{c}: merchant gold");
+            if (c.ExpectedPlayerItems != null) AssertItems(c.ExpectedPlayerItems, model.PlayerItems());
+            if (c.ExpectedContainerItems != null) AssertItems(c.ExpectedContainerItems, model.ContainerItems(c.OpContainer));
+            if (c.ExpectedMerchantItems != null) AssertItems(c.ExpectedMerchantItems, model.MerchantItems(c.OpMerchant));
+        }
+
+        [Test]
+        public void Trade_StateLocationInvariant_ReadsAreLiveSaveState()
+        {
+            JsonVal state = JsonVal.Parse(
+                "{\"player\":{\"gold\":0,\"inventory\":[]}," +
+                "\"containers\":{\"containers\":{\"chest\":{\"items\":[{\"itemId\":\"gem\",\"quantity\":2,\"value\":100}]}}}," +
+                "\"npcs\":{\"merchantStates\":{}}}");
+            var model = new InsimulTradeModel(state);
+            model.TakeAllFromContainer("chest");
+            state.TryGet("player", out var player);
+            player.TryGet("inventory", out var inv);
+            Assert.That(ReferenceEquals(inv, model.PlayerItems()), Is.True,
+                "PlayerItems() must be the live currentState.player.inventory reference");
+        }
+
+        [Test]
+        public void Trade_PersistenceRoundTrip_SurvivesSaveLoad()
+        {
+            var save = new InsimulSaveSystem();
+            save.NewGame("{\"world\":{\"id\":\"w1\"}}", new InsimulSaveSystem.NewGameOptions { Id = "s1", WorldId = "w1" });
+            save.SaveFile.TryGet("currentState", out var cs);
+            cs.TryGet("player", out var pl);
+            pl.Set("gold", JsonVal.Int(100));
+            cs.TryGet("npcs", out var npcs);
+            var shop = JsonVal.Object();
+            shop.Set("goldReserve", JsonVal.Int(100));
+            var items = JsonVal.Arr();
+            var potion = JsonVal.Object();
+            potion.Set("itemId", JsonVal.Str("potion"));
+            potion.Set("quantity", JsonVal.Int(5));
+            potion.Set("value", JsonVal.Int(10));
+            items.Add(potion);
+            shop.Set("items", items);
+            var merchants = JsonVal.Object();
+            merchants.Set("shop", shop);
+            npcs.Set("merchantStates", merchants);
+
+            Assert.That(new InsimulTradeModel(cs).Buy("shop", "potion", 3).Ok, Is.True);
+
+            var reloaded = new InsimulSaveSystem();
+            reloaded.Load(save.SerializeCanonical());
+            reloaded.SaveFile.TryGet("currentState", out var cs2);
+            var model = new InsimulTradeModel(cs2);
+            Assert.That(model.PlayerGold(), Is.EqualTo(70));
+            Assert.That(model.MerchantGold("shop"), Is.EqualTo(130));
+            Assert.That(model.PlayerQuantity("potion"), Is.EqualTo(3));
+        }
+
+        private static TradeResult ApplyTradeOp(InsimulTradeModel model, TradeCase c)
+        {
+            int qty = c.HasOpQty ? c.OpQty : 0;
+            switch (c.OpKind)
+            {
+                case "take": return model.TakeFromContainer(c.OpContainer, c.OpItem, qty);
+                case "take_all": return model.TakeAllFromContainer(c.OpContainer);
+                case "buy": return model.Buy(c.OpMerchant, c.OpItem, qty);
+                case "sell": return model.Sell(c.OpMerchant, c.OpItem, qty);
+                default: throw new System.Exception($"unknown trade op kind '{c.OpKind}'");
+            }
+        }
+
+        private static void AssertItems(Dictionary<string, int> expected, JsonVal items)
+        {
+            var actual = new Dictionary<string, int>();
+            foreach (JsonVal s in items.Items)
+            {
+                string id = s.TryGet("itemId", out var idv) ? idv.Str : "";
+                actual[id] = s.TryGet("quantity", out var qv) ? (int)qv.Number : 0;
+            }
+            Assert.That(actual.Count, Is.EqualTo(expected.Count));
+            foreach (var kv in expected)
+            {
+                Assert.That(actual.ContainsKey(kv.Key), Is.True, $"missing item '{kv.Key}'");
+                Assert.That(actual[kv.Key], Is.EqualTo(kv.Value), $"item '{kv.Key}' quantity");
+            }
         }
 
         // ── Theme tokens ──────────────────────────────────────────────────────

@@ -141,6 +141,12 @@
          these against the shared corpus (quest-journal-cases.json) + a live runtime. -->
     <Compile Include="../../packages/unity/Runtime/UI/InsimulQuestJournalModel.cs" />
     <Compile Include="../../packages/unity/Runtime/UI/InsimulQuestFeed.cs" />
+    <!-- Trade view-model (US-UU3): the pure inventory / container-transfer /
+         merchant model, backed EXCLUSIVELY by save.currentState (JsonVal). The UGUI
+         views (Runtime/UI/InsimulInventoryPanel/ContainerPanel/MerchantPanel.cs) are
+         structural-gate-only. RunTradeTests in Program.cs drives it against the shared
+         corpus (trade-cases.json) + a save serialize/load round-trip. -->
+    <Compile Include="../../packages/unity/Runtime/UI/InsimulTradeModel.cs" />
     <Compile Include="../../packages/unity/Tests/Editor/UiCorpus.cs" />
   </ItemGroup>
 

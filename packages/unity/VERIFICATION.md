@@ -298,3 +298,38 @@ required.
 - [ ] **No-polling check:** with the panels open and idle (no quest transitions), the
       Profiler shows the quest panels doing no per-frame list rebuilds — repaints
       happen only on the `InsimulQuestFeed.Changed` signal.
+
+## 9. Inventory / container transfer / merchant panels (US-UU3, Unity editor + Play mode)
+
+All stack math — inventory grouping, container take / take-all, merchant buy / sell
+with gold + stock bounds and stack splitting — lives in the UnityEngine-free
+`InsimulTradeModel`, host-tested (`tools/verify-unity`, `RunTradeTests` against the
+shared corpus `packages/core/conformance/ui/trade-cases.json`, plus stack-splitting,
+gold-bounds/conservation, the **state-location invariant** — every read is the live
+`save.currentState` reference, the model keeps no private store — and a **save
+serialize → load round-trip**). The model mutates `currentState` in place
+(`player.gold`/`player.inventory`, `containers.containers[id].items`,
+`npcs.merchantStates[id].{goldReserve,items}`); items **move** between stacks and a
+merchant trade **conserves gold** (player + merchant total constant). This is the
+**human pass** for the UGUI seam (`InsimulInventoryPanel` / `InsimulContainerPanel` /
+`InsimulMerchantPanel`, resolving through the `InsimulUIManager` registry keys
+`inventory` / `container` / `merchant`). A world with a lootable container and an
+NPC merchant is required.
+
+- [ ] Enter Play mode with a world loaded. Open the **Inventory** panel (`inventory`).
+      Items are listed grouped by category with rarity tint and equip-slot markers;
+      the counts match the player's `currentState.player.inventory`.
+- [ ] Open a **container** (`container`). Its stacks show on the left, the
+      player inventory on the right. **Take** a partial stack (e.g. 7 of 20) — the
+      taken amount lands in inventory and the **remainder stays** in the container.
+      **Take All** empties the container into the inventory.
+- [ ] Talk to a **merchant** (`merchant`). Merchant stock + your inventory show
+      side by side with per-item prices and both gold totals. **Buy** an affordable
+      item: your gold drops by price×qty, the merchant's gold rises by the same, and
+      the item moves to your inventory (stacking onto an existing stack).
+- [ ] Attempt to **buy** something you can't afford / that's out of stock — the trade
+      is refused with no gold or item change. **Sell** an item back: gold flows from
+      the merchant to you; selling when the merchant can't afford it is refused.
+- [ ] **Persistence check:** after a few trades, **save**, quit to menu, and
+      **Continue**. Gold totals, inventory stacks, container contents, and merchant
+      stock are exactly as you left them (no item created or lost across the save).

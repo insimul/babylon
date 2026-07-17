@@ -84,6 +84,35 @@ namespace Insimul.UI.TestSupport
         public override string ToString() => $"quest-journal:{Name}";
     }
 
+    // ── Trade cases (inventory / container / merchant) ────────────────────────
+
+    public sealed class TradeCase
+    {
+        public string Name;
+        /// <summary>Raw JSON of the case's initial currentState slice — feed to
+        /// JsonVal.Parse so the trade model operates on real save state.</summary>
+        public string StateJson;
+        public string OpKind;
+        public string OpContainer;
+        public string OpMerchant;
+        public string OpItem;
+        public int OpQty;
+        public bool HasOpQty;
+        // Expected outcome (nullable maps/ints absent when the case omits them).
+        public bool ExpectedOk;
+        public string ExpectedReason;         // "" when absent
+        public int ExpectedMoved;
+        public bool HasExpectedMoved;
+        public int ExpectedPlayerGold;
+        public bool HasExpectedPlayerGold;
+        public int ExpectedMerchantGold;
+        public bool HasExpectedMerchantGold;
+        public Dictionary<string, int> ExpectedPlayerItems;      // null when absent
+        public Dictionary<string, int> ExpectedContainerItems;   // null when absent
+        public Dictionary<string, int> ExpectedMerchantItems;    // null when absent
+        public override string ToString() => $"trade:{Name}";
+    }
+
     // ── Corpus locator + parsers ──────────────────────────────────────────────
 
     public static class UiCorpus
@@ -231,6 +260,51 @@ namespace Insimul.UI.TestSupport
                 list.Add(qc);
             }
             return list;
+        }
+
+        public static IReadOnlyList<TradeCase> LoadTradeCases()
+        {
+            var list = new List<TradeCase>();
+            var root = ReadFile("trade-cases.json");
+            if (root == null || !root.Value.TryGetProperty("cases", out JsonElement cases)) return list;
+            foreach (JsonElement el in cases.EnumerateArray())
+            {
+                var tc = new TradeCase
+                {
+                    Name = Str(el, "name"),
+                    StateJson = el.GetProperty("state").GetRawText(),
+                };
+                JsonElement op = el.GetProperty("op");
+                tc.OpKind = Str(op, "kind");
+                tc.OpContainer = Str(op, "container");
+                tc.OpMerchant = Str(op, "merchant");
+                tc.OpItem = Str(op, "item");
+                if (op.TryGetProperty("qty", out JsonElement q))
+                {
+                    tc.HasOpQty = true;
+                    tc.OpQty = (int)q.GetDouble();
+                }
+                JsonElement exp = el.GetProperty("expected");
+                tc.ExpectedOk = Bool(exp, "ok");
+                tc.ExpectedReason = Str(exp, "reason");
+                if (exp.TryGetProperty("moved", out JsonElement mv)) { tc.HasExpectedMoved = true; tc.ExpectedMoved = (int)mv.GetDouble(); }
+                if (exp.TryGetProperty("player_gold", out JsonElement pg)) { tc.HasExpectedPlayerGold = true; tc.ExpectedPlayerGold = (int)pg.GetDouble(); }
+                if (exp.TryGetProperty("merchant_gold", out JsonElement mg)) { tc.HasExpectedMerchantGold = true; tc.ExpectedMerchantGold = (int)mg.GetDouble(); }
+                tc.ExpectedPlayerItems = IntMap(exp, "player_items");
+                tc.ExpectedContainerItems = IntMap(exp, "container_items");
+                tc.ExpectedMerchantItems = IntMap(exp, "merchant_items");
+                list.Add(tc);
+            }
+            return list;
+        }
+
+        /// <summary>Read an object of {itemId: quantity} into a dict (null when absent).</summary>
+        private static Dictionary<string, int> IntMap(JsonElement el, string prop)
+        {
+            if (!el.TryGetProperty(prop, out JsonElement obj) || obj.ValueKind != JsonValueKind.Object) return null;
+            var map = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (JsonProperty p in obj.EnumerateObject()) map[p.Name] = (int)p.Value.GetDouble();
+            return map;
         }
 
         private static QuestSeed Seed(JsonElement el) => new QuestSeed

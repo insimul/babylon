@@ -61,6 +61,7 @@ namespace Insimul.Verify
             RunThemeTokenTests();
             RunQuestJournalTests();
             RunQuestFeedTests();
+            RunTradeTests();
 
             if (skipNative)
             {
@@ -2355,6 +2356,170 @@ namespace Insimul.Verify
                 feed.Model.SetFilter("available");
                 AssertSequence(new[] { "radiant_rt_fetch_1000" }, feed.Model.FilteredIds(), "shows under Available");
             });
+        }
+
+        private static void RunTradeTests()
+        {
+            Section("Default UI — trade view-model: inventory / container / merchant (US-UU3)");
+
+            var cases = UiCorpus.LoadTradeCases();
+            AssertTrue(cases.Count > 0, "trade-cases.json must load");
+            foreach (TradeCase c in cases)
+            {
+                Case($"trade: {c.Name}", () =>
+                {
+                    JsonVal state = JsonVal.Parse(c.StateJson);
+                    var model = new InsimulTradeModel(state);
+
+                    TradeResult r = ApplyTradeOp(model, c);
+                    AssertEqual(c.ExpectedOk, r.Ok);
+                    if (!string.IsNullOrEmpty(c.ExpectedReason))
+                        AssertEqual(c.ExpectedReason, r.Reason);
+                    if (c.HasExpectedMoved)
+                        AssertEqual(c.ExpectedMoved, r.Moved);
+                    if (c.HasExpectedPlayerGold)
+                        AssertEqual(c.ExpectedPlayerGold, model.PlayerGold());
+                    if (c.HasExpectedMerchantGold)
+                        AssertEqual(c.ExpectedMerchantGold, model.MerchantGold(c.OpMerchant));
+                    if (c.ExpectedPlayerItems != null)
+                        AssertItemQuantities(c.ExpectedPlayerItems, model.PlayerItems(), $"{c.Name}: player items");
+                    if (c.ExpectedContainerItems != null)
+                        AssertItemQuantities(c.ExpectedContainerItems, model.ContainerItems(c.OpContainer), $"{c.Name}: container items");
+                    if (c.ExpectedMerchantItems != null)
+                        AssertItemQuantities(c.ExpectedMerchantItems, model.MerchantItems(c.OpMerchant), $"{c.Name}: merchant items");
+                });
+            }
+
+            Case("Stack splitting: a partial take clamps and leaves the remainder in the container", () =>
+            {
+                JsonVal state = JsonVal.Parse(
+                    "{\"player\":{\"gold\":0,\"inventory\":[]}," +
+                    "\"containers\":{\"containers\":{\"chest\":{\"items\":[{\"itemId\":\"arrow\",\"quantity\":20,\"value\":1}]}}}," +
+                    "\"npcs\":{\"merchantStates\":{}}}");
+                var model = new InsimulTradeModel(state);
+                AssertEqual(7, model.TakeFromContainer("chest", "arrow", 7).Moved);
+                AssertEqual(7, model.PlayerQuantity("arrow"));
+                AssertItemQuantities(new Dictionary<string, int> { { "arrow", 13 } }, model.ContainerItems("chest"), "split: container remainder");
+                // Taking the rest empties the container stack.
+                AssertEqual(13, model.TakeFromContainer("chest", "arrow", 0).Moved);
+                AssertEqual(20, model.PlayerQuantity("arrow"));
+                AssertItemQuantities(new Dictionary<string, int>(), model.ContainerItems("chest"), "split: container drained");
+            });
+
+            Case("Gold bounds + conservation: buy then sell conserves player+merchant gold", () =>
+            {
+                JsonVal state = JsonVal.Parse(
+                    "{\"player\":{\"gold\":100,\"inventory\":[]}," +
+                    "\"containers\":{\"containers\":{}}," +
+                    "\"npcs\":{\"merchantStates\":{\"shop\":{\"goldReserve\":100,\"items\":[{\"itemId\":\"potion\",\"quantity\":5,\"value\":10}]}}}}");
+                var model = new InsimulTradeModel(state);
+                int total = model.PlayerGold() + model.MerchantGold("shop"); // 200
+
+                // Can't overspend: 11 potions * 10 > 100 gold -> rejected, nothing moves.
+                var over = model.Buy("shop", "potion", 11);
+                AssertTrue(!over.Ok && over.Reason == "out_of_stock", "over-stock buy rejected before gold check");
+                AssertEqual(100, model.PlayerGold());
+
+                AssertTrue(model.Buy("shop", "potion", 3).Ok, "affordable buy");
+                AssertEqual(70, model.PlayerGold());
+                AssertEqual(130, model.MerchantGold("shop"));
+                AssertEqual(total, model.PlayerGold() + model.MerchantGold("shop")); // conserved
+
+                AssertTrue(model.Sell("shop", "potion", 1).Ok, "sell one back");
+                AssertEqual(80, model.PlayerGold());
+                AssertEqual(120, model.MerchantGold("shop"));
+                AssertEqual(total, model.PlayerGold() + model.MerchantGold("shop")); // still conserved
+            });
+
+            Case("State-location invariant: all item state lives in currentState (no private store)", () =>
+            {
+                JsonVal state = JsonVal.Parse(
+                    "{\"player\":{\"gold\":50,\"inventory\":[]}," +
+                    "\"containers\":{\"containers\":{\"chest\":{\"items\":[{\"itemId\":\"gem\",\"quantity\":2,\"value\":100}]}}}," +
+                    "\"npcs\":{\"merchantStates\":{}}}");
+                var model = new InsimulTradeModel(state);
+                model.TakeAllFromContainer("chest");
+
+                // The model's read accessor returns the SAME JsonVal reference the save
+                // holds — proof it keeps no copy of its own.
+                state.TryGet("player", out var player);
+                player.TryGet("inventory", out var savedInventory);
+                AssertTrue(ReferenceEquals(savedInventory, model.PlayerItems()),
+                    "PlayerItems() must be the live currentState.player.inventory reference");
+                AssertItemQuantities(new Dictionary<string, int> { { "gem", 2 } }, savedInventory, "invariant: read straight off save state");
+            });
+
+            Case("Persistence round-trip: trades survive a save serialize -> load cycle", () =>
+            {
+                var save = new InsimulSaveSystem();
+                save.NewGame("{\"world\":{\"id\":\"w1\"}}", new InsimulSaveSystem.NewGameOptions { Id = "s1", WorldId = "w1" });
+
+                // Seed a fresh save's currentState with a merchant + player gold, then trade.
+                save.SaveFile.TryGet("currentState", out var cs);
+                cs.TryGet("player", out var pl);
+                pl.Set("gold", JsonVal.Int(100));
+                cs.TryGet("npcs", out var npcs);
+                var merchants = JsonVal.Object();
+                var shop = JsonVal.Object();
+                shop.Set("goldReserve", JsonVal.Int(100));
+                var shopItems = JsonVal.Arr();
+                var potion = JsonVal.Object();
+                potion.Set("itemId", JsonVal.Str("potion"));
+                potion.Set("quantity", JsonVal.Int(5));
+                potion.Set("value", JsonVal.Int(10));
+                shopItems.Add(potion);
+                shop.Set("items", shopItems);
+                merchants.Set("shop", shop);
+                npcs.Set("merchantStates", merchants);
+
+                var model = new InsimulTradeModel(cs);
+                AssertTrue(model.Buy("shop", "potion", 3).Ok, "buy through the live save state");
+                AssertEqual(70, model.PlayerGold());
+
+                // Serialize the whole save and load it back — the trade must persist.
+                string json = save.SerializeCanonical();
+                var reloaded = new InsimulSaveSystem();
+                reloaded.Load(json);
+                reloaded.SaveFile.TryGet("currentState", out var cs2);
+                var model2 = new InsimulTradeModel(cs2);
+                AssertEqual(70, model2.PlayerGold());
+                AssertEqual(130, model2.MerchantGold("shop"));
+                AssertEqual(3, model2.PlayerQuantity("potion"));
+                AssertItemQuantities(new Dictionary<string, int> { { "potion", 2 } }, model2.MerchantItems("shop"), "round-trip: merchant stock");
+            });
+        }
+
+        private static TradeResult ApplyTradeOp(InsimulTradeModel model, TradeCase c)
+        {
+            int qty = c.HasOpQty ? c.OpQty : 0;
+            switch (c.OpKind)
+            {
+                case "take": return model.TakeFromContainer(c.OpContainer, c.OpItem, qty);
+                case "take_all": return model.TakeAllFromContainer(c.OpContainer);
+                case "buy": return model.Buy(c.OpMerchant, c.OpItem, qty);
+                case "sell": return model.Sell(c.OpMerchant, c.OpItem, qty);
+                default: throw new Exception($"unknown trade op kind '{c.OpKind}'");
+            }
+        }
+
+        /// <summary>Assert a JsonVal item array holds EXACTLY the expected
+        /// {itemId: quantity} multiset (order-insensitive; extra/missing stacks fail).</summary>
+        private static void AssertItemQuantities(Dictionary<string, int> expected, JsonVal items, string what)
+        {
+            var actual = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (JsonVal s in items.Items)
+            {
+                string id = s.TryGet("itemId", out var idv) ? idv.Str : "";
+                int qty = s.TryGet("quantity", out var qv) && qv.Kind == JsonKind.Number ? (int)qv.Number : 0;
+                actual[id] = qty;
+            }
+            AssertEqual(expected.Count, actual.Count);
+            foreach (var kv in expected)
+            {
+                AssertTrue(actual.TryGetValue(kv.Key, out int got),
+                    $"{what}: expected item '{kv.Key}' present");
+                AssertTrue(got == kv.Value, $"{what}: '{kv.Key}' expected {kv.Value}, got {got}");
+            }
         }
 
         private static double Round3(double v) => Math.Round(v, 3, MidpointRounding.AwayFromZero);
