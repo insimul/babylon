@@ -52,6 +52,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/gdextension/test/run_quest_tests.sh
 	echo "== godot: startup-orchestrator host tests (US-GC4, full loop) =="
 	bash packages/godot/gdextension/test/run_bootstrap_tests.sh
+	echo "== godot: binding-resolver host tests (US-GB1) =="
+	bash packages/godot/gdextension/test/run_binding_tests.sh
 	echo "== godot: GDScript structural lint (US-GP3, godot --check-only stand-in) =="
 	python3 packages/godot/gdextension/tests/gdscript_structural_lint.py
 	echo "== godot: world-source headless test (US-GC1, skips without a godot binary) =="
@@ -62,6 +64,8 @@ if changed_matches "packages/godot/"; then
 	bash packages/godot/addons/insimul/tests/run_quest_system_headless.sh
 	echo "== godot: runtime-bootstrap headless test (US-GC4, skips without a godot binary/extension) =="
 	bash packages/godot/addons/insimul/tests/run_runtime_bootstrap_headless.sh
+	echo "== godot: binding-resolver headless test (US-GB1, skips without a godot binary) =="
+	bash packages/godot/addons/insimul/editor/binding/run_binding_resolver_headless.sh
 else
 	echo "engines:check: no packages/godot/ changes — skipping godot gates"
 fi
