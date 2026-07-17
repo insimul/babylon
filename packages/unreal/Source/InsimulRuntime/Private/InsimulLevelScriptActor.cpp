@@ -3,7 +3,9 @@
 #include "InsimulLevelScriptActor.h"
 #include "InsimulAICharacter.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "InsimulConversationComponent.h"
+#include "InsimulRuntimeSubsystem.h"
 
 AInsimulLevelScriptActor::AInsimulLevelScriptActor()
 {
@@ -55,6 +57,33 @@ void AInsimulLevelScriptActor::BeginPlay()
 void AInsimulLevelScriptActor::SpawnInsimulCharacters()
 {
 	UE_LOG(LogTemp, Log, TEXT("Spawning Insimul characters in Small_City_LVL..."));
+
+	// Prefer the world source (US-XC4): if the runtime subsystem has booted, drive
+	// the spawn set from its loaded world snapshot instead of the hardcoded ids.
+	// Falls back to the configured defaults when the runtime is not ready.
+	if (const UGameInstance* GI = GetGameInstance())
+	{
+		if (const UInsimulRuntimeSubsystem* Runtime = GI->GetSubsystem<UInsimulRuntimeSubsystem>())
+		{
+			if (Runtime->IsRuntimeReady())
+			{
+				const TArray<FInsimulWorldCharacter> WorldChars = Runtime->GetWorldCharacters();
+				if (WorldChars.Num() > 0)
+				{
+					CharacterIDs.Reset();
+					CharacterNames.Reset();
+					for (const FInsimulWorldCharacter& C : WorldChars)
+					{
+						CharacterIDs.Add(C.Id);
+						const FString FullName = C.LastName.IsEmpty()
+							? C.FirstName
+							: FString::Printf(TEXT("%s %s"), *C.FirstName, *C.LastName);
+						CharacterNames.Add(FullName);
+					}
+				}
+			}
+		}
+	}
 
 	const int32 SpawnCount = FMath::Min3(SpawnLocations.Num(), CharacterIDs.Num(), CharacterNames.Num());
 

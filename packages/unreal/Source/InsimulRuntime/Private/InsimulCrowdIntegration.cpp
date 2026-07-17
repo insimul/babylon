@@ -2,7 +2,9 @@
 
 #include "InsimulCrowdIntegration.h"
 #include "InsimulCharacterMappingComponent.h"
+#include "InsimulRuntimeSubsystem.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "EngineUtils.h"
 
 // ============================================================================
@@ -70,14 +72,34 @@ void UInsimulCrowdIntegration::EnableAutomaticMapping(bool bEnable)
 
 void UInsimulCrowdIntegration::ConfigureInsimul(const FString& ServerURL, const FString& WorldId)
 {
+	// Read from the world source when the runtime has booted (US-XC4): the crowd
+	// bridge maps crowd actors against the same loaded world as the rest of the
+	// runtime, so an empty WorldId resolves to the booted world rather than the
+	// server default. The character catalogue is still loaded via the mapping
+	// subsystem transport; the world id it keys on now comes from the world source.
+	FString EffectiveWorldId = WorldId;
+	if (EffectiveWorldId.IsEmpty())
+	{
+		if (const UGameInstance* GI = GetGameInstance())
+		{
+			if (const UInsimulRuntimeSubsystem* Runtime = GI->GetSubsystem<UInsimulRuntimeSubsystem>())
+			{
+				if (Runtime->IsRuntimeReady())
+				{
+					EffectiveWorldId = Runtime->GetWorldId();
+				}
+			}
+		}
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		if (UInsimulCharacterMappingSubsystem* Subsystem = World->GetSubsystem<UInsimulCharacterMappingSubsystem>())
 		{
-			Subsystem->SetInsimulWorldId(WorldId);
+			Subsystem->SetInsimulWorldId(EffectiveWorldId);
 			Subsystem->LoadInsimulCharacters(ServerURL);
 
-			UE_LOG(LogTemp, Log, TEXT("Configured Insimul: Server=%s, WorldId=%s"), *ServerURL, *WorldId);
+			UE_LOG(LogTemp, Log, TEXT("Configured Insimul: Server=%s, WorldId=%s"), *ServerURL, *EffectiveWorldId);
 		}
 	}
 }
