@@ -1,7 +1,0 @@
-{
-  "description": "SHA-256 integrity of each fixture AFTER migrateSaveFile() to SAVE_FILE_VERSION (TS authority). The Unity host harness (tools/verify-unity/Program.cs) loads+migrates the same fixture and asserts its ComputeIntegrity() matches. Regenerate with the same vite-node dump if the migration chain changes.",
-  "vectors": {
-    "v1-minimal.json": "5d4292aa2090e750aa245597f6db0c984dce96c69278cded280d296d0c7c75b7",
-    "v2-typical.json": "132b59b8559d9570d09fd69264e7acc3e9bf93eaeee42682452f9efbdbc32466"
-  }
-}

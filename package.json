@@ -10,7 +10,10 @@
   },
   "homepage": "https://github.com/insimul/runtime",
   "workspaces": [
-    "packages/*"
+    "packages/core",
+    "packages/babylon",
+    "packages/typescript",
+    "packages/babylon-game"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
@@ -23,31 +26,8 @@
   ],
   "scripts": {
     "check": "tsc -p tsconfig.check.json",
-    "engines:manifests": "node scripts/engines/validate-manifests.mjs",
-    "engines:templates": "node scripts/engines/validate-templates.mjs",
-    "engines:check": "bash scripts/engines-check.sh",
-    "engines:unreal:host": "bash tools/verify-unreal/run-host-tests.sh",
-    "engines:unreal:binding": "bash tools/verify-unreal/run-binding-tests.sh",
-    "engines:unreal:scene": "bash tools/verify-unreal/run-scene-tests.sh",
-    "engines:unreal:placeholder": "bash tools/verify-unreal/run-placeholder-tests.sh",
-    "engines:unreal:reimport": "bash tools/verify-unreal/run-reimport-tests.sh",
-    "engines:unreal:binding-editor": "bash tools/verify-unreal/run-binding-editor-tests.sh",
-    "engines:unreal:connect": "bash tools/verify-unreal/run-connect-tests.sh",
-    "engines:unreal:world-browser": "bash tools/verify-unreal/run-world-browser-tests.sh",
-    "engines:unreal:generation": "bash tools/verify-unreal/run-generation-tests.sh",
-    "engines:unreal:conversation": "bash tools/verify-unreal/run-conversation-tests.sh",
-    "engines:unreal:ui": "bash tools/verify-unreal/run-ui-tests.sh",
-    "engines:unreal:quest-ui": "bash tools/verify-unreal/run-quest-ui-tests.sh",
-    "engines:unreal:trade": "bash tools/verify-unreal/run-trade-ui-tests.sh",
-    "engines:unreal:dialogue-ui": "bash tools/verify-unreal/run-dialogue-ui-tests.sh",
-    "engines:release": "node scripts/engines/release-dry-run.mjs",
     "test": "vitest run",
-    "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell",
-    "codegen": "node tools/codegen/index.mjs",
-    "codegen:verify-cs": "node tools/codegen/verify-cs/run.mjs",
-    "codegen:verify-cpp": "node tools/codegen/verify-cpp/run.mjs",
-    "codegen:verify-gdscript": "node tools/codegen/verify-gdscript/run.mjs",
-    "openapi:sync": "node tools/codegen/openapi-sync.mjs"
+    "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

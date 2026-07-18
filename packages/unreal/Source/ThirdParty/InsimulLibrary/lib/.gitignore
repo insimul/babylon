@@ -1,9 +1,0 @@
-# Prebuilt native binaries are staged at package time — never commit them.
-*.dylib
-*.so
-*.dll
-*.lib
-*.a
-# Keep the directory layout + this README tracked.
-!README.md
-!.gitignore
