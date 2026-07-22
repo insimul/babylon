@@ -127,16 +127,90 @@ or renaming a module in `@insimul/babylon`, or dropping it from that package's
 resolution of the same shims is covered by
 `packages/babylon/src/__tests__/exports-map.test.ts`.
 
+## Versioning
+
+The four web packages are **independently versioned** — `@insimul/babylon` moves when
+the runtime changes, the passthroughs only when a shim surface does — so their versions
+diverge on purpose. [`VERSIONS.json`](../VERSIONS.json) is the single source of truth: a
+`web` block pins each package's version, and the release preflight fails if a manifest
+disagrees with it. (The native engine packages use the same file; see
+[`RELEASING.md`](./RELEASING.md).)
+
+To bump a package: edit its `VERSIONS.json` `web` entry, sync `package.json`
+`version`, and add a `CHANGELOG.md` entry. Semver applies normally, with one
+consolidation-specific rule: **dropping a shim** from a deprecated passthrough (or
+removing a passthrough package) is a **major** bump — that is the step-4 "shim removal"
+milestone in the root README's timeline, not a patch.
+
+A release is cut by tagging: `web-v<train>`, where the train is the release date —
+e.g. `web-v2026.07.22`. The tag names the *release train*, not a version; the release
+publishes whichever per-package versions are not yet on the registry, so re-running a
+tag is idempotent and a train that only bumps one package publishes only that one.
+
+## The release workflow
+
+```bash
+npm run release:dry-run          # rehearse the whole release; publishes nothing
+```
+
+`scripts/release/publish-web-packages.mjs` is the release orchestrator, and
+[`.github/workflows/release-web-packages.yml`](../.github/workflows/release-web-packages.yml)
+is the tag-triggered CI job that runs it. Both run the same four steps in the same
+order, so the dry-run is a real rehearsal:
+
+| Step | What | Fails on |
+| --- | --- | --- |
+| 1. preflight | manifest versions vs `VERSIONS.json` `web`; `access: restricted`; the tag is a `web-v*` tag pointing at HEAD; clean worktree | a version drift, a `public` flip, an untagged or dirty checkout |
+| 2. gate | `npm run publish:dry-run` (tarball contents, above) | missing entry/README/LICENSE, leaked tests, a broken passthrough shim |
+| 3. publish | `npm publish` per package, skipping versions already on the registry | a registry error |
+| 4. deprecate | `npm deprecate` per passthrough, using the manifest's own message | a registry error |
+
+In dry-run mode steps 3–4 are **printed, not run** (`would run npm publish …`), so you
+can read the exact plan before authorizing it.
+
+### Why this cannot publish by accident
+
+Publishing is outward and irreversible, so the real publish path takes **three
+independent opt-ins**, none of them a default:
+
+1. the workflow's `publish` job requires the repository variable
+   `INSIMUL_PUBLISH_ENABLED` to be exactly `"true"` — unset (the current state) means
+   every tag and every manual run is a rehearsal;
+2. that job runs in the `npm-release` GitHub environment, so it waits on that
+   environment's reviewers;
+3. the script itself publishes only with `--execute` **and** `INSIMUL_PUBLISH=1` in the
+   environment — a stray `--execute` alone exits non-zero.
+
+`shared/__tests__/release-workflow.test.ts` parses the workflow and fails if any step
+that can reach the registry loses one of those guards, or if the verify job stops
+running a gate.
+
 ## Actually publishing
 
-Publishing is an **outward, irreversible** step and is deliberately **not** automated
-from this repo's task tooling. It requires:
+Publishing is a **deliberate human/CI step** and is never triggered by this repo's task
+tooling. Preconditions:
 
-1. a clean, tagged checkout,
+1. a clean checkout tagged `web-v<train>` (see "Versioning" above),
 2. `GITHUB_TOKEN` with `write:packages` (see `.npmrc.example`),
-3. a green `npm run check`, `npm test`, `npm run test:export-shell`, and
-   `npm run publish:dry-run`,
+3. a green `npm run check`, `npm test`, `npm run test:export-shell`,
+   `npm run publish:dry-run`, and `npm run release:dry-run`,
 4. the hygiene gate above still being satisfied (i.e. `access: restricted`),
-5. an `npm deprecate` call for each passthrough version, right after its publish
-   (see "The deprecated passthroughs" above) — publishing alone does **not** set the
-   registry deprecation flag.
+5. `INSIMUL_PUBLISH_ENABLED=true` set as a repository variable and a reviewer on the
+   `npm-release` environment ready to approve.
+
+Then push the tag and approve the `publish` job. To release from a workstation
+instead:
+
+```bash
+GITHUB_TOKEN=… INSIMUL_PUBLISH=1 \
+  node scripts/release/publish-web-packages.mjs --execute --tag web-v2026.07.22
+```
+
+Step 4 of the orchestrator issues the `npm deprecate` call for each passthrough version
+right after its publish (see "The deprecated passthroughs" above) — publishing alone
+does **not** set the registry deprecation flag.
+
+**Going public is still blocked.** Everything above releases *restricted* packages to
+the Insimul org. The flip to `public` awaits the git-history audit and the third-party
+purge described at the top of this file; until then the publish gate fails on any
+manifest that is not `restricted`, in the release path as well as in CI.

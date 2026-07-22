@@ -567,3 +567,26 @@ manifest:
   `@insimul/babylon`; the CLI step is a documented release precondition.
 - **Falsify every new gate assertion**: `cp` the victim file to `/tmp`, break it, run
   the gate, restore, re-run. A vacuous guard is worse than none.
+
+### The release path (US-PB3)
+
+`scripts/release/packages.mjs` is the **shared** package table (dirs, names,
+`mustInclude`, `deprecated`, the `web-v*` tag pattern) — the publish gate and the
+release orchestrator both import it, so they can never disagree about what ships
+(same "one manifest, two consumers" pattern as `packages/core/scripts/schema-manifest.ts`).
+
+- **`npm run release:dry-run`** (`scripts/release/publish-web-packages.mjs`) is the
+  whole release, rehearsed: preflight → publish gate → the `npm publish` /
+  `npm deprecate` commands **printed, not run**. Real publishing needs `--execute`
+  AND `INSIMUL_PUBLISH=1`; CI additionally needs the `INSIMUL_PUBLISH_ENABLED` repo
+  variable and the `npm-release` environment's reviewers. Keep all three opt-ins —
+  `shared/__tests__/release-workflow.test.ts` parses the workflow and fails if a
+  registry-reaching step loses one (falsified four ways when it was written).
+- **Version discipline**: `VERSIONS.json` now has a `web` block pinning all four
+  npm packages; a manifest that disagrees fails the preflight. Bump the entry AND
+  the manifest AND the CHANGELOG together. The packages stay independently versioned;
+  the git tag (`web-v<date>`) names a release *train*, and publishing skips versions
+  already on the registry, so one tag releases only what actually changed.
+- A test that must run from the repo root (not a package) goes in `shared/__tests__/`
+  **and** must be added to the root `vitest.config.ts` `include` list by name — that
+  array lists shared-tree suites explicitly, it has no `shared/**` glob.

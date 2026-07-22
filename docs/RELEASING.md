@@ -1,4 +1,23 @@
-# Releasing the native engine packages
+# Releasing
+
+Insimul ships two families of packages with two release processes:
+
+| Family | Packages | Process |
+| --- | --- | --- |
+| **Web (npm)** | `@insimul/core`, `@insimul/babylon`, and the deprecated `@insimul/typescript` / `@insimul/babylon-game` | [`PUBLISHING.md`](./PUBLISHING.md) — tag `web-v<train>`, CI workflow `.github/workflows/release-web-packages.yml`, rehearse with `npm run release:dry-run` |
+| **Native engines** | `packages/{unity,unreal,godot}` | this file — per-engine artifacts, manual submission |
+
+Both families single-source their versions from [`VERSIONS.json`](../VERSIONS.json)
+(the `web` block for npm, the top-level keys for the engines) and both are
+**private/restricted today**: the npm packages publish with
+`publishConfig.access: "restricted"` to the Insimul org, and **going public is gated on
+the repository-hygiene work** — a git-history audit and a third-party-content purge. A
+public package exposes the whole commit history, which has not yet been reviewed for
+credentials, private world content, or licensed corpora. The publish gate fails on any
+manifest that is not `restricted`, so the flip has to be a deliberate, reviewed edit.
+See [`PUBLISHING.md`](./PUBLISHING.md).
+
+## The native engine packages
 
 The three native engine packages — `packages/unity`, `packages/unreal`,
 `packages/godot` — are **independently releasable**. Each targets a different
@@ -14,9 +33,10 @@ self-contained (Node + system `zip`/
 `tar` only, no repo-root imports) so they move verbatim with their package** —
 nothing in `scripts/release/` reaches back into the runtime repo.
 
-## Version discipline (do this first, every release)
+### Version discipline (do this first, every release)
 
-`VERSIONS.json` at the repo root is the single source of truth. To cut a release:
+`VERSIONS.json` at the repo root is the single source of truth. To cut an engine
+release:
 
 1. Bump the package's entry in `VERSIONS.json`.
 2. Sync the package manifest(s): unity `package.json` `version`; unreal `VERSION`
@@ -29,7 +49,7 @@ nothing in `scripts/release/` reaches back into the runtime repo.
 Because the packages are independent, their versions may diverge; only a
 package's *own* manifest must match its *own* `VERSIONS.json` entry.
 
-## Dry-run the artifacts
+### Dry-run the artifacts
 
 `npm run engines:release` builds and validates every package's release artifact
 without publishing (each also runs standalone — see below). Artifacts land in
@@ -42,7 +62,7 @@ set and exits non-zero on a layout problem, so this doubles as a release gate.
 | Unreal | `node packages/unreal/scripts/release/build-plugin-zip.mjs` | `dist/Insimul-<v>.zip` | FAB / Marketplace |
 | Godot | `node packages/godot/scripts/release/build-assetlib-zip.mjs` | `dist/insimul-godot-<v>.zip` | Godot Asset Library |
 
-### Unity — UPM tarball
+#### Unity — UPM tarball
 
 `npm pack` produces the UPM tarball. The `files` allow-list in
 `packages/unity/package.json` keeps it to the SDK (`Runtime/`, `Editor/`,
@@ -53,7 +73,7 @@ dry-run asserts the tarball ships the SDK and never `templates/`, then prints an
 OpenUPM readiness checklist. Publishing is a manual `npm publish` (or OpenUPM CI)
 from a clean, tagged checkout.
 
-### Unreal — FAB / Marketplace plugin zip
+#### Unreal — FAB / Marketplace plugin zip
 
 Stages the plugin into `dist/Insimul/` with `Insimul.uplugin` at the plugin-folder
 root plus `Source/`, then zips it. Build intermediates (`Binaries/`,
@@ -63,7 +83,7 @@ compile against each supported UE version requires the Unreal editor and is **ou
 of this harness** (see `tools/README.md`); do it before submitting `dist/Insimul-<v>.zip`
 to the FAB seller portal.
 
-### Godot — Asset Library zip
+#### Godot — Asset Library zip
 
 Stages `addons/insimul/**` (the reusable plugin) plus docs into
 `dist/insimul-godot/` and zips it in the layout the editor's AssetLib installer
@@ -71,7 +91,7 @@ preserves. The `templates/` tree is excluded. The dry-run asserts `plugin.cfg`
 and every committed `addons/` file are present. Submission is manual at
 godotengine.org/asset-library, pointing at a tagged commit.
 
-## After the split
+### After the split
 
 When a package moves to its own repo, drop `scripts/release/` in place (it already
 has no runtime-repo dependencies), keep `VERSIONS.json` as a small per-repo file

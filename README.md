@@ -183,6 +183,23 @@ resolves into it once installed. It publishes nothing.
 > credentials, private world content, or licensed third-party corpora. See
 > [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
 
+### Release
+
+```bash
+npm run release:dry-run
+```
+
+Rehearses a whole release — preflight (manifest versions vs the `web` block of
+`VERSIONS.json`, `access: restricted`, a `web-v*` tag on a clean HEAD), the publish
+gate, then the `npm publish` / `npm deprecate` commands **printed rather than run**.
+A real release is cut by pushing a `web-v<train>` tag (e.g. `web-v2026.07.22`), which
+runs `.github/workflows/release-web-packages.yml`: it verifies, and only publishes if
+the `INSIMUL_PUBLISH_ENABLED` repository variable is `"true"` **and** a reviewer
+approves the `npm-release` environment — so no tag, push, or manual run publishes by
+accident. `shared/__tests__/release-workflow.test.ts` fails if any of those guards
+goes missing. Versioning policy and the full process:
+[`docs/PUBLISHING.md`](docs/PUBLISHING.md), [`docs/RELEASING.md`](docs/RELEASING.md).
+
 ## Shim / deprecation timeline
 
 1. **Now (consolidated, shims live).** `@insimul/babylon` is the one web-runtime package.

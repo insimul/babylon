@@ -73,6 +73,32 @@ so a web creator installs exactly one thing (plan: `docs/PLATFORM_SPLIT_AND_ENGI
   un-shipping a module in the successor package now fails the gate instead of a
   consumer's install.
 
+### Added — release workflow (US-PB3)
+
+- **`npm run release:dry-run`** (`scripts/release/publish-web-packages.mjs`) — the
+  release orchestrator, dry-run by default. It runs the preflight (manifest versions vs
+  the new `web` block in `VERSIONS.json`, the `restricted` access pin, a `web-v*` tag on
+  a clean HEAD) and the publish gate, then **prints** the `npm publish` /
+  `npm deprecate` commands it would run. Publishing requires `--execute` *and*
+  `INSIMUL_PUBLISH=1`; a stray flag alone exits non-zero.
+- **`.github/workflows/release-web-packages.yml`** — cuts a release on a `web-v<train>`
+  tag (e.g. `web-v2026.07.22`). The `verify` job runs `check`, `test`,
+  `test:export-shell`, the publish gate, and the release dry-run; the `publish` job runs
+  only when the `INSIMUL_PUBLISH_ENABLED` repository variable is `"true"` **and** a
+  reviewer approves the `npm-release` environment — so no tag, push, or manual run
+  publishes by accident. Publishing is idempotent: versions already on the registry are
+  skipped, so one tag releases only what changed.
+- **`VERSIONS.json` now covers the web packages** (`web` block) alongside the native
+  engines; the packages stay independently versioned, and the preflight fails on any
+  manifest/`VERSIONS.json` drift.
+- **`shared/__tests__/release-workflow.test.ts`** — parses the workflow and fails if a
+  step that can reach the registry loses a guard, or if the verify job stops running a
+  gate.
+- **Docs** — `docs/PUBLISHING.md` gained "Versioning" (tag format + semver policy, incl.
+  shim removal = major) and "The release workflow"; `docs/RELEASING.md` now indexes both
+  package families and restates that going public awaits the history-audit /
+  third-party-purge hygiene.
+
 ### Deprecated
 
 - **`@insimul/typescript`** → install `@insimul/babylon`, import `@insimul/babylon/conversation`.

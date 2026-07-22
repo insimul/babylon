@@ -28,7 +28,8 @@
     "check": "tsc -p tsconfig.check.json",
     "test": "vitest run",
     "test:export-shell": "npm --workspace=@insimul/babylon run test:export-shell",
-    "publish:dry-run": "node scripts/release/npm-publish-dry-run.mjs"
+    "publish:dry-run": "node scripts/release/npm-publish-dry-run.mjs",
+    "release:dry-run": "node scripts/release/publish-web-packages.mjs"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

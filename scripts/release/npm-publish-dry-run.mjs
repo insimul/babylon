@@ -12,10 +12,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, posix, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+import { join, posix } from 'node:path';
+import { PACKAGES, repoRoot, SUCCESSOR } from './packages.mjs';
 
 /**
  * Patterns that must NEVER appear in a published tarball. Tests, dev tooling, and
@@ -30,40 +28,6 @@ const FORBIDDEN = [
   { pattern: /^vitest\.config\./, why: 'test config' },
   { pattern: /(^|\/)OLD_[A-Z_]+\.json$/, why: 'guard snapshot' },
 ];
-
-/**
- * The packages this gate covers, with the files each one must ship beyond
- * README/LICENSE (which are required of every package).
- *
- * `deprecated: true` marks a passthrough package (US-PB2): it must carry deprecation
- * metadata pointing at @insimul/babylon, depend on it, and ship shims that still
- * resolve there once installed.
- */
-const PACKAGES = [
-  { dir: 'packages/core', name: '@insimul/core', mustInclude: ['src/index.ts', 'schemas/save-file.schema.json'] },
-  {
-    dir: 'packages/babylon',
-    name: '@insimul/babylon',
-    mustInclude: ['src/index.ts', 'src/conversation/index.ts', 'src/data/index.ts', 'src/engine/index.ts', 'templates/vite.config.ts'],
-  },
-  {
-    dir: 'packages/typescript',
-    name: '@insimul/typescript',
-    mustInclude: ['src/index.ts'],
-    deprecated: true,
-  },
-  {
-    dir: 'packages/babylon-game',
-    name: '@insimul/babylon-game',
-    // The snapshotted shim surface (OLD_EXPORT_SURFACE.json) is asserted separately;
-    // these are the two entry points the platform imports directly.
-    mustInclude: ['src/WorldStateManager.ts', 'src/DataSource.ts'],
-    deprecated: true,
-  },
-];
-
-/** The package every deprecated passthrough must point at. */
-const SUCCESSOR = '@insimul/babylon';
 
 const ALWAYS_INCLUDE = ['README.md', 'LICENSE'];
 
