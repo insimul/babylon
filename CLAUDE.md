@@ -197,6 +197,18 @@ gotchas:
   session and never lands in a save. Base packs must use only predicate-schema-guaranteed
   predicates (`person`/`occupation`/`settlement`/`settlement_mayor`/`item_category`/
   `business_owner`) so they are world-portable.
+- **Content-library fixtures (US-CL2)**: `conformance/content-library/*.json` break
+  the `{ area, description, cases }` envelope pattern — each file **is** a whole
+  content library (the artifact an editor publishes / an importer reads), validated
+  against `contentLibrarySchema` by `src/conformance/__tests__/content-library-corpus.test.ts`.
+  `minimal.json` pins the empty-section discipline, `riverside-starter.json` is the
+  full-coverage golden. Beyond schema-parse the runner asserts the *importer*
+  contract: lossless parse (`parse(raw)` deep-equals `raw`, so `.passthrough()`
+  keeps unrecognised authored fields), per-section id uniqueness, every cross-ref
+  (`assignedBy`/`prerequisiteQuestIds`/`mayorId`/`homeTownId`) resolving to a
+  library-scoped id, and `prologFacts` passing `validatePrologFact` against
+  `getCurrentPredicateSchema()`. Format documented in `conformance/README.md`
+  (§ "Content-library fixture format").
 
 ### Dependency-direction guard (US-CE6)
 

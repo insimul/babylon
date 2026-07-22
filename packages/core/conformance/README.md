@@ -19,6 +19,10 @@ never as code.**
 - `radiant/*.json` — the radiant quest-generation corpus (see "Radiant case
   format" below). Pins `generateRadiantQuests` — the contract the future native
   `insimul_radiant_tick()` must match.
+- `content-library/*.json` — portable content-library (world artifact) fixtures
+  (see "Content-library fixture format" below). The shared golden every
+  per-engine importer validates against, run by
+  `src/conformance/__tests__/content-library-corpus.test.ts`.
 - `ui/*.json` — the default-UI view-model corpus (US-GU1). `theme-tokens.json` is
   the single-source-of-truth design token set every engine's theme maps;
   `registry-cases.json` pins the panel-registry behavior (default lookup, creator
@@ -160,6 +164,57 @@ giver differs accordingly. A native engine that sorts candidates or seeds its RN
 differently will diverge here — which is exactly the contract violation this
 corpus exists to catch. The quest-list order is the deterministic sorted-`TplId`
 order.
+
+## Content-library fixture format
+
+Unlike the `prolog/` and `radiant/` corpora (a `{ area, description, cases }`
+envelope of input→expected pairs), each file in `content-library/` **is** a
+content library — a whole artifact, exactly as an editor would publish it and an
+importer would read it. The schema is `contentLibrarySchema`
+(`src/schemas/content-library.schema.ts`, US-CL1); the JSON Schema counterpart
+is `schemas/content-library.schema.json`.
+
+```jsonc
+{
+  "manifest": {
+    "contractVersion": "insimul-content-library-v1",  // z.literal — a stale value is REJECTED
+    "libraryId": "lib-riverside-starter",             // unique to its publisher
+    "name": "Riverside Starter Pack",
+    "version": 3,                                     // the library's own monotonic revision
+    "generatedAt": "2026-07-22T00:00:00.000Z",
+    "provenance": { "source": "insimul-editor", "license": "CC-BY-SA-4.0" }  // both REQUIRED
+  },
+  "items": [ { "id": "…", "name": "…", "itemType": "…" } ],
+  "quests": [ { "id": "…", "title": "…", "questType": "…" } ],
+  "characters": [ { "id": "…", "name": "…" } ],
+  "towns": [ { "id": "…", "name": "…", "settlementType": "…" } ],
+  "narratives": [ { "id": "…", "title": "…" } ],
+  "prologFacts": [ "settlement(town_riverside)." ]    // OPTIONAL KB slice
+}
+```
+
+Field semantics (a conforming importer MUST honour these):
+
+- **All five section headers are REQUIRED.** An empty array is how a library says
+  "no content of this kind" — same discipline as the WorldIR section headers — so
+  an importer iterates the five kinds without presence checks. Only `prologFacts`
+  is optional. `minimal.json` pins exactly this case.
+- **Cross-references are library-scoped ids**, never world/db ids: a quest's
+  `assignedBy` → a `characters[].id`, its `prerequisiteQuestIds` → `quests[].id`,
+  a character's `homeTownId` → `towns[].id`, a town's `mayorId` →
+  `characters[].id`. An importer resolves the whole entity graph from the artifact
+  alone and remaps to its own ids on import. Ids are unique within each section.
+- **Every definition is `.passthrough()`**, so parsing is lossless — fields the
+  schema has not tightened yet (a lot's `buildingType`, a business's `ownerId`, an
+  objective's shape) reach the importer intact. Only a MISSING required key fails.
+  The corpus runner asserts `parse(raw)` deep-equals `raw` to keep this true.
+- **`prologFacts`** must use only predicate-schema-registered predicates
+  (`getCurrentPredicateSchema()`), validated fact-by-fact via `validatePrologFact`
+  — an unregistered predicate would not be world-portable.
+
+`riverside-starter.json` is the full-coverage golden: every kind populated, every
+cross-reference resolving, a KB slice attached. Add fixtures here whenever a new
+authored shape becomes load-bearing for import.
 
 ## Purpose — the cross-engine parity gate
 
