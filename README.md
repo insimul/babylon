@@ -164,6 +164,23 @@ consolidation from regressing:
   `packages/babylon/OLD_ENGINE_EXPORT_SURFACE.json`); the guard fails if any old
   importable path stops being a thin re-export shim.
 
+### Publish gate
+
+```bash
+npm run publish:dry-run
+```
+
+Runs `npm publish --dry-run` for each web package and asserts the tarball ships the
+entry + every `exports` target + `README`/`LICENSE`, and ships **no** tests,
+conformance corpus, or dev tooling. It publishes nothing.
+
+> **Public release is gated on repository hygiene.** Every package pins
+> `publishConfig.access: "restricted"` and the gate fails if that changes. Going
+> public awaits the **git-history audit** and the **third-party purge** — a public
+> package exposes the whole commit history, which has not yet been reviewed for
+> credentials, private world content, or licensed third-party corpora. See
+> [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
+
 ## Shim / deprecation timeline
 
 1. **Now (consolidated, shims live).** `@insimul/babylon` is the one web-runtime package.

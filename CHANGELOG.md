@@ -41,6 +41,21 @@ so a web creator installs exactly one thing (plan: `docs/PLATFORM_SPLIT_AND_ENGI
 - README rewritten around the two-package model with a "plug Insimul into your existing
   web game" quickstart.
 
+### Added — publishing (US-PB1)
+
+- **`@insimul/core` + `@insimul/babylon` are publish-ready.** Both pin
+  `publishConfig.access: "restricted"` (public release is gated on the git-history
+  audit + third-party purge — see `docs/PUBLISHING.md`), ship `LICENSE` (Apache-2.0)
+  and a package `README.md` (new for `@insimul/babylon`), and carry tightened `files`
+  allow-lists that exclude every test file, `__tests__/` directory, the `conformance/`
+  parity corpus, and dev tooling. `@insimul/core` now also ships its language-neutral
+  contract artifacts (`schemas/*.schema.json`, `openapi/`, `data/`).
+- **`npm run publish:dry-run`** (`scripts/release/npm-publish-dry-run.mjs`) — a publish
+  gate that dry-runs each package and asserts the tarball contents, the `exports`-map
+  targets, and the `restricted` access pin. It never publishes.
+- **`docs/PUBLISHING.md`** — the npm release process, the source-distribution rationale
+  (no `dist/` build by design), and the hygiene gate on going public.
+
 ### Deprecated
 
 - **`@insimul/typescript`** → install `@insimul/babylon`, import `@insimul/babylon/conversation`.
