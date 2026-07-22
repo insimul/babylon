@@ -134,6 +134,19 @@ emitted JSON Schema counterparts. Conventions:
   drift guard covers them. `contractVersion` is a `z.literal` of
   `GROUNDING_CONTRACT_VERSION`, so any new bridge shape added here MUST reuse that
   constant (or a stale-version fixture would be silently accepted).
+- **Content library / world artifact (US-CL1)**: `schemas/content-library.schema.ts`
+  is the shareable authored-content unit — `manifest` (own `CONTENT_LIBRARY_CONTRACT_VERSION`
+  literal, monotonic `version`, `provenance` with a required SPDX `license`) plus the
+  five REQUIRED section headers `items`/`quests`/`characters`/`towns`/`narratives`
+  (empty array = "none of this kind", same discipline as the WorldIR section headers)
+  and an optional `prologFacts` KB slice. Each definition MIRRORS the portable subset
+  of its `*IR` interface (`ItemIR`/`QuestIR`/`CharacterIR`/`SettlementIR`/`NarrativeIR`)
+  so an entry lifts into a WorldIR section without a translation table — but drops
+  world-scoped identity (`worldId`) and engine-computed geometry (street networks,
+  elevation profiles) and uses ONLY `NarrativeIR`'s generic `protagonist*` vocabulary,
+  never its legacy Missing-Writer field names. Cross-references between definitions
+  (`assignedBy`, `mayorId`, `homeTownId`, `prerequisiteQuestIds`) are **library-scoped
+  ids**, resolved on import.
 
 ### Conformance corpus (US-CE5)
 
@@ -184,6 +197,18 @@ gotchas:
   session and never lands in a save. Base packs must use only predicate-schema-guaranteed
   predicates (`person`/`occupation`/`settlement`/`settlement_mayor`/`item_category`/
   `business_owner`) so they are world-portable.
+- **Content-library fixtures (US-CL2)**: `conformance/content-library/*.json` break
+  the `{ area, description, cases }` envelope pattern — each file **is** a whole
+  content library (the artifact an editor publishes / an importer reads), validated
+  against `contentLibrarySchema` by `src/conformance/__tests__/content-library-corpus.test.ts`.
+  `minimal.json` pins the empty-section discipline, `riverside-starter.json` is the
+  full-coverage golden. Beyond schema-parse the runner asserts the *importer*
+  contract: lossless parse (`parse(raw)` deep-equals `raw`, so `.passthrough()`
+  keeps unrecognised authored fields), per-section id uniqueness, every cross-ref
+  (`assignedBy`/`prerequisiteQuestIds`/`mayorId`/`homeTownId`) resolving to a
+  library-scoped id, and `prologFacts` passing `validatePrologFact` against
+  `getCurrentPredicateSchema()`. Format documented in `conformance/README.md`
+  (§ "Content-library fixture format").
 
 ### Dependency-direction guard (US-CE6)
 
