@@ -27,3 +27,22 @@ export {
   type GroundingPackSchema,
   type CanonicalWorldExportSchema,
 } from './grounding.schema';
+export {
+  CONTENT_LIBRARY_CONTRACT_VERSION,
+  contentLibraryProvenanceSchema,
+  contentLibraryManifestSchema,
+  itemDefinitionSchema,
+  questDefinitionSchema,
+  characterDefinitionSchema,
+  townDefinitionSchema,
+  narrativeDefinitionSchema,
+  contentLibrarySchema,
+  type ContentLibraryProvenanceSchema,
+  type ContentLibraryManifestSchema,
+  type ItemDefinitionSchema,
+  type QuestDefinitionSchema,
+  type CharacterDefinitionSchema,
+  type TownDefinitionSchema,
+  type NarrativeDefinitionSchema,
+  type ContentLibrarySchema,
+} from './content-library.schema';

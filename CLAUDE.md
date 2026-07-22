@@ -134,6 +134,19 @@ emitted JSON Schema counterparts. Conventions:
   drift guard covers them. `contractVersion` is a `z.literal` of
   `GROUNDING_CONTRACT_VERSION`, so any new bridge shape added here MUST reuse that
   constant (or a stale-version fixture would be silently accepted).
+- **Content library / world artifact (US-CL1)**: `schemas/content-library.schema.ts`
+  is the shareable authored-content unit — `manifest` (own `CONTENT_LIBRARY_CONTRACT_VERSION`
+  literal, monotonic `version`, `provenance` with a required SPDX `license`) plus the
+  five REQUIRED section headers `items`/`quests`/`characters`/`towns`/`narratives`
+  (empty array = "none of this kind", same discipline as the WorldIR section headers)
+  and an optional `prologFacts` KB slice. Each definition MIRRORS the portable subset
+  of its `*IR` interface (`ItemIR`/`QuestIR`/`CharacterIR`/`SettlementIR`/`NarrativeIR`)
+  so an entry lifts into a WorldIR section without a translation table — but drops
+  world-scoped identity (`worldId`) and engine-computed geometry (street networks,
+  elevation profiles) and uses ONLY `NarrativeIR`'s generic `protagonist*` vocabulary,
+  never its legacy Missing-Writer field names. Cross-references between definitions
+  (`assignedBy`, `mayorId`, `homeTownId`, `prerequisiteQuestIds`) are **library-scoped
+  ids**, resolved on import.
 
 ### Conformance corpus (US-CE5)
 

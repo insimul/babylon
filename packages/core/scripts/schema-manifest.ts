@@ -21,6 +21,7 @@ import {
   groundingPackSchema,
   canonicalWorldExportSchema,
 } from '../src/schemas/grounding.schema';
+import { contentLibrarySchema } from '../src/schemas/content-library.schema';
 
 export interface SchemaEntry {
   /** Output filename under packages/core/schemas/. */
@@ -40,6 +41,11 @@ export const SCHEMA_ENTRIES: SchemaEntry[] = [
     file: 'canonical-world-export.schema.json',
     name: 'CanonicalWorldExport',
     schema: canonicalWorldExportSchema,
+  },
+  {
+    file: 'content-library.schema.json',
+    name: 'ContentLibrary',
+    schema: contentLibrarySchema,
   },
 ];
 
