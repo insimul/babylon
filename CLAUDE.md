@@ -533,3 +533,60 @@ it will link. `autoMerge` is off for these PRDs — a human reviews toolchain wi
   `smoke/test_smoke.gd` is a `godot --headless -s` end-to-end for when a Godot binary
   is available. godot-cpp pin (`godot-4.2-stable`) and libinsimul consumption are in
   `gdextension/THIRD_PARTY.md`.
+
+## Publishing the web packages (`npm run publish:dry-run`, US-PB*)
+
+`scripts/release/npm-publish-dry-run.mjs` is the publish gate for all four web
+packages. It never uploads (`npm publish --dry-run --json` needs no credentials and
+exits 0), so it is safe in CI. Rules it encodes — keep them true when you touch a
+manifest:
+
+- **The web packages are source-distributed on purpose** — `main`/`module`/`types` all
+  point at `src/index.ts` and there is no `dist/`. The export pipeline vendors
+  `packages/babylon/src` verbatim, and babylon src uses `@shared/*` aliases a plain
+  `tsc` emit cannot resolve. Do not add a build step. Rationale: `docs/PUBLISHING.md`.
+- **`publishConfig.access` must stay `"restricted"`** until the §7 history-audit /
+  third-party-purge hygiene lands. The gate fails on anything else, so going public has
+  to be a deliberate reviewed edit.
+- **npm `files` supports negation** — `["src", "!src/**/__tests__", "!src/**/*.test.ts"]`
+  drops tests from the tarball. `README`/`LICENSE`/`package.json` ship regardless of the
+  allow-list, but the **`LICENSE` file must physically exist in each package dir** (npm
+  does not hoist the repo-root one), so a new publishable package needs a `cp LICENSE`.
+- **The deprecated passthroughs' relative shims survive publishing.** `@insimul/typescript`
+  / `@insimul/babylon-game` shims re-export via `../../babylon/src/...`, which escapes
+  the package — that is correct, because npm installs scoped packages as siblings, so
+  from the installed package root `../babylon/src/x` is `node_modules/@insimul/babylon/src/x`,
+  mirroring `packages/babylon/src/x`. The gate normalizes every shipped shim's specifier
+  against the package root and requires it to land under `../babylon/src/` **and** name a
+  file `@insimul/babylon` actually ships. Do NOT rewrite these to bare
+  `@insimul/babylon/...` specifiers — US-BC4's export-pipeline aliasing needs the
+  relative form.
+- **`npm deprecate` is a separate post-publish CLI call**; no manifest field sets the
+  registry flag. The artifact states deprecation three ways (manifest `deprecated`
+  string, a `DEPRECATED …` `description`, a README banner) and all three must name
+  `@insimul/babylon`; the CLI step is a documented release precondition.
+- **Falsify every new gate assertion**: `cp` the victim file to `/tmp`, break it, run
+  the gate, restore, re-run. A vacuous guard is worse than none.
+
+### The release path (US-PB3)
+
+`scripts/release/packages.mjs` is the **shared** package table (dirs, names,
+`mustInclude`, `deprecated`, the `web-v*` tag pattern) — the publish gate and the
+release orchestrator both import it, so they can never disagree about what ships
+(same "one manifest, two consumers" pattern as `packages/core/scripts/schema-manifest.ts`).
+
+- **`npm run release:dry-run`** (`scripts/release/publish-web-packages.mjs`) is the
+  whole release, rehearsed: preflight → publish gate → the `npm publish` /
+  `npm deprecate` commands **printed, not run**. Real publishing needs `--execute`
+  AND `INSIMUL_PUBLISH=1`; CI additionally needs the `INSIMUL_PUBLISH_ENABLED` repo
+  variable and the `npm-release` environment's reviewers. Keep all three opt-ins —
+  `shared/__tests__/release-workflow.test.ts` parses the workflow and fails if a
+  registry-reaching step loses one (falsified four ways when it was written).
+- **Version discipline**: `VERSIONS.json` now has a `web` block pinning all four
+  npm packages; a manifest that disagrees fails the preflight. Bump the entry AND
+  the manifest AND the CHANGELOG together. The packages stay independently versioned;
+  the git tag (`web-v<date>`) names a release *train*, and publishing skips versions
+  already on the registry, so one tag releases only what actually changed.
+- A test that must run from the repo root (not a package) goes in `shared/__tests__/`
+  **and** must be added to the root `vitest.config.ts` `include` list by name — that
+  array lists shared-tree suites explicitly, it has no `shared/**` glob.

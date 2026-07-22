@@ -25,6 +25,8 @@ export default defineConfig({
     include: [
       // The import-hygiene guard.
       'shared/__tests__/import-hygiene.test.ts',
+      // The release-workflow guard (US-PB3): the publish path stays guarded.
+      'shared/__tests__/release-workflow.test.ts',
       // Per-package vitest suites.
       'packages/babylon/src/**/*.test.{ts,tsx}',
       'packages/babylon-game/src/**/*.test.{ts,tsx}',

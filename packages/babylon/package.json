@@ -43,13 +43,18 @@
   },
   "homepage": "https://github.com/insimul/runtime/tree/main/packages/babylon",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "files": [
     "src",
+    "!src/**/__tests__",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
     "templates",
     "tsconfig.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

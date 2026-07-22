@@ -1,0 +1,96 @@
+# Release the four web npm packages (@insimul/core, @insimul/babylon, and the two
+# deprecated passthroughs) on a `web-v*` tag.
+#
+# The workflow is a rehearsal by default and can only publish with THREE independent
+# opt-ins, so no ordinary push, tag, or manual run can release by accident:
+#
+#   1. the `publish` job's `if:` requires the repository variable
+#      INSIMUL_PUBLISH_ENABLED to be exactly "true" (unset = every run is a dry run);
+#   2. `environment: npm-release` gates the job on that environment's reviewers;
+#   3. the release script itself needs `--execute` AND INSIMUL_PUBLISH=1.
+#
+# Docs: docs/PUBLISHING.md (the release process, the tag/versioning policy, and why
+# `publishConfig.access` stays `restricted` until the history-audit / third-party-purge
+# hygiene lands).
+name: Release web packages
+
+on:
+  push:
+    tags:
+      - 'web-v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Attempt a real publish (still requires INSIMUL_PUBLISH_ENABLED=true and the npm-release environment)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # Everything that must be green before a release. Runs on every tag and every manual
+  # dispatch; touches no registry.
+  verify:
+    name: Verify (no publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@insimul'
+
+      # No lockfile is committed (the workspace root is the parent directory — see
+      # README § "Workspace install gotcha"), so this is `install`, not `ci`.
+      # --legacy-peer-deps works around the pre-existing @types/react peer conflict.
+      - run: npm install --legacy-peer-deps
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      - name: Export-shell smoke build
+        run: npm run test:export-shell
+
+      - name: Publish gate (tarball contents)
+        run: npm run publish:dry-run
+
+      - name: Release dry-run (preflight + the exact publish plan)
+        run: node scripts/release/publish-web-packages.mjs --tag "${{ github.ref_name }}"
+
+  # The only job that can reach the registry. Skipped entirely unless the repository
+  # variable is set, and then still held for the npm-release environment's reviewers.
+  publish:
+    name: Publish to GitHub Packages
+    needs: verify
+    if: ${{ vars.INSIMUL_PUBLISH_ENABLED == 'true' && (github.event_name == 'push' || inputs.publish) }}
+    environment: npm-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@insimul'
+
+      - run: npm install --legacy-peer-deps
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Re-runs the full preflight + gate, then publishes each package whose version is
+      # not already on the registry and `npm deprecate`s each passthrough.
+      - name: Publish + deprecate
+        run: node scripts/release/publish-web-packages.mjs --execute --tag "${{ github.ref_name }}"
+        env:
+          INSIMUL_PUBLISH: '1'
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

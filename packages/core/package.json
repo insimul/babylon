@@ -20,12 +20,19 @@
   },
   "homepage": "https://github.com/insimul/runtime/tree/main/packages/core",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "files": [
     "src",
+    "!src/**/__tests__",
+    "!src/**/*.test.ts",
+    "schemas",
+    "openapi",
+    "data",
     "tsconfig.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -41,13 +41,72 @@ so a web creator installs exactly one thing (plan: `docs/PLATFORM_SPLIT_AND_ENGI
 - README rewritten around the two-package model with a "plug Insimul into your existing
   web game" quickstart.
 
+### Added — publishing (US-PB1)
+
+- **`@insimul/core` + `@insimul/babylon` are publish-ready.** Both pin
+  `publishConfig.access: "restricted"` (public release is gated on the git-history
+  audit + third-party purge — see `docs/PUBLISHING.md`), ship `LICENSE` (Apache-2.0)
+  and a package `README.md` (new for `@insimul/babylon`), and carry tightened `files`
+  allow-lists that exclude every test file, `__tests__/` directory, the `conformance/`
+  parity corpus, and dev tooling. `@insimul/core` now also ships its language-neutral
+  contract artifacts (`schemas/*.schema.json`, `openapi/`, `data/`).
+- **`npm run publish:dry-run`** (`scripts/release/npm-publish-dry-run.mjs`) — a publish
+  gate that dry-runs each package and asserts the tarball contents, the `exports`-map
+  targets, and the `restricted` access pin. It never publishes.
+- **`docs/PUBLISHING.md`** — the npm release process, the source-distribution rationale
+  (no `dist/` build by design), and the hygiene gate on going public.
+
+### Added — publishable deprecated passthroughs (US-PB2)
+
+- **`@insimul/typescript` + `@insimul/babylon-game` are publish-ready as deprecated
+  stubs.** Both now ship `LICENSE` and a `README.md` (new for `@insimul/babylon-game`,
+  with a per-path migration table), pin `publishConfig.access: "restricted"`, carry a
+  `deprecated` message in the manifest alongside the `DEPRECATED …` description, and
+  exclude tests from `files`. `@insimul/typescript`'s README no longer claims MIT — the
+  package is Apache-2.0 like the rest.
+- **Each passthrough declares `@insimul/babylon` as a dependency**, so installing the
+  old name pulls in the implementation its shims re-export.
+- **The publish gate covers all four packages.** For a deprecated one it additionally
+  asserts the deprecation metadata (manifest + description + README) names
+  `@insimul/babylon`, and that every shipped shim's relative re-export resolves — from
+  the installed package root — to a file `@insimul/babylon` actually ships. Renaming or
+  un-shipping a module in the successor package now fails the gate instead of a
+  consumer's install.
+
+### Added — release workflow (US-PB3)
+
+- **`npm run release:dry-run`** (`scripts/release/publish-web-packages.mjs`) — the
+  release orchestrator, dry-run by default. It runs the preflight (manifest versions vs
+  the new `web` block in `VERSIONS.json`, the `restricted` access pin, a `web-v*` tag on
+  a clean HEAD) and the publish gate, then **prints** the `npm publish` /
+  `npm deprecate` commands it would run. Publishing requires `--execute` *and*
+  `INSIMUL_PUBLISH=1`; a stray flag alone exits non-zero.
+- **`.github/workflows/release-web-packages.yml`** — cuts a release on a `web-v<train>`
+  tag (e.g. `web-v2026.07.22`). The `verify` job runs `check`, `test`,
+  `test:export-shell`, the publish gate, and the release dry-run; the `publish` job runs
+  only when the `INSIMUL_PUBLISH_ENABLED` repository variable is `"true"` **and** a
+  reviewer approves the `npm-release` environment — so no tag, push, or manual run
+  publishes by accident. Publishing is idempotent: versions already on the registry are
+  skipped, so one tag releases only what changed.
+- **`VERSIONS.json` now covers the web packages** (`web` block) alongside the native
+  engines; the packages stay independently versioned, and the preflight fails on any
+  manifest/`VERSIONS.json` drift.
+- **`shared/__tests__/release-workflow.test.ts`** — parses the workflow and fails if a
+  step that can reach the registry loses a guard, or if the verify job stops running a
+  gate.
+- **Docs** — `docs/PUBLISHING.md` gained "Versioning" (tag format + semver policy, incl.
+  shim removal = major) and "The release workflow"; `docs/RELEASING.md` now indexes both
+  package families and restates that going public awaits the history-audit /
+  third-party-purge hygiene.
+
 ### Deprecated
 
 - **`@insimul/typescript`** → install `@insimul/babylon`, import `@insimul/babylon/conversation`.
 - **`@insimul/babylon-game`** → install `@insimul/babylon`, import `@insimul/babylon/data`.
 
   Both keep publishing as 100% re-export shims so existing installs resolve unchanged;
-  they are marked deprecated via `npm deprecate` at publish time. The
+  they are marked deprecated via `npm deprecate` at publish time (a separate CLI step —
+  publishing alone does not set the registry flag; see `docs/PUBLISHING.md`). The
   `@shared/game-engine/*` and `@shared/voice/*` module paths likewise still resolve
   through one-line shims. Removal is deferred to a future major release once no consumer
   imports the old paths (see the README shim / deprecation timeline).

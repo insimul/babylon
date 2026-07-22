@@ -60,3 +60,24 @@ Golden save fixtures for the schema tests live in `conformance/saves/`.
 - `npm run typecheck` — standalone `tsc --noEmit`
 - `npm test` — `vitest run`
 - `npm run schemas` — regenerate `schemas/*.schema.json` from the zod schemas
+
+## What ships in the tarball
+
+TypeScript **source** (`src/`, minus `__tests__`/`*.test.ts`) plus the
+language-neutral contract artifacts a non-TypeScript consumer reads directly:
+
+| Shipped | Why |
+| --- | --- |
+| `src/**` | The contract itself. Source-distributed — consumers build it with their own bundler/compiler, so there is no prebuilt `dist/`. `main`/`types` both point at `src/index.ts`. |
+| `schemas/*.schema.json` | Emitted JSON Schema for the save file, envelope, World IR, content library, and bridge shapes — validate Insimul data from any language. |
+| `openapi/` | The v1 REST contract (`insimul-v1.yaml` + the generated `operations.json`) mirrored by `src/editor/operations.ts`. |
+| `data/radiant/base-templates.pl` | The canonical, natively-readable radiant template pack (mirrored as a string constant in `src/radiant/base-templates.ts`). |
+| `README.md`, `LICENSE` | — |
+
+Deliberately **excluded**: `conformance/` (the cross-engine parity corpus — a test
+fixture set, not a runtime artifact), `scripts/` (dev tooling), `docs/`, and every
+test file.
+
+See [`docs/PUBLISHING.md`](../../docs/PUBLISHING.md) for the release process.
+
+Licensed under [Apache-2.0](./LICENSE).
