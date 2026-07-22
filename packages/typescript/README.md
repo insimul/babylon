@@ -138,6 +138,15 @@ button.onpointerup = () => mic.stopCapture();
 
 Full TypeScript type definitions are included. All conversation protocol types (`TextChunk`, `AudioChunkOutput`, `FacialData`, `ActionTrigger`, etc.) are exported from the package root.
 
+## What ships
+
+The tarball is `src/**` (no tests) plus `tsconfig.json`, `README.md`, and `LICENSE`.
+Every file under `src/` is a one-line re-export shim into
+`@insimul/babylon/conversation` — `@insimul/babylon` is a hard dependency of this
+package, so installing the passthrough pulls in the real implementation. There is no
+build step; like the rest of the web packages this one is source-distributed (see
+[`docs/PUBLISHING.md`](../../docs/PUBLISHING.md) § "What ships").
+
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](./LICENSE).

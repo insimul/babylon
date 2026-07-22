@@ -2,6 +2,7 @@
   "name": "@insimul/babylon-game",
   "version": "0.1.1",
   "description": "DEPRECATED passthrough — the save/data/loading layer moved to @insimul/babylon (subpath ./data) in US-BC2. This package now contains only one-line re-export shims (packages/babylon-game/src/* -> @insimul/babylon/data/*) so existing consumers keep resolving. Install @insimul/babylon instead.",
+  "deprecated": "@insimul/babylon-game is deprecated — the save/data/loading layer now ships in @insimul/babylon (subpath ./data). This package only re-exports it; install @insimul/babylon instead.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -14,11 +15,19 @@
   },
   "homepage": "https://github.com/insimul/runtime/tree/main/packages/babylon-game",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "files": [
-    "src"
+    "src",
+    "!src/**/__tests__",
+    "!src/**/*.test.ts",
+    "README.md",
+    "LICENSE"
   ],
+  "dependencies": {
+    "@insimul/babylon": "^0.2.0"
+  },
   "peerDependencies": {
     "react": "^18.0.0"
   },

@@ -56,13 +56,31 @@ so a web creator installs exactly one thing (plan: `docs/PLATFORM_SPLIT_AND_ENGI
 - **`docs/PUBLISHING.md`** — the npm release process, the source-distribution rationale
   (no `dist/` build by design), and the hygiene gate on going public.
 
+### Added — publishable deprecated passthroughs (US-PB2)
+
+- **`@insimul/typescript` + `@insimul/babylon-game` are publish-ready as deprecated
+  stubs.** Both now ship `LICENSE` and a `README.md` (new for `@insimul/babylon-game`,
+  with a per-path migration table), pin `publishConfig.access: "restricted"`, carry a
+  `deprecated` message in the manifest alongside the `DEPRECATED …` description, and
+  exclude tests from `files`. `@insimul/typescript`'s README no longer claims MIT — the
+  package is Apache-2.0 like the rest.
+- **Each passthrough declares `@insimul/babylon` as a dependency**, so installing the
+  old name pulls in the implementation its shims re-export.
+- **The publish gate covers all four packages.** For a deprecated one it additionally
+  asserts the deprecation metadata (manifest + description + README) names
+  `@insimul/babylon`, and that every shipped shim's relative re-export resolves — from
+  the installed package root — to a file `@insimul/babylon` actually ships. Renaming or
+  un-shipping a module in the successor package now fails the gate instead of a
+  consumer's install.
+
 ### Deprecated
 
 - **`@insimul/typescript`** → install `@insimul/babylon`, import `@insimul/babylon/conversation`.
 - **`@insimul/babylon-game`** → install `@insimul/babylon`, import `@insimul/babylon/data`.
 
   Both keep publishing as 100% re-export shims so existing installs resolve unchanged;
-  they are marked deprecated via `npm deprecate` at publish time. The
+  they are marked deprecated via `npm deprecate` at publish time (a separate CLI step —
+  publishing alone does not set the registry flag; see `docs/PUBLISHING.md`). The
   `@shared/game-engine/*` and `@shared/voice/*` module paths likewise still resolve
   through one-line shims. Removal is deferred to a future major release once no consumer
   imports the old paths (see the README shim / deprecation timeline).

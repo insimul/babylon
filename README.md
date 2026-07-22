@@ -170,9 +170,11 @@ consolidation from regressing:
 npm run publish:dry-run
 ```
 
-Runs `npm publish --dry-run` for each web package and asserts the tarball ships the
-entry + every `exports` target + `README`/`LICENSE`, and ships **no** tests,
-conformance corpus, or dev tooling. It publishes nothing.
+Runs `npm publish --dry-run` for each of the four web packages and asserts the tarball
+ships the entry + every `exports` target + `README`/`LICENSE`, and ships **no** tests,
+conformance corpus, or dev tooling. For the two deprecated passthroughs it also asserts
+the deprecation metadata names `@insimul/babylon` and that every shipped shim still
+resolves into it once installed. It publishes nothing.
 
 > **Public release is gated on repository hygiene.** Every package pins
 > `publishConfig.access: "restricted"` and the gate fails if that changes. Going

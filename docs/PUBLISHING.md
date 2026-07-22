@@ -48,6 +48,9 @@ What the allow-lists (`files` in each `package.json`) exclude is the bloat:
 - `scripts/` (dev tooling), `docs/`, and the guard snapshots
   (`OLD_*_EXPORT_SURFACE.json`).
 
+The two **deprecated passthroughs** ship only their shim tree (`src/**`, no tests) plus
+`README.md` and `LICENSE` — ~20–25 kB each. See "The deprecated passthroughs" below.
+
 `@insimul/core` additionally ships the language-neutral contract artifacts a
 non-TypeScript consumer reads directly — `schemas/*.schema.json` (emitted JSON
 Schema), `openapi/` (the v1 REST contract), and `data/radiant/base-templates.pl`.
@@ -71,13 +74,58 @@ package and asserts, per package:
 - the tarball contains **no** test file, `__tests__/` directory, `conformance/`
   corpus, `scripts/` tooling, `node_modules/`, vitest config, or guard snapshot.
 
-The `PACKAGES` table at the top of the script is the coverage list; it currently
-covers `@insimul/core` and `@insimul/babylon`. The two deprecated passthroughs are
-added to it alongside their deprecation metadata.
+The `PACKAGES` table at the top of the script is the coverage list; it covers all
+four web packages. Entries marked `deprecated: true` get the extra passthrough
+assertions described below.
 
 `--dry-run` stops before the registry write, so this never publishes anything and is
 safe to run in CI on every push. It requires no registry credentials (npm prints a
 "requires you to be logged in" warning and proceeds).
+
+## The deprecated passthroughs
+
+`@insimul/typescript` and `@insimul/babylon-game` are kept publishable so existing
+installs keep resolving after the US-BC consolidation. They have two jobs — **say
+they're deprecated**, and **still work** — and the gate checks both.
+
+**Saying it.** Deprecation is stated in three places, because consumers meet the
+package in three ways:
+
+| Where | What | Who sees it |
+| --- | --- | --- |
+| `package.json` `description` | Starts with `DEPRECATED passthrough — …` | `npm view`, search results, the package page |
+| `package.json` `deprecated` | Full message naming `@insimul/babylon` | Tooling that reads the manifest / the tarball |
+| `README.md` | A blockquote banner + a per-path migration table | Anyone opening the package page |
+
+The **registry-side** deprecation flag — the one that makes `npm install` print a
+warning — is *not* a manifest field npm sets for you. It is a separate, explicit CLI
+call made **after** publishing each version:
+
+```bash
+npm deprecate '@insimul/typescript@<version>' \
+  "@insimul/typescript is deprecated — install @insimul/babylon (subpath ./conversation) instead."
+npm deprecate '@insimul/babylon-game@<version>' \
+  "@insimul/babylon-game is deprecated — install @insimul/babylon (subpath ./data) instead."
+```
+
+Use the manifest's own `deprecated` string as the message so the two never diverge.
+
+**Still working.** Each passthrough declares `@insimul/babylon` as a real
+`dependency`, so installing the old name pulls in the implementation. The shims
+themselves re-export through **relative** paths (`../../babylon/src/…`) rather than the
+`@insimul/babylon` specifier — that form is what lets the platform's export pipeline
+vendor the trees (see the US-BC4 notes in `CLAUDE.md`), and it survives installation
+because npm lays scoped packages out as siblings: from the installed package root,
+`../babylon/src/x` is `node_modules/@insimul/babylon/src/x`, mirroring the repo's
+`packages/babylon/src/x` exactly.
+
+The gate encodes that invariant. For every shim in the tarball it resolves each
+relative specifier against the package root and fails unless the result lands under
+`../babylon/src/` **and** names a file `@insimul/babylon` actually ships. So deleting
+or renaming a module in `@insimul/babylon`, or dropping it from that package's
+`files` allow-list, breaks the publish gate rather than a consumer's install. Runtime
+resolution of the same shims is covered by
+`packages/babylon/src/__tests__/exports-map.test.ts`.
 
 ## Actually publishing
 
@@ -88,4 +136,7 @@ from this repo's task tooling. It requires:
 2. `GITHUB_TOKEN` with `write:packages` (see `.npmrc.example`),
 3. a green `npm run check`, `npm test`, `npm run test:export-shell`, and
    `npm run publish:dry-run`,
-4. the hygiene gate above still being satisfied (i.e. `access: restricted`).
+4. the hygiene gate above still being satisfied (i.e. `access: restricted`),
+5. an `npm deprecate` call for each passthrough version, right after its publish
+   (see "The deprecated passthroughs" above) — publishing alone does **not** set the
+   registry deprecation flag.

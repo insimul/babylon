@@ -11,8 +11,8 @@
  * The real `npm publish` is a deliberate human/CI step; see docs/PUBLISHING.md.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -34,6 +34,10 @@ const FORBIDDEN = [
 /**
  * The packages this gate covers, with the files each one must ship beyond
  * README/LICENSE (which are required of every package).
+ *
+ * `deprecated: true` marks a passthrough package (US-PB2): it must carry deprecation
+ * metadata pointing at @insimul/babylon, depend on it, and ship shims that still
+ * resolve there once installed.
  */
 const PACKAGES = [
   { dir: 'packages/core', name: '@insimul/core', mustInclude: ['src/index.ts', 'schemas/save-file.schema.json'] },
@@ -42,7 +46,24 @@ const PACKAGES = [
     name: '@insimul/babylon',
     mustInclude: ['src/index.ts', 'src/conversation/index.ts', 'src/data/index.ts', 'src/engine/index.ts', 'templates/vite.config.ts'],
   },
+  {
+    dir: 'packages/typescript',
+    name: '@insimul/typescript',
+    mustInclude: ['src/index.ts'],
+    deprecated: true,
+  },
+  {
+    dir: 'packages/babylon-game',
+    name: '@insimul/babylon-game',
+    // The snapshotted shim surface (OLD_EXPORT_SURFACE.json) is asserted separately;
+    // these are the two entry points the platform imports directly.
+    mustInclude: ['src/WorldStateManager.ts', 'src/DataSource.ts'],
+    deprecated: true,
+  },
 ];
+
+/** The package every deprecated passthrough must point at. */
+const SUCCESSOR = '@insimul/babylon';
 
 const ALWAYS_INCLUDE = ['README.md', 'LICENSE'];
 
@@ -58,6 +79,8 @@ function packDryRun(dir) {
 }
 
 const failures = [];
+/** Per-package tarball contents, so a passthrough can be checked against its successor. */
+const packed = new Map();
 
 for (const pkg of PACKAGES) {
   const manifest = JSON.parse(readFileSync(join(repoRoot, pkg.dir, 'package.json'), 'utf8'));
@@ -92,9 +115,84 @@ for (const pkg of PACKAGES) {
     }
   }
 
+  packed.set(pkg.name, shipped);
+  if (pkg.deprecated) checkDeprecatedPassthrough(pkg, manifest, files, fail);
+
   console.log(
-    `${pkg.name}@${manifest.version} — ${files.length} files, ${(report.unpackedSize / 1024).toFixed(0)} kB unpacked, access=${manifest.publishConfig.access}`,
+    `${pkg.name}@${manifest.version} — ${files.length} files, ${(report.unpackedSize / 1024).toFixed(0)} kB unpacked, access=${manifest.publishConfig.access}${pkg.deprecated ? ', DEPRECATED passthrough' : ''}`,
   );
+}
+
+/**
+ * A deprecated passthrough (US-PB2) has two jobs: tell every consumer it is
+ * deprecated, and keep resolving to the successor package. Both are checked against
+ * the *published* artifact, not just the repo.
+ *
+ * Note the registry-side deprecation flag is set by `npm deprecate` at release time
+ * (see docs/PUBLISHING.md); the manifest field + README banner are what a consumer
+ * reading the tarball or the package page sees.
+ */
+function checkDeprecatedPassthrough(pkg, manifest, files, fail) {
+  if (typeof manifest.deprecated !== 'string' || !manifest.deprecated.includes(SUCCESSOR)) {
+    fail(`package.json "deprecated" must be a message referencing ${SUCCESSOR}`);
+  }
+  if (!/deprecated/i.test(manifest.description ?? '') || !manifest.description?.includes(SUCCESSOR)) {
+    fail(`description must say the package is deprecated and point at ${SUCCESSOR}`);
+  }
+  const readme = readFileSync(join(repoRoot, pkg.dir, 'README.md'), 'utf8');
+  if (!/deprecated/i.test(readme) || !readme.includes(SUCCESSOR)) {
+    fail(`README.md must carry a deprecation notice referencing ${SUCCESSOR}`);
+  }
+  // Installing the passthrough must pull in the package it forwards to.
+  if (!manifest.dependencies?.[SUCCESSOR]) {
+    fail(`must declare ${SUCCESSOR} as a dependency so the re-export targets are installed`);
+  }
+
+  // Every shipped shim must still resolve once installed. The shims re-export via
+  // relative paths that escape the package (`../../babylon/src/...`); that works
+  // because npm installs scoped packages as siblings — `@insimul/<pkg>/src/x.ts`
+  // reaching `../babylon/src/...` (relative to the package root) lands inside
+  // `@insimul/babylon`, exactly as it lands in `packages/babylon` in the repo.
+  const successorFiles = packed.get(SUCCESSOR);
+  const shims = files.filter((f) => f.startsWith('src/') && /\.tsx?$/.test(f));
+  if (shims.length === 0) fail('tarball ships no shim sources under src/');
+
+  for (const file of shims) {
+    const source = readFileSync(join(repoRoot, pkg.dir, file), 'utf8');
+    const specifiers = [...source.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    if (specifiers.length === 0) {
+      fail(`${file} re-exports nothing — a shim must forward to ${SUCCESSOR}`);
+      continue;
+    }
+    for (const spec of specifiers) {
+      if (!spec.startsWith('.')) {
+        if (spec !== SUCCESSOR && !spec.startsWith(`${SUCCESSOR}/`)) {
+          fail(`${file} re-exports from ${spec}, which is neither relative nor ${SUCCESSOR}`);
+        }
+        continue;
+      }
+      const fromPackageRoot = posix.normalize(posix.join(posix.dirname(file), spec));
+      if (!fromPackageRoot.startsWith('../babylon/src/')) {
+        fail(`${file} re-exports ${spec}, which resolves to ${fromPackageRoot} — outside the installed ${SUCCESSOR} package`);
+        continue;
+      }
+      const inSuccessor = fromPackageRoot.slice('../babylon/'.length);
+      const resolved = resolveSource(join(repoRoot, 'packages/babylon'), inSuccessor);
+      if (!resolved) {
+        fail(`${file} re-exports ${spec}, which resolves to a nonexistent ${SUCCESSOR} module (${inSuccessor})`);
+      } else if (!successorFiles?.has(resolved)) {
+        fail(`${file} re-exports ${spec} → ${resolved}, which ${SUCCESSOR} does not ship`);
+      }
+    }
+  }
+}
+
+/** Extensionless module specifier -> the package-relative file it resolves to, if any. */
+function resolveSource(packageRoot, relPath) {
+  for (const candidate of [relPath, `${relPath}.ts`, `${relPath}.tsx`, `${relPath}/index.ts`, `${relPath}/index.tsx`]) {
+    if (existsSync(join(packageRoot, candidate))) return candidate;
+  }
+  return null;
 }
 
 /** Concrete (non-glob) file targets an exports map advertises. */
