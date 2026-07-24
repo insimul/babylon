@@ -16,6 +16,11 @@ never as code.**
   test (`src/conformance/__tests__/saves-migration.test.ts`) asserts
   `migrateSaveFile` lifts `v1-minimal` to the current `SAVE_FILE_VERSION`.
 - `prolog/*.json` — the golden Prolog query corpus (this file's main subject).
+- `predicate-schema-hash.json` — the committed `predicateSchemaHash` (the Prolog
+  contract's fingerprint, stamped on a canonical world export and carried in a
+  save's WorldSnapshot). `src/conformance/__tests__/predicate-schema-hash.test.ts`
+  fails when the schema moves without the artifact being regenerated; the file
+  itself documents the regenerate command.
 - `radiant/*.json` — the radiant quest-generation corpus (see "Radiant case
   format" below). Pins `generateRadiantQuests` — the contract the future native
   `insimul_radiant_tick()` must match.
@@ -93,6 +98,189 @@ Field semantics (a conforming engine MUST reproduce these):
 **Order-independence.** `expected` is compared as an unordered multiset — a
 conforming engine need not enumerate solutions in the same order as `tau-prolog`,
 only produce the same set. Do not rely on solution order in a case.
+
+## KINP identifiers in the corpus
+
+Entity ids in the corpus are **KINP identifiers** (`koine/specs/identity.md`
+§3.3), not bare atoms. The canonical Prolog form is the compound term
+
+```prolog
+id(Kind, Namespace, LocalId)     % e.g. id(ent, 'insimul:world:alderforest', 'q1')
+```
+
+with three interchangeable views of the same identifier:
+
+| form | example |
+|---|---|
+| Prolog term (canonical) | `id(ent, 'insimul:world:alderforest', 'npc-renaud')` |
+| CURIE (§3.2) | `insimul:world:alderforest:ent:npc-renaud` |
+| IRI (§3.1) | `https://id.koine.example/ent/insimul:world:alderforest/npc-renaud` |
+
+Insimul's binding: a world is `insimul:world:<w>`, an entity inside that world is
+`insimul:world:<w>:ent:<id>` — **a world-scoped entity's namespace is its world's
+own CURIE**, so the world is recoverable from the identifier alone, with no side
+table and no string parsing. A global (cross-world) entity is `insimul:ent:<id>`
+and a provisional offline-minted local is `insimul:local:ent:<id>` (§6).
+
+The `<local-id>` is the collection document's sanitized Mongo `_id`. Sanitization
+(`sanitizeLocalId` in `src/identity/kinp.ts`) is **lossless** — the §3.1 charset
+`[a-z0-9][a-z0-9._-]*` with everything else percent-encoded — so
+`_id` atom ⇄ CURIE ⇄ `id/3` term round-trips for every collection in
+`COLLECTION_PROLOG_MODE`. A 24-char ObjectId hex passes through untouched.
+
+Two corpus conventions follow from this:
+
+- **`prolog/identity.json` (`area: kinp-identity`)** pins the accessor rules
+  (`id_kind/2`, `id_namespace/2`, `id_local/2`), the legacy-atom bridge
+  (`entity_id/2`, `entity_curie/2`, `curie/2`), and world scoping (`id_world/2`,
+  `same_world/2`). Its `kb` clauses mirror `src/identity/identity-predicates.ts`
+  verbatim — a native engine consults the same text.
+- **Bindings stay scalar.** A case must never bind a query variable directly to
+  an `id/3` term: the binding format (§ "Prolog case format") is atoms/numbers,
+  and engines render compound terms differently. Project the column through a
+  rule instead — `quest_available(L) :- quest(id(ent, _, L), _, _, _, active).`
+  — exactly like the anonymous-variable rule. Literal `id/3` terms in the *query
+  goal* are fine (`quest_objective(id(ent, 'insimul:world:alderforest', 'q1'),
+  Idx, Goal)`), which is how `gameplay.json` addresses a specific quest.
+
+**Amendments for the native harness (US-83 re-vendor).** `gameplay.json` was
+rewritten in lockstep with this change and `identity.json` is new, so a native
+harness re-vendoring the corpus must:
+
+1. Parse compound terms in `kb`/`query` — the corpus is no longer atom-only.
+   `expected` is unchanged (still scalar bindings).
+2. Reproduce `libinsimul`'s JSON binding shape for compounds
+   (`{"functor":…, "args":[…]}`) only if it chooses to expose them; no case
+   requires it, by the scalar-binding rule above.
+3. Keep the two identifier spellings distinct: `'insimul:world:alderforest'` is
+   an **atom** (quoted — it contains `:`), never a term to be decomposed.
+
+Nothing in `insimul-native` was edited from this story.
+
+## The equivalence layer in the corpus
+
+`prolog/equivalence.json` (`area: kinp-equivalence`) pins the KINP **equivalence
+layer** (`koine/specs/identity.md` §4) — the links between identifiers that
+different projects mint for the same thing. Its `kb` clauses mirror
+`src/identity/equivalence-predicates.ts` verbatim, exactly as `identity.json`
+mirrors the identity pack.
+
+Links are assertions, so they carry annotations rather than bare arguments:
+
+```prolog
+based_on(id(ent, 'insimul:world:alderforest', 'npc-renaud'),
+         id(ent, pinakes, 'napoleon-i'), confidence(0.8)).
+same_as(id(ent, pinakes, 'napoleon-i'), id(ent, wikidata, q517),
+        confidence(1.0), src('pinakes:anchor/wikidata')).
+```
+
+Both arities are legal — §4.3's worked example spells a link with
+`confidence(_)` alone, §4.2's adds `src(_)` — so every rule reads links through
+the single normalized `equiv_link/5`.
+
+The whole §4.3 **firewall** is one asymmetry: `same_as_closure/2` walks
+`same_as` edges only, `based_on` is never fed into it, and
+`licenses_fact_transfer(same_as)` is the only such fact. A fictional entity
+modeled on a real one therefore emits `based_on` and never `same_as`, its
+in-fiction claims never reach the real entity (`fact_of/4`, `real_fact/3`), and
+a `based_on` chain is never promoted to `same_as` by transitivity (§4.5). The
+cases reproduce `koine/scenarios/e2e-worlds-to-fabric.md`'s two cross-project
+queries against one graph.
+
+Three conventions a native harness must honour:
+
+- **Declare every link arity dynamic.** The pack declares all eight
+  (`same_as/3,4`, `based_on/3,4`, `part_of/3,4`, `instance_of/3,4`) precisely so
+  a partially-populated link set does not raise `existence_error` from
+  `equiv_link/5`. A case that supplies only the arity-4 facts must still carry
+  `:- dynamic(same_as/3).` — one case does, deliberately.
+- **`kinp_member/2` is local on purpose.** The cycle-safe closure walker needs a
+  membership check; using `member/2` would require `:- use_module(library(lists)).`
+  in every case (see the tau-prolog gotcha above), so the pack ships its own
+  two-clause predicate and stays library-free.
+- **Bindings stay scalar**, as everywhere else: project each `id/3` column
+  through `id_local/2` / `id_namespace/2` rather than binding the term.
+
+**Amendments for the native harness (US-83 re-vendor).** In addition to the
+identity-corpus amendments above:
+
+4. `equivalence.json` is new; add `kinp-equivalence` to the required-areas list.
+5. The `confidence(C)` argument binds a **float** (`0.8`), so the harness's
+   binding comparison must treat JSON numbers as numbers, not strings.
+6. `claim/4`'s fourth argument is the world, spelled with the ratified
+   `@world(W)` context argument (see the next section) — `claim(S, P, O,
+   '@world'(id(world, …)))`. US-1's/US-2's earlier bare-world spelling is gone.
+
+Nothing in `insimul-native` was edited from this story either.
+
+## Worlds and the `@world(W)` context argument in the corpus
+
+`prolog/worlds.json` (`area: kinp-worlds`) pins the KINP **world model**
+(`koine/specs/identity.md` §5) and the ratified context argument (§11 decision
+3). Its `kb` clauses mirror `src/identity/world-predicates.ts` verbatim, exactly
+as `identity.json` and `equivalence.json` mirror their packs.
+
+Insimul's chain, and the identifier each level uses:
+
+```
+pinakes:world:consensus-reality          id(world, pinakes, 'consensus-reality')
+└── insimul:world:alderforest            id(world, insimul, alderforest)
+    └── insimul:world:alderforest#save-7f
+                                         id(world, insimul, 'alderforest%23save-7f')
+```
+
+Editor canon is a world, a playthrough is a *child* world that forks it — not a
+foreign key stamped on every row. §5 writes the playthrough separator literally
+(`#save-`); §3.1's local-id charset requires percent-encoding, so the stored
+local id is `<w>%23save-<id>` and `unsanitizeLocalId` recovers §5's spelling.
+
+An assertion carries its world as an explicit argument:
+
+```prolog
+claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), garrisons,
+      id(ent, 'insimul:world:alderforest', northkeep),
+      '@world'(id(world, insimul, alderforest))).
+
+?- holds(id(ent, 'insimul:world:alderforest', 'npc-renaud'), garrisons, O,
+         '@world'(id(world, insimul, 'alderforest%23save-7f'))).
+```
+
+Four conventions a native harness must honour:
+
+- **`'@world'` is a QUOTED atom used as a functor.** `@` is a symbolic
+  character, so a bare `@world(W)` would need a custom prefix operator, and a
+  `:- op/3` directive does not survive a KB snapshot (clauses only). Parsing
+  `'@world'(X)` as an ordinary compound is all that is required.
+- **Resolve the parent BEFORE the override check.** `world_resolve/4`'s second
+  clause is `world_parent(W, P), world_resolve(P, S, Pr, O), \+ claim_defined(W,
+  S, Pr)` in that order, so the negation always runs on ground arguments. With
+  the goals swapped, an unbound `(S, P)` makes `\+ claim_defined/3` mean "W
+  asserts nothing at all" and inheritance collapses — one case enumerates an
+  unbound `(P, O)` at a world that does hold an override, precisely to pin this.
+- **An override masks, it never rewrites.** A playthrough claim shadows the
+  canon value *in the playthrough only*; `claim_at/4` (no inheritance) still
+  shows the canon world holding exactly what the editor authored. The
+  "never-written-back" case asserts that directly.
+- **Inheritance is declared, not assumed.** A fiction reaches consensus reality
+  only when a `world_parent/2` edge says so (§5: it MAY inherit) — one case runs
+  the same query with the edge absent and expects no solutions. And facts never
+  travel *up*: a query at consensus reality sees no in-fiction claim.
+
+Inheritance (down a world chain) and `same_as` transfer (across identifiers) are
+orthogonal: `equivalence-predicates.ts` reads `claim/4` at the world it was
+asserted at and does not walk `world_parent/2`, `world-predicates.ts` walks the
+chain and knows nothing about links. A KB that consults both composes them in a
+rule of its own; neither pack calls into the other, so each stands alone.
+
+**Amendments for the native harness (US-83 re-vendor).** In addition to the
+amendments above:
+
+7. `worlds.json` is new; add `kinp-worlds` to the required-areas list.
+8. A world's local id may contain a percent escape (`alderforest%23save-7f`).
+   It is an ordinary atom — do not decode it in the engine; decoding is a
+   presentation concern (`unsanitizeLocalId`).
+
+Nothing in `insimul-native` was edited from this story either.
 
 ## Radiant case format
 

@@ -31,6 +31,12 @@ export * from './asset-types';
 export * from './archetypes/taxonomy';
 export * from './prolog';
 
+// ── KINP identity (US-1) ───────────────────────────────────────────────────
+// The Koine identifier grammar (IRI / CURIE / id/3), the prefix registry, the
+// Prolog accessor pack, and the sanitized `_id` atom ⇄ identifier bridge.
+// See koine/specs/identity.md and ./identity/kinp.ts.
+export * from './identity';
+
 // ── Radiant quest generation (US-RQ2) ──────────────────────────────────────
 // Pure, deterministic slot-filling engine over the radiant template vocabulary
 // (see prolog/predicate-schema radiant section + docs/radiant-templates.md).

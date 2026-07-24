@@ -126,14 +126,20 @@ emitted JSON Schema counterparts. Conventions:
   `prolog/tau-engine.test.ts` harness stays excluded by name).
 - Golden save fixtures live in `packages/core/conformance/saves/` (copied
   read-only from `insimul-platform/shared/__tests__/fixtures/saves/`).
-- **Bridge schema stubs (US-CE7)**: `schemas/grounding.schema.ts` reserves the
-  LinguaScrape interchange seam (`groundingPackSchema`,
-  `canonicalWorldExportSchema`) — schema-only, no import/export logic. Both are
-  registered in `SCHEMA_ENTRIES` so `npm run schemas` emits
-  `grounding-pack.schema.json` + `canonical-world-export.schema.json` and the same
-  drift guard covers them. `contractVersion` is a `z.literal` of
+- **Bridge schema stubs (US-CE7, renamed to Pinakes in US-4)**:
+  `schemas/grounding.schema.ts` reserves the Pinakes interchange seam
+  (`groundingPackSchema`, `canonicalWorldExportSchema`) — schema-only, no
+  import/export logic. Both are registered in `SCHEMA_ENTRIES` so `npm run schemas`
+  emits `grounding-pack.schema.json` + `canonical-world-export.schema.json` and the
+  same drift guard covers them. `contractVersion` is a `z.literal` of
   `GROUNDING_CONTRACT_VERSION`, so any new bridge shape added here MUST reuse that
-  constant (or a stale-version fixture would be silently accepted).
+  constant (or a stale-version fixture would be silently accepted). The pack's
+  producer field is `z.literal(PINAKES_NAMESPACE)` — reuse the `identity/kinp.ts`
+  constant, never a fresh `'pinakes'` string literal, so the pack's producer and
+  the identifiers it carries can't drift apart. These envelopes are NOT yet the
+  ratified KGP pack shape (`koine/specs/grounding-pack.md` §2); the deltas are
+  catalogued in `packages/core/docs/kgp-alignment-open-questions.md` and are the
+  platform-side alignment story's to close — don't guess them in core.
 - **Content library / world artifact (US-CL1)**: `schemas/content-library.schema.ts`
   is the shareable authored-content unit — `manifest` (own `CONTENT_LIBRARY_CONTRACT_VERSION`
   literal, monotonic `version`, `provenance` with a required SPDX `license`) plus the
@@ -147,6 +153,147 @@ emitted JSON Schema counterparts. Conventions:
   never its legacy Missing-Writer field names. Cross-references between definitions
   (`assignedBy`, `mayorId`, `homeTownId`, `prerequisiteQuestIds`) are **library-scoped
   ids**, resolved on import.
+
+### KINP identity surface (US-1, `packages/core/src/identity/`)
+
+Insimul's adoption of the Koine Identity & Namespace Protocol
+(`koine/specs/identity.md`, spec 0.2.1 — the spec lives in the sibling `koine`
+checkout, read-only from here). Three files, one invariant: **Prolog is
+canonical and no id logic leaves it.**
+
+- `kinp.ts` — the grammar (IRI §3.1 / CURIE §3.2 / `id(Kind, Namespace, LocalId)`
+  §3.3) + the §3.4 prefix registry. Insimul binding: a world is
+  `insimul:world:<w>`; a world-scoped entity is `insimul:world:<w>:ent:<id>`, i.e.
+  **its namespace IS its world's CURIE**, so the world is recoverable from the
+  identifier alone; a global entity is `insimul:ent:<id>`; an offline-minted
+  provisional local is `insimul:local:ent:<id>` (§6).
+- `identity-predicates.ts` — `IDENTITY_PREDICATES_PROLOG`, the rule pack
+  (accessors, registry facts, `id_world/2`, `same_world/2`). Consulted like the
+  other packs (never asserted as player facts, so it never lands in a save).
+  Deliberately free of `sub_atom/5`-style string surgery so a native engine can
+  reproduce it verbatim — all encoding happens at mint time in TS.
+- `identity-facts.ts` — the bridge: `entity_id/2` + `entity_curie/2` + `curie/2`,
+  three ground facts per entity, the ONE place the legacy sanitized `_id` atom
+  meets its CURIE. `curie/2` for a world must be emitted before `id_world/2` can
+  resolve that world's entities (`worldIdentityFacts`).
+
+Gotchas:
+
+- **`sanitizeLocalId` is lossless** (percent-encoding over the §3.1 charset,
+  plus an `x-` guard prefix when the first char has to be escaped) — unlike the
+  converters' local `sanitizeAtom`, which is deliberately lossy. Never swap one
+  for the other; the round-trip test (`__tests__/kinp.test.ts`) is the contract.
+- **`parseCurie` anchors on the LAST two segments** because a namespace may
+  contain `:`.
+- `predicate-schema.ts` gained `buildPredicateIdMap()` / `PREDICATE_ID_MAP` /
+  `curieForPredicateArgument()`: which argument of which predicate holds an
+  entity id, derived mechanically from the `fieldMap`s (so it can't drift) plus
+  explicit `STORED_ID_ARGUMENTS` for the stored-prologContent quest/action
+  predicates. A new `*Id` field must be added to `ID_FIELD_TARGETS` or the
+  completeness test fails; a block with no id arguments needs a
+  `NON_ENTITY_ID_BLOCKS` rationale.
+- The identity pack is in `buildPredicateSchemaSnapshot()`'s sources, so it moves
+  the schema hash. The committed value lives in
+  `packages/core/conformance/predicate-schema-hash.json` (drift-guarded by
+  `src/conformance/__tests__/predicate-schema-hash.test.ts`) — regenerate and
+  commit it with any predicate change.
+- **Corpus rule: bindings stay scalar.** Never bind a query variable straight to
+  an `id/3` term — `extractBindings` in `tau-engine.ts` collapses a compound to
+  its functor name (`"id"`). Project the column through a rule
+  (`quest_available(L) :- quest(id(ent,_,L),_,_,_,active).`); literal `id/3`
+  terms *inside the query goal* are fine. Documented in `conformance/README.md`
+  § "KINP identifiers in the corpus", together with the amendments the native
+  harness needs when it re-vendors the corpus.
+
+### KINP equivalence layer (US-2, `packages/core/src/identity/`)
+
+The §4 half of the same surface: links between the different local ids projects
+mint for the same thing. Two more files, one invariant: **only `same_as`
+licenses fact transfer.**
+
+- `equivalence-predicates.ts` — `EQUIVALENCE_PREDICATES_PROLOG`, consulted like
+  the identity pack. The whole §4.3 firewall is one asymmetry:
+  `same_as_closure/2` walks `same_as` edges only, `based_on_edge/2` is never fed
+  into it, and `licenses_fact_transfer(same_as).` is the sole such fact. So a
+  `based_on` chain can't be promoted to `same_as` by transitivity (§4.5) *by
+  construction*, and `firewalled/2` makes that checkable. `fact_of/4` /
+  `real_fact/3` answer "facts true of this entity"; `inspired_by/2` /
+  `inspired_by_anchor/2` answer "which real figures inspired characters?".
+- `equivalence.ts` — mints the links. `chooseEquivalenceRelation()` is §4.5
+  delta C (different non-identity-inheriting world ⇒ `based_on`; same or
+  identity-inheriting ⇒ `same_as`; `viaBasedOnChain` ⇒ always `based_on`);
+  `reconcile()` adds the §11-decision-2 threshold (link or queue, never guess);
+  `reconcileProvisional()` is the §6 re-ID case (`same_as` by construction,
+  refuses cross-authority pairs).
+
+Gotchas:
+
+- **Links come in two arities.** §4.3's worked example is `based_on(A, B,
+  confidence(C))`, §4.2's is `same_as(A, B, confidence(C), src(S))`. Both are
+  emitted, so every rule reads through `equiv_link/5` and the pack declares ALL
+  eight link arities `:- dynamic` — otherwise a KB carrying only the arity-4
+  facts raises `existence_error(procedure, same_as/3)` from `equiv_link/5`.
+- **`kinp_member/2` is deliberate.** The cycle-safe closure walker needs a
+  membership check; `member/2` would force `:- use_module(library(lists)).` into
+  every consulting KB (see the tau-prolog gotcha above), so the pack ships its
+  own two-clause predicate and stays library-free.
+- **The firewall is enforced at mint time too.** `equivalenceLink()` throws on a
+  `same_as` between a world-scoped entity and an identifier in a *different
+  known* world. An unknown world is allowed through (a provisional local has
+  none, and §6 re-ID is a legitimate `same_as`) — the resolver separately
+  refuses to *choose* `same_as` when a world is unknown, so the default is
+  closed either way.
+- **Predicate-schema redundancy is intentional but hides drift.** The
+  equivalence predicates are listed both in `PREDICATE_SCHEMA.equivalence` and
+  parsed out of the rule pack, so deleting one occurrence alone does NOT move
+  the hash (the contract genuinely hasn't changed). To falsify the drift guard,
+  add a new predicate to the pack.
+- `claim/4` reifies the world as the claim's fourth argument. That is a
+  placeholder shape for US-3's ratified `@world(W)` context argument; when it
+  lands, the corpus's claim spelling changes and `conformance/README.md`'s
+  native-harness amendment list must gain another entry.
+
+### KINP world model + `@world(W)` (US-3, `packages/core/src/identity/`)
+
+The §5 half: truth is **true-in-a-world**, worlds inherit, and reasoning takes
+the ratified explicit context argument (§11 decision 3). Two more files.
+
+- `worlds.ts` — mints the chain `pinakes:world:consensus-reality` ← canon
+  `insimul:world:<w>` ← playthrough `insimul:world:<w>#save-<id>`
+  (`insimulWorldChain`, `playthroughWorldId`, `parsePlaythroughWorld`),
+  emits the ground facts (`worldFacts`), and renders/parses the context
+  argument (`worldContextTerm` ⇄ `worldContextCell`, `holdsGoal`).
+- `world-predicates.ts` — `WORLD_CONTEXT_PREDICATES_PROLOG`: `world_parent/2`
+  chain walkers, `claim_at/4` (no inheritance), `holds/4` + `world_resolve/4`
+  (inheritance with override), `holds_at/5`, `overrides/3`, `masked/4`.
+- Corpus: `conformance/prolog/worlds.json` (area `kinp-worlds`, 12 cases).
+
+Gotchas:
+
+- **`@world` must be QUOTED**: `@` is a symbolic char, so `@world(W)` needs a
+  custom prefix operator, and a `:- op/3` directive does not survive a KB
+  snapshot. The on-the-wire spelling is `'@world'(W)` — an ordinary compound.
+  `claimFact()` (equivalence.ts) now emits it; US-1/US-2's bare-world 4th
+  argument is gone, and the equivalence corpus was rewritten in lockstep.
+- **Resolve the parent BEFORE the override check.** `world_resolve/4`'s second
+  clause is `world_parent, world_resolve(Parent…), \+ claim_defined(W…)` in that
+  order. Swapped, an unbound `(S,P)` makes the negation mean "W asserts nothing
+  at all" and inheritance collapses for every other predicate in that world. One
+  test and one corpus case enumerate unbound `(P,O)` precisely to pin this.
+- **`#` is percent-encoded.** §5 writes `insimul:world:<w>#save-<id>`; §3.1's
+  charset does not allow `#`, so the stored local id is `<w>%23save-<id>` and
+  `unsanitizeLocalId`/`parsePlaythroughWorld` recover §5's spelling. Treat it as
+  an opaque atom in Prolog — never decode it in the engine.
+- **The two transfer axes stay separate.** `equivalence-predicates.ts` transfers
+  across identifiers (`same_as`), `world-predicates.ts` down a world chain;
+  neither pack calls the other, so each consults standalone. Compose them in a
+  world-layer rule if you need both.
+- **No storage assumptions** (AC 3): a playthrough is a *world identifier*, not
+  a foreign key. A guard in `__tests__/worlds.test.ts` scans `src/identity/*.ts`
+  and fails on any save-file/`node:fs` import or the string `playthroughId`.
+- The world pack is in `buildPredicateSchemaSnapshot()`'s sources, so it moved
+  the hash again (612 signatures) — regenerate
+  `conformance/predicate-schema-hash.json` with any predicate change.
 
 ### Conformance corpus (US-CE5)
 
