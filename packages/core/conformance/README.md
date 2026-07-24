@@ -157,6 +157,63 @@ harness re-vendoring the corpus must:
 
 Nothing in `insimul-native` was edited from this story.
 
+## The equivalence layer in the corpus
+
+`prolog/equivalence.json` (`area: kinp-equivalence`) pins the KINP **equivalence
+layer** (`koine/specs/identity.md` §4) — the links between identifiers that
+different projects mint for the same thing. Its `kb` clauses mirror
+`src/identity/equivalence-predicates.ts` verbatim, exactly as `identity.json`
+mirrors the identity pack.
+
+Links are assertions, so they carry annotations rather than bare arguments:
+
+```prolog
+based_on(id(ent, 'insimul:world:alderforest', 'npc-renaud'),
+         id(ent, pinakes, 'napoleon-i'), confidence(0.8)).
+same_as(id(ent, pinakes, 'napoleon-i'), id(ent, wikidata, q517),
+        confidence(1.0), src('pinakes:anchor/wikidata')).
+```
+
+Both arities are legal — §4.3's worked example spells a link with
+`confidence(_)` alone, §4.2's adds `src(_)` — so every rule reads links through
+the single normalized `equiv_link/5`.
+
+The whole §4.3 **firewall** is one asymmetry: `same_as_closure/2` walks
+`same_as` edges only, `based_on` is never fed into it, and
+`licenses_fact_transfer(same_as)` is the only such fact. A fictional entity
+modeled on a real one therefore emits `based_on` and never `same_as`, its
+in-fiction claims never reach the real entity (`fact_of/4`, `real_fact/3`), and
+a `based_on` chain is never promoted to `same_as` by transitivity (§4.5). The
+cases reproduce `koine/scenarios/e2e-worlds-to-fabric.md`'s two cross-project
+queries against one graph.
+
+Three conventions a native harness must honour:
+
+- **Declare every link arity dynamic.** The pack declares all eight
+  (`same_as/3,4`, `based_on/3,4`, `part_of/3,4`, `instance_of/3,4`) precisely so
+  a partially-populated link set does not raise `existence_error` from
+  `equiv_link/5`. A case that supplies only the arity-4 facts must still carry
+  `:- dynamic(same_as/3).` — one case does, deliberately.
+- **`kinp_member/2` is local on purpose.** The cycle-safe closure walker needs a
+  membership check; using `member/2` would require `:- use_module(library(lists)).`
+  in every case (see the tau-prolog gotcha above), so the pack ships its own
+  two-clause predicate and stays library-free.
+- **Bindings stay scalar**, as everywhere else: project each `id/3` column
+  through `id_local/2` / `id_namespace/2` rather than binding the term.
+
+**Amendments for the native harness (US-83 re-vendor).** In addition to the
+identity-corpus amendments above:
+
+4. `equivalence.json` is new; add `kinp-equivalence` to the required-areas list.
+5. The `confidence(C)` argument binds a **float** (`0.8`), so the harness's
+   binding comparison must treat JSON numbers as numbers, not strings.
+6. `claim/4` here reifies the world as the claim's fourth argument. The ratified
+   `@world(W)` context argument (§5 / §11 decision 3) is a later story; when it
+   lands, the corpus's claim spelling changes and the native side must re-vendor
+   again.
+
+Nothing in `insimul-native` was edited from this story either.
+
 ## Radiant case format
 
 Each file in `radiant/` is a JSON object with the same `{ area, description,

@@ -20,12 +20,15 @@ import {
   PREDICATE_SCHEMA,
 } from '../../prolog/predicate-schema';
 import {
+  CONSENSUS_REALITY_WORLD,
+  declaredWorld,
   formatCurie,
   formatIdTerm,
   fromIri,
   idEquals,
   insimulEntityId,
   insimulWorldId,
+  isProvisionalId,
   isProvisionalNamespace,
   isRegisteredNamespace,
   isValidLocalId,
@@ -33,6 +36,7 @@ import {
   KINP_NAMESPACE_REGISTRY,
   mongoIdOf,
   parseCurie,
+  pinakesEntityId,
   parseIdTerm,
   provisionalEntityId,
   sanitizeLocalId,
@@ -258,5 +262,40 @@ describe('predicate id map', () => {
     expect(map['quest/5'][0]).toMatchObject({ collection: 'quests', local: 'authored' });
     expect(map['quest_prerequisite/2']).toHaveLength(2);
     expect(map['can_perform/2'][1]).toMatchObject({ collection: 'actions' });
+  });
+});
+
+/**
+ * US-2 — the world an identifier's assertions default to (§5). The equivalence
+ * layer's §4.5 relation choice reads this, so `null` (unknown) has to stay
+ * distinguishable from consensus reality.
+ */
+describe('declared world', () => {
+  it('reads a world-scoped entity’s own world', () => {
+    expect(declaredWorld(insimulEntityId('npc-renaud', 'alderforest'))).toEqual(
+      insimulWorldId('alderforest'),
+    );
+  });
+
+  it('defaults a Pinakes entity to consensus reality', () => {
+    expect(declaredWorld(pinakesEntityId('napoleon-i'))).toEqual(CONSENSUS_REALITY_WORLD);
+    expect(formatCurie(CONSENSUS_REALITY_WORLD)).toBe('pinakes:world:consensus-reality');
+  });
+
+  it('leaves a global or provisional entity’s world unknown', () => {
+    expect(declaredWorld(insimulEntityId('lib-sword'))).toBeNull();
+    expect(declaredWorld(provisionalEntityId('tmp-42'))).toBeNull();
+    expect(declaredWorld(provisionalEntityId('e-8842', 'analyzer'))).toBeNull();
+  });
+
+  it('recognises a provisional identifier (§6)', () => {
+    expect(isProvisionalId(provisionalEntityId('tmp-42'))).toBe(true);
+    expect(isProvisionalId(insimulEntityId('npc-renaud', 'alderforest'))).toBe(false);
+    expect(isProvisionalId(pinakesEntityId('napoleon-i'))).toBe(false);
+  });
+
+  it('mints a Pinakes entity under the canonical authority', () => {
+    expect(formatCurie(pinakesEntityId('napoleon-i'))).toBe('pinakes:ent:napoleon-i');
+    expect(worldOfEntity(pinakesEntityId('napoleon-i'))).toBeNull();
   });
 });

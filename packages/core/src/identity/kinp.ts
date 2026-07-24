@@ -107,6 +107,9 @@ export const KINP_NAMESPACE_REGISTRY: Readonly<Record<string, KinpNamespaceEntry
 /** Insimul's own namespace segment. */
 export const INSIMUL_NAMESPACE = 'insimul';
 
+/** Pinakes — the canonical authority for real-world entities (§6, §11 decision 1). */
+export const PINAKES_NAMESPACE = 'pinakes';
+
 // ─── Local-id sanitization (lossless) ───────────────────────────────────────
 //
 // A Mongo `_id` is an arbitrary string (ObjectId hex in practice, but authored
@@ -361,12 +364,54 @@ export function provisionalEntityId(localId: string, ns: string = INSIMUL_NAMESP
   return { kind: 'ent', namespace: `${ns}:local`, localId: sanitizeLocalId(localId) };
 }
 
+/** `pinakes:ent:<canonical>` — a real-world entity minted by the canonical authority (§6). */
+export function pinakesEntityId(canonicalId: string): KinpId {
+  return { kind: 'ent', namespace: PINAKES_NAMESPACE, localId: sanitizeLocalId(canonicalId) };
+}
+
 /** The world an entity belongs to, or `null` for a global/provisional entity. */
 export function worldOfEntity(id: KinpId): KinpId | null {
   if (id.kind !== 'ent') return null;
   const parts = id.namespace.split(':');
   if (parts.length !== 3 || parts[1] !== 'world') return null;
   return { kind: 'world', namespace: parts[0], localId: parts[2] };
+}
+
+/**
+ * `pinakes:world:consensus-reality` — the default world for real-world knowledge
+ * (§5). Every other world in the chain inherits from it (or does not); it is the
+ * world a "facts true of the real entity" query is asked at.
+ */
+export const CONSENSUS_REALITY_WORLD: KinpId = {
+  kind: 'world',
+  namespace: PINAKES_NAMESPACE,
+  localId: 'consensus-reality',
+};
+
+/**
+ * The world an identifier's assertions default to (§5: "assertions without an
+ * explicit world default to the producer's declared world").
+ *
+ *   - a world-scoped entity → its own world (`worldOfEntity`);
+ *   - a Pinakes entity      → `consensus-reality`, the real-world default;
+ *   - anything else         → `null` (unknown; the caller must state it).
+ *
+ * `null` is deliberately NOT coerced to consensus reality: the §4.5 resolver
+ * treats an unknown world as "not provably the same world", which yields
+ * `based_on` and keeps the firewall closed by default.
+ */
+export function declaredWorld(id: KinpId): KinpId | null {
+  const scoped = worldOfEntity(id);
+  if (scoped) return scoped;
+  if (rootNamespace(id.namespace) === PINAKES_NAMESPACE && id.kind === 'ent') {
+    return CONSENSUS_REALITY_WORLD;
+  }
+  return null;
+}
+
+/** True for a provisional, pre-reconciliation identifier (`<ns>:local:…`, §6). */
+export function isProvisionalId(id: KinpId): boolean {
+  return isProvisionalNamespace(id.namespace);
 }
 
 /** Recover the source Mongo `_id` from an identifier (inverse of the minting helpers). */

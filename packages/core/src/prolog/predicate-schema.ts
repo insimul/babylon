@@ -27,6 +27,7 @@ import { HELPER_PREDICATES_PROLOG } from './helper-predicates';
 import { getAdvancedPredicates } from './advanced-predicates';
 import { getNPCReasoningRules } from './npc-reasoning';
 import { IDENTITY_PREDICATES_PROLOG } from '../identity/identity-predicates';
+import { EQUIVALENCE_PREDICATES_PROLOG } from '../identity/equivalence-predicates';
 import {
   formatCurie,
   insimulEntityId,
@@ -116,6 +117,48 @@ export const PREDICATE_SCHEMA = {
       'same_world/2',        // same_world(IdA, IdB).
     ],
     note: 'KINP identifier surface (koine/specs/identity.md §3/§5). Rule pack: packages/core/src/identity/identity-predicates.ts (consulted like the helper packs, never asserted as player facts). curie/2, entity_id/2 and entity_curie/2 are the ground bridge facts emitted per entity by identity-facts.ts; the rest are rules. Insimul CURIEs: a world is insimul:world:<w>, a world-scoped entity insimul:world:<w>:ent:<id>, a global entity insimul:ent:<id>, a provisional local insimul:local:ent:<id>.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EQUIVALENCE (KINP — koine/specs/identity.md §4; rules in
+  // packages/core/src/identity/equivalence-predicates.ts)
+  //
+  // The equivalence layer over source-local identifiers (§4.1): links are
+  // assertions carrying confidence(_)/src(_), and "the merged entity" is a
+  // query-time view over the same_as closure. Only same_as licenses fact
+  // transfer — that single asymmetry (§4.3) is what keeps a fiction's claims
+  // out of the real entity it was modeled on.
+  // ═══════════════════════════════════════════════════════════════════════════
+  equivalence: {
+    predicates: [
+      'equivalence_relation/1',   // equivalence_relation(same_as|based_on|part_of|instance_of). [§4.2]
+      'licenses_fact_transfer/1', // licenses_fact_transfer(same_as).                  [§4.3 firewall]
+      'lifecycle_relation/1',     // lifecycle_relation(retracts|supersedes).          [§4.2 reserved]
+      'same_as/3',                // same_as(A, B, confidence(C)).
+      'same_as/4',                // same_as(A, B, confidence(C), src(S)).
+      'based_on/3',               // based_on(A, B, confidence(C)).
+      'based_on/4',               // based_on(A, B, confidence(C), src(S)).
+      'part_of/3',                // part_of(A, B, confidence(C)).
+      'part_of/4',                // part_of(A, B, confidence(C), src(S)).
+      'instance_of/3',            // instance_of(A, B, confidence(C)).
+      'instance_of/4',            // instance_of(A, B, confidence(C), src(S)).
+      'equiv_link/5',             // equiv_link(Relation, A, B, confidence(C), src(S)). [normalized reader]
+      'link_confidence/4',        // link_confidence(Relation, A, B, Confidence).
+      'link_source/4',            // link_source(Relation, A, B, Src).
+      'kinp_member/2',            // kinp_member(X, List) — local, so no library(lists).
+      'same_as_edge/2',           // same_as_edge(A, B) — symmetric one-hop.
+      'same_as_closure/2',        // same_as_closure(A, B) — the §4.1 query-time view.
+      'same_as_reach/3',          // same_as_reach(A, B, Seen) — cycle-safe walker.
+      'based_on_edge/2',          // based_on_edge(A, B) — directed lineage, one hop.
+      'inspired_by/2',            // inspired_by(Fiction, Source).                     [§4.3 Q1]
+      'inspired_by_anchor/2',     // inspired_by_anchor(Fiction, Anchor).              [§4.4 anchors]
+      'firewalled/2',             // firewalled(Fiction, Source) — lineage without same_as. [§4.5]
+      'claim/4',                  // claim(Subject, Predicate, Object, WorldId).       [§5]
+      'fact_of/4',                // fact_of(Id, P, O, World) — direct or same_as-transferred.
+      'consensus_reality/1',      // consensus_reality(id(world, pinakes, 'consensus-reality')). [§5]
+      'real_fact/3',              // real_fact(Id, P, O).                              [§4.3 Q2]
+    ],
+    note: 'KINP equivalence layer (koine/specs/identity.md §4). Rule pack: packages/core/src/identity/equivalence-predicates.ts (consulted like the helper packs, never asserted as player facts). same_as/based_on/part_of/instance_of are ground link facts minted by equivalence.ts in both the arity-3 (confidence only, §4.3) and arity-4 (with src, §4.2) spellings; equiv_link/5 normalizes them. Fact transfer traverses same_as ONLY: a fictional entity modeled on a real one emits based_on and never same_as (§4.3/§4.5), and a based_on chain is never promoted to same_as by transitivity.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -669,6 +712,7 @@ const BLOCK_COLLECTIONS: Record<string, IdCollection> = {
  */
 export const NON_ENTITY_ID_BLOCKS: Record<string, string> = {
   identity: 'the identity surface itself — its arguments are id/3 terms and CURIEs, not atoms to be named',
+  equivalence: 'the equivalence layer links id/3 terms to id/3 terms (koine/specs/identity.md §4); it has no sanitized _id atoms to name',
   rule: 'rule_*/N key on a sanitized rule NAME authored by the converters, not on the rules collection _id',
   narrative: 'narrative_*/N key on the authored template atom from the seed .pl files, not on a document _id',
   cefrProficiency: 'runtime player facts keyed on the playthrough player handle (no collection)',
@@ -980,8 +1024,9 @@ function skipToClauseEnd(src: string, start: number): number {
  * Enumerate every Prolog predicate signature this Insimul build depends on,
  * aggregated across predicate-schema.ts (collection-derived catalog),
  * helper-predicates.ts, advanced-predicates.ts, npc-reasoning.ts, and the KINP
- * identity rule pack (identity/identity-predicates.ts) — so the snapshot and
- * its hash reflect the id surface too.
+ * identity + equivalence rule packs (identity/identity-predicates.ts,
+ * identity/equivalence-predicates.ts) — so the snapshot and its hash reflect
+ * the id surface too.
  *
  * Deduplicated by (name, arity) with precedence dynamic > builtin > helper so
  * that a predicate appearing both as a `:- dynamic` declaration and as a
@@ -1018,6 +1063,7 @@ export function buildPredicateSchemaSnapshot(): PredicateSignature[] {
     getAdvancedPredicates(),
     getNPCReasoningRules(),
     IDENTITY_PREDICATES_PROLOG,
+    EQUIVALENCE_PREDICATES_PROLOG,
   ];
   for (const src of sources) {
     const { dynamic, builtin } = parsePrologSignatures(src);

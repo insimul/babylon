@@ -199,6 +199,54 @@ Gotchas:
   § "KINP identifiers in the corpus", together with the amendments the native
   harness needs when it re-vendors the corpus.
 
+### KINP equivalence layer (US-2, `packages/core/src/identity/`)
+
+The §4 half of the same surface: links between the different local ids projects
+mint for the same thing. Two more files, one invariant: **only `same_as`
+licenses fact transfer.**
+
+- `equivalence-predicates.ts` — `EQUIVALENCE_PREDICATES_PROLOG`, consulted like
+  the identity pack. The whole §4.3 firewall is one asymmetry:
+  `same_as_closure/2` walks `same_as` edges only, `based_on_edge/2` is never fed
+  into it, and `licenses_fact_transfer(same_as).` is the sole such fact. So a
+  `based_on` chain can't be promoted to `same_as` by transitivity (§4.5) *by
+  construction*, and `firewalled/2` makes that checkable. `fact_of/4` /
+  `real_fact/3` answer "facts true of this entity"; `inspired_by/2` /
+  `inspired_by_anchor/2` answer "which real figures inspired characters?".
+- `equivalence.ts` — mints the links. `chooseEquivalenceRelation()` is §4.5
+  delta C (different non-identity-inheriting world ⇒ `based_on`; same or
+  identity-inheriting ⇒ `same_as`; `viaBasedOnChain` ⇒ always `based_on`);
+  `reconcile()` adds the §11-decision-2 threshold (link or queue, never guess);
+  `reconcileProvisional()` is the §6 re-ID case (`same_as` by construction,
+  refuses cross-authority pairs).
+
+Gotchas:
+
+- **Links come in two arities.** §4.3's worked example is `based_on(A, B,
+  confidence(C))`, §4.2's is `same_as(A, B, confidence(C), src(S))`. Both are
+  emitted, so every rule reads through `equiv_link/5` and the pack declares ALL
+  eight link arities `:- dynamic` — otherwise a KB carrying only the arity-4
+  facts raises `existence_error(procedure, same_as/3)` from `equiv_link/5`.
+- **`kinp_member/2` is deliberate.** The cycle-safe closure walker needs a
+  membership check; `member/2` would force `:- use_module(library(lists)).` into
+  every consulting KB (see the tau-prolog gotcha above), so the pack ships its
+  own two-clause predicate and stays library-free.
+- **The firewall is enforced at mint time too.** `equivalenceLink()` throws on a
+  `same_as` between a world-scoped entity and an identifier in a *different
+  known* world. An unknown world is allowed through (a provisional local has
+  none, and §6 re-ID is a legitimate `same_as`) — the resolver separately
+  refuses to *choose* `same_as` when a world is unknown, so the default is
+  closed either way.
+- **Predicate-schema redundancy is intentional but hides drift.** The
+  equivalence predicates are listed both in `PREDICATE_SCHEMA.equivalence` and
+  parsed out of the rule pack, so deleting one occurrence alone does NOT move
+  the hash (the contract genuinely hasn't changed). To falsify the drift guard,
+  add a new predicate to the pack.
+- `claim/4` reifies the world as the claim's fourth argument. That is a
+  placeholder shape for US-3's ratified `@world(W)` context argument; when it
+  lands, the corpus's claim spelling changes and `conformance/README.md`'s
+  native-harness amendment list must gain another entry.
+
 ### Conformance corpus (US-CE5)
 
 `packages/core/conformance/` is the language-neutral, data-only cross-engine

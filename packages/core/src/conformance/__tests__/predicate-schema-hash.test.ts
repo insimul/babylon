@@ -53,6 +53,28 @@ describe('predicate schema hash', () => {
     }
   });
 
+  it('includes the KINP equivalence layer (US-2)', () => {
+    const signatures = new Set(snapshot.map((s) => `${s.name}/${s.arity}`));
+    for (const required of [
+      'same_as/3',
+      'same_as/4',
+      'based_on/3',
+      'based_on/4',
+      'equiv_link/5',
+      'same_as_closure/2',
+      'based_on_edge/2',
+      'inspired_by/2',
+      'firewalled/2',
+      'licenses_fact_transfer/1',
+      'claim/4',
+      'fact_of/4',
+      'real_fact/3',
+      'consensus_reality/1',
+    ]) {
+      expect(signatures, `equivalence predicate ${required} missing from the snapshot`).toContain(required);
+    }
+  });
+
   it('is stable across rebuilds', () => {
     expect(hashPredicateSchema(buildPredicateSchemaSnapshot())).toBe(hashPredicateSchema(snapshot));
   });
