@@ -108,8 +108,8 @@
       "kb": [
         "based_on(id(ent, 'insimul:world:alderforest', 'npc-renaud'), id(ent, pinakes, 'napoleon-i'), confidence(0.8)).",
         "same_as(id(ent, pinakes, 'napoleon-i'), id(ent, wikidata, q517), confidence(1.0)).",
-        "claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), fought, id(ent, 'insimul:world:alderforest', 'dragon-3'), id(world, insimul, alderforest)).",
-        "claim(id(ent, pinakes, 'napoleon-i'), ruled, id(ent, pinakes, france), id(world, pinakes, 'consensus-reality')).",
+        "claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), fought, id(ent, 'insimul:world:alderforest', 'dragon-3'), '@world'(id(world, insimul, alderforest))).",
+        "claim(id(ent, pinakes, 'napoleon-i'), ruled, id(ent, pinakes, france), '@world'(id(world, pinakes, 'consensus-reality'))).",
         "equiv_link(same_as, A, B, C, src(unattributed)) :- same_as(A, B, C).",
         "kinp_member(X, [X|_]).",
         "kinp_member(X, [_|T]) :- kinp_member(X, T).",
@@ -118,8 +118,8 @@
         "same_as_closure(A, B) :- same_as_reach(A, B, [A]).",
         "same_as_reach(A, B, Seen) :- same_as_edge(A, B), \\+ kinp_member(B, Seen).",
         "same_as_reach(A, B, Seen) :- same_as_edge(A, M), \\+ kinp_member(M, Seen), same_as_reach(M, B, [M|Seen]).",
-        "fact_of(Id, P, O, W) :- claim(Id, P, O, W).",
-        "fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, W).",
+        "fact_of(Id, P, O, W) :- claim(Id, P, O, '@world'(W)).",
+        "fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, '@world'(W)).",
         "consensus_reality(id(world, pinakes, 'consensus-reality')).",
         "real_fact(Id, P, O) :- consensus_reality(W), fact_of(Id, P, O, W).",
         "id_local(id(_, _, L), L).",
@@ -132,7 +132,7 @@
       "name": "the-in-fiction-claim-does-not-transfer-in-any-world",
       "kb": [
         "based_on(id(ent, 'insimul:world:alderforest', 'npc-renaud'), id(ent, pinakes, 'napoleon-i'), confidence(0.8)).",
-        "claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), fought, id(ent, 'insimul:world:alderforest', 'dragon-3'), id(world, insimul, alderforest)).",
+        "claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), fought, id(ent, 'insimul:world:alderforest', 'dragon-3'), '@world'(id(world, insimul, alderforest))).",
         "equiv_link(same_as, A, B, C, src(unattributed)) :- same_as(A, B, C).",
         ":- dynamic(same_as/3).",
         "kinp_member(X, [X|_]).",
@@ -142,8 +142,8 @@
         "same_as_closure(A, B) :- same_as_reach(A, B, [A]).",
         "same_as_reach(A, B, Seen) :- same_as_edge(A, B), \\+ kinp_member(B, Seen).",
         "same_as_reach(A, B, Seen) :- same_as_edge(A, M), \\+ kinp_member(M, Seen), same_as_reach(M, B, [M|Seen]).",
-        "fact_of(Id, P, O, W) :- claim(Id, P, O, W).",
-        "fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, W)."
+        "fact_of(Id, P, O, W) :- claim(Id, P, O, '@world'(W)).",
+        "fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, '@world'(W))."
       ],
       "query": "fact_of(id(ent, pinakes, 'napoleon-i'), fought, _, _)",
       "expected": []
@@ -175,8 +175,8 @@
     {
       "name": "provisional-local-is-usable-before-reconciliation",
       "kb": [
-        "claim(id(ent, 'insimul:local', 'tmp-npc-42'), commands, id(ent, 'insimul:world:alderforest', 'army-of-ash'), id(world, insimul, alderforest)).",
-        "fact_of(Id, P, O, W) :- claim(Id, P, O, W).",
+        "claim(id(ent, 'insimul:local', 'tmp-npc-42'), commands, id(ent, 'insimul:world:alderforest', 'army-of-ash'), '@world'(id(world, insimul, alderforest))).",
+        "fact_of(Id, P, O, W) :- claim(Id, P, O, '@world'(W)).",
         "id_local(id(_, _, L), L).",
         "provisional_fact(P, L) :- fact_of(id(ent, 'insimul:local', 'tmp-npc-42'), P, O, _), id_local(O, L)."
       ],
@@ -186,7 +186,7 @@
     {
       "name": "reconciling-a-provisional-local-adds-same-as-without-moving-its-claims",
       "kb": [
-        "claim(id(ent, 'insimul:local', 'tmp-npc-42'), commands, id(ent, 'insimul:world:alderforest', 'army-of-ash'), id(world, insimul, alderforest)).",
+        "claim(id(ent, 'insimul:local', 'tmp-npc-42'), commands, id(ent, 'insimul:world:alderforest', 'army-of-ash'), '@world'(id(world, insimul, alderforest))).",
         "same_as(id(ent, 'insimul:local', 'tmp-npc-42'), id(ent, 'insimul:world:alderforest', 'npc-renaud'), confidence(1.0), src('insimul:resolver/1')).",
         "equiv_link(same_as, A, B, C, S) :- same_as(A, B, C, S).",
         "kinp_member(X, [X|_]).",
@@ -196,8 +196,8 @@
         "same_as_closure(A, B) :- same_as_reach(A, B, [A]).",
         "same_as_reach(A, B, Seen) :- same_as_edge(A, B), \\+ kinp_member(B, Seen).",
         "same_as_reach(A, B, Seen) :- same_as_edge(A, M), \\+ kinp_member(M, Seen), same_as_reach(M, B, [M|Seen]).",
-        "fact_of(Id, P, O, W) :- claim(Id, P, O, W).",
-        "fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, W).",
+        "fact_of(Id, P, O, W) :- claim(Id, P, O, '@world'(W)).",
+        "fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, '@world'(W)).",
         "id_local(id(_, _, L), L).",
         "canonical_fact(P, L) :- fact_of(id(ent, 'insimul:world:alderforest', 'npc-renaud'), P, O, _), id_local(O, L)."
       ],

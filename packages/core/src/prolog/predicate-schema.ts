@@ -28,6 +28,7 @@ import { getAdvancedPredicates } from './advanced-predicates';
 import { getNPCReasoningRules } from './npc-reasoning';
 import { IDENTITY_PREDICATES_PROLOG } from '../identity/identity-predicates';
 import { EQUIVALENCE_PREDICATES_PROLOG } from '../identity/equivalence-predicates';
+import { WORLD_CONTEXT_PREDICATES_PROLOG } from '../identity/world-predicates';
 import {
   formatCurie,
   insimulEntityId,
@@ -153,12 +154,48 @@ export const PREDICATE_SCHEMA = {
       'inspired_by/2',            // inspired_by(Fiction, Source).                     [§4.3 Q1]
       'inspired_by_anchor/2',     // inspired_by_anchor(Fiction, Anchor).              [§4.4 anchors]
       'firewalled/2',             // firewalled(Fiction, Source) — lineage without same_as. [§4.5]
-      'claim/4',                  // claim(Subject, Predicate, Object, WorldId).       [§5]
+      'claim/4',                  // claim(Subject, Predicate, Object, '@world'(W)).   [§5]
       'fact_of/4',                // fact_of(Id, P, O, World) — direct or same_as-transferred.
       'consensus_reality/1',      // consensus_reality(id(world, pinakes, 'consensus-reality')). [§5]
       'real_fact/3',              // real_fact(Id, P, O).                              [§4.3 Q2]
     ],
     note: 'KINP equivalence layer (koine/specs/identity.md §4). Rule pack: packages/core/src/identity/equivalence-predicates.ts (consulted like the helper packs, never asserted as player facts). same_as/based_on/part_of/instance_of are ground link facts minted by equivalence.ts in both the arity-3 (confidence only, §4.3) and arity-4 (with src, §4.2) spellings; equiv_link/5 normalizes them. Fact transfer traverses same_as ONLY: a fictional entity modeled on a real one emits based_on and never same_as (§4.3/§4.5), and a based_on chain is never promoted to same_as by transitivity.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WORLD CONTEXT (KINP — koine/specs/identity.md §5; rules in
+  // packages/core/src/identity/world-predicates.ts)
+  //
+  // Truth is true-in-a-world: worlds form an inheritance chain
+  // (consensus-reality ← editor canon ← playthrough) and reasoning is relative
+  // to one, inheriting parent facts unless overridden. The ratified mechanism
+  // (§11 decision 3) is the explicit context argument '@world'(W) — a plain
+  // compound term, so it needs no operator directive and round-trips to a TSV
+  // cell as the world's CURIE.
+  // ═══════════════════════════════════════════════════════════════════════════
+  worldContext: {
+    predicates: [
+      'world_declared/1',                    // world_declared(WorldId).                      [§5]
+      'world_parent/2',                      // world_parent(Child, Parent) — the chain.
+      'world_role/2',                        // world_role(W, canon|playthrough|consensus_reality).
+      'world_inherits_identity/1',           // world_inherits_identity(W) — §5 per-world policy, read by §4.5.
+      'world_ancestor/2',                    // world_ancestor(W, Ancestor).
+      'world_scope/2',                       // world_scope(W, Source) — W then its ancestors.
+      'world_root/2',                        // world_root(W, Root).
+      'world_inherits_consensus_reality/1',  // world_inherits_consensus_reality(W).
+      'playthrough_of/2',                    // playthrough_of(Playthrough, Canon).
+      'world_context/2',                     // world_context('@world'(W), W) — the argument's reader.
+      'claim_at/4',                          // claim_at(W, S, P, O) — asserted AT W, no inheritance.
+      'claim_defined/3',                     // claim_defined(W, S, P).
+      'world_defines/3',                     // world_defines(W, S, P) — here or inherited.
+      'holds/4',                             // holds(S, P, O, '@world'(W)) — reasoning in a world.
+      'world_resolve/4',                     // world_resolve(W, S, P, O) — inheritance + override.
+      'holds_at/5',                          // holds_at(S, P, O, '@world'(W), SourceWorld).
+      'world_resolve_at/5',                  // world_resolve_at(W, S, P, O, SourceWorld).
+      'overrides/3',                         // overrides(W, S, P) — W restates an inherited (S, P).
+      'masked/4',                            // masked(W, S, P, ParentValue).
+    ],
+    note: "KINP world model (koine/specs/identity.md §5, §11 decision 3). Rule pack: packages/core/src/identity/world-predicates.ts (consulted like the helper packs, never asserted as player facts). world_declared/1, world_parent/2, world_role/2 and world_inherits_identity/1 are ground facts emitted per world by worlds.ts; the rest are rules. Insimul's chain: pinakes:world:consensus-reality (optional) ← insimul:world:<w> (editor canon) ← insimul:world:<w>#save-<id> (a playthrough). holds/4 resolves a claim at a world, falling back to its parents unless the world overrides that (Subject, Predicate); it never writes an override back to the parent. The pack makes NO storage assumption — a playthrough is a world identifier, not a foreign key on another collection.",
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -713,6 +750,7 @@ const BLOCK_COLLECTIONS: Record<string, IdCollection> = {
 export const NON_ENTITY_ID_BLOCKS: Record<string, string> = {
   identity: 'the identity surface itself — its arguments are id/3 terms and CURIEs, not atoms to be named',
   equivalence: 'the equivalence layer links id/3 terms to id/3 terms (koine/specs/identity.md §4); it has no sanitized _id atoms to name',
+  worldContext: 'the §5 world model reasons over id/3 world terms and the @world(W) context argument, not over sanitized _id atoms (a playthrough is a world identifier, not a foreign key)',
   rule: 'rule_*/N key on a sanitized rule NAME authored by the converters, not on the rules collection _id',
   narrative: 'narrative_*/N key on the authored template atom from the seed .pl files, not on a document _id',
   cefrProficiency: 'runtime player facts keyed on the playthrough player handle (no collection)',
@@ -1024,9 +1062,9 @@ function skipToClauseEnd(src: string, start: number): number {
  * Enumerate every Prolog predicate signature this Insimul build depends on,
  * aggregated across predicate-schema.ts (collection-derived catalog),
  * helper-predicates.ts, advanced-predicates.ts, npc-reasoning.ts, and the KINP
- * identity + equivalence rule packs (identity/identity-predicates.ts,
- * identity/equivalence-predicates.ts) — so the snapshot and its hash reflect
- * the id surface too.
+ * identity + equivalence + world rule packs (identity/identity-predicates.ts,
+ * identity/equivalence-predicates.ts, identity/world-predicates.ts) — so the
+ * snapshot and its hash reflect the id and world surfaces too.
  *
  * Deduplicated by (name, arity) with precedence dynamic > builtin > helper so
  * that a predicate appearing both as a `:- dynamic` declaration and as a
@@ -1064,6 +1102,7 @@ export function buildPredicateSchemaSnapshot(): PredicateSignature[] {
     getNPCReasoningRules(),
     IDENTITY_PREDICATES_PROLOG,
     EQUIVALENCE_PREDICATES_PROLOG,
+    WORLD_CONTEXT_PREDICATES_PROLOG,
   ];
   for (const src of sources) {
     const { dynamic, builtin } = parsePrologSignatures(src);

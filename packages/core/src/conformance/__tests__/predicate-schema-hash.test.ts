@@ -75,6 +75,27 @@ describe('predicate schema hash', () => {
     }
   });
 
+  it('includes the KINP world model (US-3)', () => {
+    const signatures = new Set(snapshot.map((s) => `${s.name}/${s.arity}`));
+    for (const required of [
+      'world_declared/1',
+      'world_parent/2',
+      'world_role/2',
+      'world_inherits_identity/1',
+      'world_ancestor/2',
+      'world_scope/2',
+      'world_context/2',
+      'claim_at/4',
+      'claim_defined/3',
+      'holds/4',
+      'holds_at/5',
+      'world_resolve/4',
+      'overrides/3',
+    ]) {
+      expect(signatures, `world predicate ${required} missing from the snapshot`).toContain(required);
+    }
+  });
+
   it('is stable across rebuilds', () => {
     expect(hashPredicateSchema(buildPredicateSchemaSnapshot())).toBe(hashPredicateSchema(snapshot));
   });

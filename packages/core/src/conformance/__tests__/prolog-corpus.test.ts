@@ -88,6 +88,7 @@ describe('Prolog conformance corpus', () => {
       'gameplay-predicates',
       'kinp-identity',
       'kinp-equivalence',
+      'kinp-worlds',
     ]) {
       expect(areas, `missing area file for "${required}"`).toContain(required);
     }

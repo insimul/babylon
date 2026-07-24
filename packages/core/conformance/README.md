@@ -207,10 +207,78 @@ identity-corpus amendments above:
 4. `equivalence.json` is new; add `kinp-equivalence` to the required-areas list.
 5. The `confidence(C)` argument binds a **float** (`0.8`), so the harness's
    binding comparison must treat JSON numbers as numbers, not strings.
-6. `claim/4` here reifies the world as the claim's fourth argument. The ratified
-   `@world(W)` context argument (§5 / §11 decision 3) is a later story; when it
-   lands, the corpus's claim spelling changes and the native side must re-vendor
-   again.
+6. `claim/4`'s fourth argument is the world, spelled with the ratified
+   `@world(W)` context argument (see the next section) — `claim(S, P, O,
+   '@world'(id(world, …)))`. US-1's/US-2's earlier bare-world spelling is gone.
+
+Nothing in `insimul-native` was edited from this story either.
+
+## Worlds and the `@world(W)` context argument in the corpus
+
+`prolog/worlds.json` (`area: kinp-worlds`) pins the KINP **world model**
+(`koine/specs/identity.md` §5) and the ratified context argument (§11 decision
+3). Its `kb` clauses mirror `src/identity/world-predicates.ts` verbatim, exactly
+as `identity.json` and `equivalence.json` mirror their packs.
+
+Insimul's chain, and the identifier each level uses:
+
+```
+pinakes:world:consensus-reality          id(world, pinakes, 'consensus-reality')
+└── insimul:world:alderforest            id(world, insimul, alderforest)
+    └── insimul:world:alderforest#save-7f
+                                         id(world, insimul, 'alderforest%23save-7f')
+```
+
+Editor canon is a world, a playthrough is a *child* world that forks it — not a
+foreign key stamped on every row. §5 writes the playthrough separator literally
+(`#save-`); §3.1's local-id charset requires percent-encoding, so the stored
+local id is `<w>%23save-<id>` and `unsanitizeLocalId` recovers §5's spelling.
+
+An assertion carries its world as an explicit argument:
+
+```prolog
+claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), garrisons,
+      id(ent, 'insimul:world:alderforest', northkeep),
+      '@world'(id(world, insimul, alderforest))).
+
+?- holds(id(ent, 'insimul:world:alderforest', 'npc-renaud'), garrisons, O,
+         '@world'(id(world, insimul, 'alderforest%23save-7f'))).
+```
+
+Four conventions a native harness must honour:
+
+- **`'@world'` is a QUOTED atom used as a functor.** `@` is a symbolic
+  character, so a bare `@world(W)` would need a custom prefix operator, and a
+  `:- op/3` directive does not survive a KB snapshot (clauses only). Parsing
+  `'@world'(X)` as an ordinary compound is all that is required.
+- **Resolve the parent BEFORE the override check.** `world_resolve/4`'s second
+  clause is `world_parent(W, P), world_resolve(P, S, Pr, O), \+ claim_defined(W,
+  S, Pr)` in that order, so the negation always runs on ground arguments. With
+  the goals swapped, an unbound `(S, P)` makes `\+ claim_defined/3` mean "W
+  asserts nothing at all" and inheritance collapses — one case enumerates an
+  unbound `(P, O)` at a world that does hold an override, precisely to pin this.
+- **An override masks, it never rewrites.** A playthrough claim shadows the
+  canon value *in the playthrough only*; `claim_at/4` (no inheritance) still
+  shows the canon world holding exactly what the editor authored. The
+  "never-written-back" case asserts that directly.
+- **Inheritance is declared, not assumed.** A fiction reaches consensus reality
+  only when a `world_parent/2` edge says so (§5: it MAY inherit) — one case runs
+  the same query with the edge absent and expects no solutions. And facts never
+  travel *up*: a query at consensus reality sees no in-fiction claim.
+
+Inheritance (down a world chain) and `same_as` transfer (across identifiers) are
+orthogonal: `equivalence-predicates.ts` reads `claim/4` at the world it was
+asserted at and does not walk `world_parent/2`, `world-predicates.ts` walks the
+chain and knows nothing about links. A KB that consults both composes them in a
+rule of its own; neither pack calls into the other, so each stands alone.
+
+**Amendments for the native harness (US-83 re-vendor).** In addition to the
+amendments above:
+
+7. `worlds.json` is new; add `kinp-worlds` to the required-areas list.
+8. A world's local id may contain a percent escape (`alderforest%23save-7f`).
+   It is an ordinary atom — do not decode it in the engine; decoding is a
+   presentation concern (`unsanitizeLocalId`).
 
 Nothing in `insimul-native` was edited from this story either.
 

@@ -122,17 +122,19 @@ firewalled(Fiction, Source) :-
   \\+ same_as_closure(Fiction, Source).
 
 % ── Claims and the transfer rule (§4.3) ───────────────────────────────────
-% An assertion is true IN A WORLD (§5, axiom 4). Here the world rides as the
-% claim's fourth argument — the same information the ratified @world(W) context
-% argument carries, reified so this pack stands alone; the @world(W) reasoning
-% context itself is US-3's story.
+% An assertion is true IN A WORLD (§5, axiom 4), carried by the ratified
+% explicit context argument '@world'(W) (§11 decision 3, US-3). This pack reads
+% that argument but does NOT walk the world inheritance chain — transfer across
+% IDENTIFIERS (same_as) and transfer down a WORLD chain (inheritance,
+% world-predicates.ts) are orthogonal axes, and each pack stands alone.
 
-:- dynamic(claim/4).   % claim(Subject, Predicate, Object, WorldId)
+:- dynamic(claim/4).   % claim(Subject, Predicate, Object, '@world'(WorldId))
 
-% Facts true OF an identifier: asserted of it directly, or transferred across a
-% same_as edge. based_on is NEVER traversed — this is where the firewall bites.
-fact_of(Id, P, O, W) :- claim(Id, P, O, W).
-fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, W).
+% Facts true OF an identifier, in the world they were asserted at: stated of it
+% directly, or transferred across a same_as edge. based_on is NEVER traversed —
+% this is where the firewall bites.
+fact_of(Id, P, O, W) :- claim(Id, P, O, '@world'(W)).
+fact_of(Id, P, O, W) :- same_as_closure(Id, Other), claim(Other, P, O, '@world'(W)).
 
 % The default world for real-world knowledge (§5).
 consensus_reality(id(world, pinakes, 'consensus-reality')).

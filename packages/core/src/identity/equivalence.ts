@@ -36,6 +36,7 @@ import {
   worldOfEntity,
   type KinpId,
 } from './kinp';
+import { worldContextTerm } from './worlds';
 
 // ─── The relation table (§4.2) ──────────────────────────────────────────────
 
@@ -154,12 +155,13 @@ export function equivalenceFacts(links: readonly EquivalenceLink[]): string[] {
 }
 
 /**
- * `claim(Subject, Predicate, Object, WorldId)` — a world-stamped assertion
- * (§5). Used by the firewall rules to answer "facts true of this entity"; the
- * ratified `@world(W)` reasoning context is US-3's story.
+ * `claim(Subject, Predicate, Object, '@world'(World))` — a world-stamped
+ * assertion (§5), carrying the ratified explicit context argument (§11 decision
+ * 3; see `./worlds`). Used by the firewall rules here to answer "facts true of
+ * this entity", and by `./world-predicates` to resolve it in a world.
  */
 export function claimFact(subject: KinpId, predicate: string, object: KinpId, world: KinpId): string {
-  return `claim(${formatIdTerm(subject)}, ${prologAtom(predicate)}, ${formatIdTerm(object)}, ${formatIdTerm(world)}).`;
+  return `claim(${formatIdTerm(subject)}, ${prologAtom(predicate)}, ${formatIdTerm(object)}, ${worldContextTerm(world)}).`;
 }
 
 // ─── The resolver's normative choices (§4.5, §6) ────────────────────────────

@@ -247,6 +247,48 @@ Gotchas:
   lands, the corpus's claim spelling changes and `conformance/README.md`'s
   native-harness amendment list must gain another entry.
 
+### KINP world model + `@world(W)` (US-3, `packages/core/src/identity/`)
+
+The §5 half: truth is **true-in-a-world**, worlds inherit, and reasoning takes
+the ratified explicit context argument (§11 decision 3). Two more files.
+
+- `worlds.ts` — mints the chain `pinakes:world:consensus-reality` ← canon
+  `insimul:world:<w>` ← playthrough `insimul:world:<w>#save-<id>`
+  (`insimulWorldChain`, `playthroughWorldId`, `parsePlaythroughWorld`),
+  emits the ground facts (`worldFacts`), and renders/parses the context
+  argument (`worldContextTerm` ⇄ `worldContextCell`, `holdsGoal`).
+- `world-predicates.ts` — `WORLD_CONTEXT_PREDICATES_PROLOG`: `world_parent/2`
+  chain walkers, `claim_at/4` (no inheritance), `holds/4` + `world_resolve/4`
+  (inheritance with override), `holds_at/5`, `overrides/3`, `masked/4`.
+- Corpus: `conformance/prolog/worlds.json` (area `kinp-worlds`, 12 cases).
+
+Gotchas:
+
+- **`@world` must be QUOTED**: `@` is a symbolic char, so `@world(W)` needs a
+  custom prefix operator, and a `:- op/3` directive does not survive a KB
+  snapshot. The on-the-wire spelling is `'@world'(W)` — an ordinary compound.
+  `claimFact()` (equivalence.ts) now emits it; US-1/US-2's bare-world 4th
+  argument is gone, and the equivalence corpus was rewritten in lockstep.
+- **Resolve the parent BEFORE the override check.** `world_resolve/4`'s second
+  clause is `world_parent, world_resolve(Parent…), \+ claim_defined(W…)` in that
+  order. Swapped, an unbound `(S,P)` makes the negation mean "W asserts nothing
+  at all" and inheritance collapses for every other predicate in that world. One
+  test and one corpus case enumerate unbound `(P,O)` precisely to pin this.
+- **`#` is percent-encoded.** §5 writes `insimul:world:<w>#save-<id>`; §3.1's
+  charset does not allow `#`, so the stored local id is `<w>%23save-<id>` and
+  `unsanitizeLocalId`/`parsePlaythroughWorld` recover §5's spelling. Treat it as
+  an opaque atom in Prolog — never decode it in the engine.
+- **The two transfer axes stay separate.** `equivalence-predicates.ts` transfers
+  across identifiers (`same_as`), `world-predicates.ts` down a world chain;
+  neither pack calls the other, so each consults standalone. Compose them in a
+  world-layer rule if you need both.
+- **No storage assumptions** (AC 3): a playthrough is a *world identifier*, not
+  a foreign key. A guard in `__tests__/worlds.test.ts` scans `src/identity/*.ts`
+  and fails on any save-file/`node:fs` import or the string `playthroughId`.
+- The world pack is in `buildPredicateSchemaSnapshot()`'s sources, so it moved
+  the hash again (612 signatures) — regenerate
+  `conformance/predicate-schema-hash.json` with any predicate change.
+
 ### Conformance corpus (US-CE5)
 
 `packages/core/conformance/` is the language-neutral, data-only cross-engine

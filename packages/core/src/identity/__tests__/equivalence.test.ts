@@ -75,11 +75,11 @@ describe('link facts', () => {
     expect(() => basedOn(RENAUD, NAPOLEON, Number.NaN)).toThrow(/confidence/);
   });
 
-  it('stamps a claim with its world (§5)', () => {
+  it('stamps a claim with the @world(W) context argument (§5, §11 decision 3)', () => {
     const dragon = insimulEntityId('dragon-3', WORLD);
     expect(claimFact(RENAUD, 'fought', dragon, insimulWorldId(WORLD))).toBe(
       "claim(id(ent, 'insimul:world:alderforest', 'npc-renaud'), fought, " +
-        "id(ent, 'insimul:world:alderforest', 'dragon-3'), id(world, insimul, alderforest)).",
+        "id(ent, 'insimul:world:alderforest', 'dragon-3'), '@world'(id(world, insimul, alderforest))).",
     );
   });
 
