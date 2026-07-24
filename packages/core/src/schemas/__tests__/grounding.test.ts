@@ -1,10 +1,12 @@
 /**
- * US-CE7 — LinguaScrape bridge schema stubs.
+ * US-CE7 — Pinakes bridge schema stubs (renamed to Pinakes in US-4).
  *
  * Asserts that:
  *  - a minimal hand-written GroundingPack fixture parses
  *  - fixtures missing `contractVersion`, an entity `csid`, or an entity
  *    `license` are rejected (the exact-required seam)
+ *  - the pack's `source` is the KINP namespace `pinakes` and the pre-rename
+ *    value is rejected outright
  *  - a minimal CanonicalWorldExport fixture parses and one missing
  *    `contractVersion` / `predicateSchemaHash` is rejected
  *
@@ -14,6 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { PINAKES_NAMESPACE } from '../../identity/kinp';
 import {
   GROUNDING_CONTRACT_VERSION,
   groundingPackSchema,
@@ -26,7 +29,7 @@ function makeGroundingPack() {
     contractVersion: GROUNDING_CONTRACT_VERSION,
     packId: 'pack-latin-cuisine-001',
     generatedAt: '2026-07-15T00:00:00.000Z',
-    source: 'linguascrape',
+    source: PINAKES_NAMESPACE,
     domains: ['cuisine', 'culture'],
     entities: [
       {
@@ -133,6 +136,12 @@ describe('groundingPackSchema', () => {
   it("rejects a pack with the wrong 'source'", () => {
     const pack = { ...makeGroundingPack(), source: 'handwritten' };
     expect(groundingPackSchema.safeParse(pack).success).toBe(false);
+  });
+
+  it("pins 'source' to the KINP pinakes namespace", () => {
+    expect(PINAKES_NAMESPACE).toBe('pinakes');
+    const parsed = groundingPackSchema.parse(makeGroundingPack());
+    expect(parsed.source).toBe('pinakes');
   });
 });
 

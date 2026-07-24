@@ -126,14 +126,20 @@ emitted JSON Schema counterparts. Conventions:
   `prolog/tau-engine.test.ts` harness stays excluded by name).
 - Golden save fixtures live in `packages/core/conformance/saves/` (copied
   read-only from `insimul-platform/shared/__tests__/fixtures/saves/`).
-- **Bridge schema stubs (US-CE7)**: `schemas/grounding.schema.ts` reserves the
-  LinguaScrape interchange seam (`groundingPackSchema`,
-  `canonicalWorldExportSchema`) — schema-only, no import/export logic. Both are
-  registered in `SCHEMA_ENTRIES` so `npm run schemas` emits
-  `grounding-pack.schema.json` + `canonical-world-export.schema.json` and the same
-  drift guard covers them. `contractVersion` is a `z.literal` of
+- **Bridge schema stubs (US-CE7, renamed to Pinakes in US-4)**:
+  `schemas/grounding.schema.ts` reserves the Pinakes interchange seam
+  (`groundingPackSchema`, `canonicalWorldExportSchema`) — schema-only, no
+  import/export logic. Both are registered in `SCHEMA_ENTRIES` so `npm run schemas`
+  emits `grounding-pack.schema.json` + `canonical-world-export.schema.json` and the
+  same drift guard covers them. `contractVersion` is a `z.literal` of
   `GROUNDING_CONTRACT_VERSION`, so any new bridge shape added here MUST reuse that
-  constant (or a stale-version fixture would be silently accepted).
+  constant (or a stale-version fixture would be silently accepted). The pack's
+  producer field is `z.literal(PINAKES_NAMESPACE)` — reuse the `identity/kinp.ts`
+  constant, never a fresh `'pinakes'` string literal, so the pack's producer and
+  the identifiers it carries can't drift apart. These envelopes are NOT yet the
+  ratified KGP pack shape (`koine/specs/grounding-pack.md` §2); the deltas are
+  catalogued in `packages/core/docs/kgp-alignment-open-questions.md` and are the
+  platform-side alignment story's to close — don't guess them in core.
 - **Content library / world artifact (US-CL1)**: `schemas/content-library.schema.ts`
   is the shareable authored-content unit — `manifest` (own `CONTENT_LIBRARY_CONTRACT_VERSION`
   literal, monotonic `version`, `provenance` with a required SPDX `license`) plus the

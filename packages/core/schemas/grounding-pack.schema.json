@@ -17,7 +17,7 @@
         },
         "source": {
           "type": "string",
-          "const": "linguascrape"
+          "const": "pinakes"
         },
         "domains": {
           "type": "array",

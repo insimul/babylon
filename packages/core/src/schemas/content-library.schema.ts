@@ -52,7 +52,7 @@ const vec2Schema = z.object({ x: z.number(), z: z.number() });
  */
 export const contentLibraryProvenanceSchema = z
   .object({
-    /** Producing tool or corpus (e.g. `insimul-editor`, `linguascrape`). */
+    /** Producing tool or corpus (e.g. `insimul-editor`, `pinakes`). */
     source: z.string().min(1),
     sourceUrl: z.string().optional(),
     /** Human or organisation credited as the author. */
