@@ -13,6 +13,11 @@
  *   - Complex entities (rules, actions, quests) store pre-generated prologContent
  *     because their conversion involves non-trivial logic (condition parsing, etc.).
  *   - Every predicate uses the MongoDB _id as its primary atom (sanitized).
+ *     Each such atom is *named* by a KINP identifier (koine/specs/identity.md
+ *     §3): `buildPredicateIdMap()` below maps every primary/foreign _id argument
+ *     of every predicate onto its `<namespace>:<kind>:<local-id>` CURIE, and the
+ *     `identity` block catalogues the `id/3` surface that reasons over them.
+ *     Sanitization is lossless, so _id atom ⇄ CURIE ⇄ id/3 round-trips.
  *   - Array fields produce one fact per element.
  *   - Null/undefined fields are omitted (no fact asserted).
  */
@@ -21,6 +26,14 @@ import { createHash } from 'node:crypto';
 import { HELPER_PREDICATES_PROLOG } from './helper-predicates';
 import { getAdvancedPredicates } from './advanced-predicates';
 import { getNPCReasoningRules } from './npc-reasoning';
+import { IDENTITY_PREDICATES_PROLOG } from '../identity/identity-predicates';
+import {
+  formatCurie,
+  insimulEntityId,
+  insimulWorldId,
+  type KinpId,
+  type KinpKind,
+} from '../identity/kinp';
 
 // ─── Collection Classification ──────────────────────────────────────────────
 
@@ -72,6 +85,38 @@ export const COLLECTION_PROLOG_MODE: Record<string, PrologSyncMode> = {
  */
 
 export const PREDICATE_SCHEMA = {
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IDENTITY (KINP — koine/specs/identity.md §3; rules in
+  // packages/core/src/identity/identity-predicates.ts)
+  //
+  // id(Kind, Namespace, LocalId) is the canonical identifier term (§3.3). The
+  // collection predicates below keep carrying their sanitized Mongo _id atom;
+  // the entity_id/2 + entity_curie/2 + curie/2 bridge facts (emitted per entity
+  // by identity-facts.ts) name each atom with its KINP CURIE, and every reader
+  // is a Prolog rule so no id logic leaves the KB.
+  // ═══════════════════════════════════════════════════════════════════════════
+  identity: {
+    predicates: [
+      'id/3',                // id(Kind, Namespace, LocalId) — the canonical term. [§3.3]
+      'kinp_kind/1',         // kinp_kind(ent|claim|asset|world|agent|src).       [§3.1]
+      'kinp_namespace/2',    // kinp_namespace(Namespace, Authority).             [§3.4 registry]
+      'id_kind/2',           // id_kind(id(K,N,L), K).
+      'id_namespace/2',      // id_namespace(id(K,N,L), N).
+      'id_local/2',          // id_local(id(K,N,L), L).
+      'well_formed_id/1',    // well_formed_id(Id).
+      'curie/2',             // curie(Id, '<ns>:<kind>:<local>').                 [§3.2 bridge]
+      'entity_id/2',         // entity_id(Atom, Id).       [sanitized _id atom → identifier]
+      'entity_curie/2',      // entity_curie(Atom, Curie).
+      'entity_kind/2',       // entity_kind(Atom, Kind).
+      'entity_namespace/2',  // entity_namespace(Atom, Namespace).
+      'entity_local/2',      // entity_local(Atom, LocalId).
+      'id_world/2',          // id_world(EntityId, WorldId).                      [§5 world scoping]
+      'entity_world/2',      // entity_world(Atom, WorldId).
+      'same_world/2',        // same_world(IdA, IdB).
+    ],
+    note: 'KINP identifier surface (koine/specs/identity.md §3/§5). Rule pack: packages/core/src/identity/identity-predicates.ts (consulted like the helper packs, never asserted as player facts). curie/2, entity_id/2 and entity_curie/2 are the ground bridge facts emitted per entity by identity-facts.ts; the rest are rules. Insimul CURIEs: a world is insimul:world:<w>, a world-scoped entity insimul:world:<w>:ent:<id>, a global entity insimul:ent:<id>, a provisional local insimul:local:ent:<id>.',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // WORLD
@@ -564,6 +609,244 @@ export const PREDICATE_SCHEMA = {
   },
 } as const;
 
+// ─── KINP identifier map (US-1) ─────────────────────────────────────────────
+//
+// Which argument of which predicate holds an entity id, and which entity it
+// refers to. This is the table that turns "every predicate uses the MongoDB
+// _id as its primary atom" into a KINP statement: an id argument's atom is the
+// local id of `<namespace>:<kind>:<local-id>` (koine/specs/identity.md §3.2),
+// namespaced by the entity's world (§3.4/§5).
+
+/** The Prolog-visible collection an id argument refers to. */
+export type IdCollection = keyof typeof COLLECTION_PROLOG_MODE;
+
+export interface PredicateIdArgument {
+  /** 0-based argument position in the predicate. */
+  index: number;
+  /** `primary` — the fact's own subject; `foreign` — a reference to another entity. */
+  role: 'primary' | 'foreign';
+  /** KINP kind (§3.1). Worlds are `world`; everything else is `ent`. */
+  kind: KinpKind;
+  /**
+   * Collection the atom identifies, or `null` when the reference is
+   * polymorphic (resolved by a sibling argument or by lookup) — a polymorphic
+   * argument still mints a CURIE, it just cannot be typed statically.
+   */
+  collection: IdCollection | null;
+  /** Source of the local id: a Mongo `_id`, or a converter-authored atom. */
+  local: 'mongo-id' | 'authored';
+  /** Source field the atom comes from (`_id`, `worldId`, `ownerIds[]`, …). */
+  field: string;
+  /** True when the entity is minted inside a world (`insimul:world:<w>:ent:<id>`). */
+  worldScoped: boolean;
+}
+
+/** PREDICATE_SCHEMA block → the collection its documents live in. */
+const BLOCK_COLLECTIONS: Record<string, IdCollection> = {
+  world: 'worlds',
+  country: 'countries',
+  state: 'states',
+  settlement: 'settlements',
+  lot: 'lots',
+  residence: 'residences',
+  business: 'businesses',
+  character: 'characters',
+  item: 'items',
+  truth: 'truths',
+  achievement: 'achievements',
+  worldLanguage: 'worldlanguages',
+  grammar: 'grammars',
+  rule: 'rules',
+  action: 'actions',
+  quest: 'quests',
+  narrative: 'narratives',
+};
+
+/**
+ * Blocks that catalogue predicates whose id-position atoms are NOT entity
+ * references, with the reason. Keeps `buildPredicateIdMap()` honest: the
+ * completeness test asserts every block is either mapped or listed here.
+ */
+export const NON_ENTITY_ID_BLOCKS: Record<string, string> = {
+  identity: 'the identity surface itself — its arguments are id/3 terms and CURIEs, not atoms to be named',
+  rule: 'rule_*/N key on a sanitized rule NAME authored by the converters, not on the rules collection _id',
+  narrative: 'narrative_*/N key on the authored template atom from the seed .pl files, not on a document _id',
+  cefrProficiency: 'runtime player facts keyed on the playthrough player handle (no collection)',
+  radiant: 'radiant_*/N key on template ids from a world template pack and on generated quest ids (no collection)',
+};
+
+/**
+ * Foreign-key field → collection it points at. `null` marks a polymorphic
+ * reference. Every `_id`/`*Id`/`*Ids[]` field in a fieldMap must appear here
+ * (asserted by the id-map completeness test), so a new schema field cannot
+ * silently escape the identifier map.
+ */
+export const ID_FIELD_TARGETS: Record<string, IdCollection | null> = {
+  worldId: 'worlds',
+  countryId: 'countries',
+  stateId: 'states',
+  settlementId: 'settlements',
+  lotId: 'lots',
+  governorId: 'characters',
+  mayorId: 'characters',
+  ownerId: 'characters',
+  founderId: 'characters',
+  spouseId: 'characters',
+  characterId: 'characters',
+  parentLanguageId: 'worldlanguages',
+  'ownerIds[]': 'characters',
+  'residentIds[]': 'characters',
+  'childIds[]': 'characters',
+  'parentIds[]': 'characters',
+  // Not *Id-suffixed, but entity references all the same.
+  'alliances[]': 'countries',
+  'enemies[]': 'countries',
+  // Polymorphic references.
+  buildingId: null,              // a residence or a business on the lot
+  'formerBuildingIds[]': null,   // ditto, historical
+  'relatedLocationIds[]': null,  // settlement | lot | residence | business
+  scopeId: null,                 // resolved by the sibling scopeType argument
+};
+
+/** True when a fieldMap field names an entity reference rather than a value. */
+export function isIdField(field: string): boolean {
+  return field === '_id' || field in ID_FIELD_TARGETS;
+}
+
+/**
+ * Id arguments of the stored-prologContent predicates (quests, actions), which
+ * have no fieldMap. Their local ids are converter-authored atoms (a quest atom
+ * comes from the quest title, an action atom from the action id) rather than
+ * raw `_id`s — the CURIE minting is identical, only the provenance differs,
+ * which is what `local: 'authored'` records.
+ */
+const STORED_ID_ARGUMENTS: Record<string, Array<Omit<PredicateIdArgument, 'worldScoped'>>> = {
+  'quest/5': [{ index: 0, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' }],
+  'quest_objective/3': [{ index: 0, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' }],
+  'quest_completion/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' }],
+  'quest_reward/3': [{ index: 0, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' }],
+  'quest_prerequisite/2': [
+    { index: 0, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' },
+    { index: 1, role: 'foreign', kind: 'ent', collection: 'quests', local: 'authored', field: 'prerequisiteQuestIds[]' },
+  ],
+  'quest_available/2': [
+    { index: 0, role: 'foreign', kind: 'ent', collection: null, local: 'authored', field: 'player' },
+    { index: 1, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' },
+  ],
+  'quest_complete/2': [
+    { index: 0, role: 'foreign', kind: 'ent', collection: null, local: 'authored', field: 'player' },
+    { index: 1, role: 'primary', kind: 'ent', collection: 'quests', local: 'authored', field: 'title' },
+  ],
+  'action/4': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_source/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_prerequisite/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_effect/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_tag/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_difficulty/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_duration/2': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_leads_to/2': [
+    { index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' },
+    { index: 1, role: 'foreign', kind: 'ent', collection: 'actions', local: 'authored', field: 'leadsToId' },
+  ],
+  'action_accept/1': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'action_reject/1': [{ index: 0, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' }],
+  'can_perform/2': [
+    { index: 0, role: 'foreign', kind: 'ent', collection: 'characters', local: 'authored', field: 'actor' },
+    { index: 1, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' },
+  ],
+  'can_perform/3': [
+    { index: 0, role: 'foreign', kind: 'ent', collection: 'characters', local: 'authored', field: 'actor' },
+    { index: 1, role: 'primary', kind: 'ent', collection: 'actions', local: 'authored', field: 'actionId' },
+    { index: 2, role: 'foreign', kind: 'ent', collection: null, local: 'authored', field: 'target' },
+  ],
+};
+
+/** Everything except a world is minted inside its world's namespace (§3.4). */
+function collectionIsWorldScoped(collection: IdCollection | null): boolean {
+  return collection !== 'worlds';
+}
+
+function kindOf(collection: IdCollection | null): KinpKind {
+  return collection === 'worlds' ? 'world' : 'ent';
+}
+
+/**
+ * Map every predicate argument that holds an entity id onto the entity it
+ * identifies, keyed `name/arity`.
+ *
+ * Derived mechanically from the `fieldMap`s (so it cannot drift from the
+ * schema) plus the explicit `STORED_ID_ARGUMENTS` for the stored-prologContent
+ * predicates. Use with `curieForPredicateArgument()` to mint the CURIE for a
+ * concrete atom.
+ */
+export function buildPredicateIdMap(): Record<string, PredicateIdArgument[]> {
+  const map: Record<string, PredicateIdArgument[]> = {};
+
+  for (const [block, entry] of Object.entries(PREDICATE_SCHEMA)) {
+    if (!('fieldMap' in entry)) continue;
+    const own = BLOCK_COLLECTIONS[block];
+    const fieldMap = entry.fieldMap as Record<string, string | readonly string[]>;
+    for (const [predicate, fields] of Object.entries(fieldMap)) {
+      const list = typeof fields === 'string' ? [fields] : Array.from(fields);
+      const args: PredicateIdArgument[] = [];
+      list.forEach((field, index) => {
+        if (!isIdField(field)) return;
+        const collection = field === '_id' ? own : ID_FIELD_TARGETS[field];
+        args.push({
+          index,
+          role: field === '_id' ? 'primary' : 'foreign',
+          kind: kindOf(collection),
+          collection,
+          local: 'mongo-id',
+          field,
+          worldScoped: collectionIsWorldScoped(collection),
+        });
+      });
+      if (args.length > 0) map[predicate] = args;
+    }
+  }
+
+  for (const [predicate, args] of Object.entries(STORED_ID_ARGUMENTS)) {
+    map[predicate] = args.map((a) => ({ ...a, worldScoped: collectionIsWorldScoped(a.collection) }));
+  }
+
+  return map;
+}
+
+/** Frozen singleton of `buildPredicateIdMap()`. */
+export const PREDICATE_ID_MAP: Readonly<Record<string, PredicateIdArgument[]>> = buildPredicateIdMap();
+
+/**
+ * The KINP identifier for a concrete atom appearing at `index` of `predicate`,
+ * or `null` when that argument is not an entity reference.
+ *
+ * `worldMongoId` scopes the entity to its world (`insimul:world:<w>:ent:<id>`);
+ * omit it for a global entity (`insimul:ent:<id>`). A `world` argument is never
+ * world-scoped — it names the world itself.
+ */
+export function idForPredicateArgument(
+  predicate: string,
+  index: number,
+  atom: string,
+  worldMongoId?: string,
+): KinpId | null {
+  const arg = PREDICATE_ID_MAP[predicate]?.find((a) => a.index === index);
+  if (!arg) return null;
+  if (arg.kind === 'world') return insimulWorldId(atom);
+  return insimulEntityId(atom, arg.worldScoped ? worldMongoId : undefined);
+}
+
+/** `idForPredicateArgument()` rendered as a CURIE (§3.2). */
+export function curieForPredicateArgument(
+  predicate: string,
+  index: number,
+  atom: string,
+  worldMongoId?: string,
+): string | null {
+  const id = idForPredicateArgument(predicate, index, atom, worldMongoId);
+  return id ? formatCurie(id) : null;
+}
+
 // ─── Predicate Signature Snapshot (US-002) ──────────────────────────────────
 
 /**
@@ -696,7 +979,9 @@ function skipToClauseEnd(src: string, start: number): number {
 /**
  * Enumerate every Prolog predicate signature this Insimul build depends on,
  * aggregated across predicate-schema.ts (collection-derived catalog),
- * helper-predicates.ts, advanced-predicates.ts, and npc-reasoning.ts.
+ * helper-predicates.ts, advanced-predicates.ts, npc-reasoning.ts, and the KINP
+ * identity rule pack (identity/identity-predicates.ts) — so the snapshot and
+ * its hash reflect the id surface too.
  *
  * Deduplicated by (name, arity) with precedence dynamic > builtin > helper so
  * that a predicate appearing both as a `:- dynamic` declaration and as a
@@ -732,6 +1017,7 @@ export function buildPredicateSchemaSnapshot(): PredicateSignature[] {
     HELPER_PREDICATES_PROLOG,
     getAdvancedPredicates(),
     getNPCReasoningRules(),
+    IDENTITY_PREDICATES_PROLOG,
   ];
   for (const src of sources) {
     const { dynamic, builtin } = parsePrologSignatures(src);

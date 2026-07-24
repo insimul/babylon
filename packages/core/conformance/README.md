@@ -16,6 +16,11 @@ never as code.**
   test (`src/conformance/__tests__/saves-migration.test.ts`) asserts
   `migrateSaveFile` lifts `v1-minimal` to the current `SAVE_FILE_VERSION`.
 - `prolog/*.json` — the golden Prolog query corpus (this file's main subject).
+- `predicate-schema-hash.json` — the committed `predicateSchemaHash` (the Prolog
+  contract's fingerprint, stamped on a canonical world export and carried in a
+  save's WorldSnapshot). `src/conformance/__tests__/predicate-schema-hash.test.ts`
+  fails when the schema moves without the artifact being regenerated; the file
+  itself documents the regenerate command.
 - `radiant/*.json` — the radiant quest-generation corpus (see "Radiant case
   format" below). Pins `generateRadiantQuests` — the contract the future native
   `insimul_radiant_tick()` must match.
@@ -93,6 +98,64 @@ Field semantics (a conforming engine MUST reproduce these):
 **Order-independence.** `expected` is compared as an unordered multiset — a
 conforming engine need not enumerate solutions in the same order as `tau-prolog`,
 only produce the same set. Do not rely on solution order in a case.
+
+## KINP identifiers in the corpus
+
+Entity ids in the corpus are **KINP identifiers** (`koine/specs/identity.md`
+§3.3), not bare atoms. The canonical Prolog form is the compound term
+
+```prolog
+id(Kind, Namespace, LocalId)     % e.g. id(ent, 'insimul:world:alderforest', 'q1')
+```
+
+with three interchangeable views of the same identifier:
+
+| form | example |
+|---|---|
+| Prolog term (canonical) | `id(ent, 'insimul:world:alderforest', 'npc-renaud')` |
+| CURIE (§3.2) | `insimul:world:alderforest:ent:npc-renaud` |
+| IRI (§3.1) | `https://id.koine.example/ent/insimul:world:alderforest/npc-renaud` |
+
+Insimul's binding: a world is `insimul:world:<w>`, an entity inside that world is
+`insimul:world:<w>:ent:<id>` — **a world-scoped entity's namespace is its world's
+own CURIE**, so the world is recoverable from the identifier alone, with no side
+table and no string parsing. A global (cross-world) entity is `insimul:ent:<id>`
+and a provisional offline-minted local is `insimul:local:ent:<id>` (§6).
+
+The `<local-id>` is the collection document's sanitized Mongo `_id`. Sanitization
+(`sanitizeLocalId` in `src/identity/kinp.ts`) is **lossless** — the §3.1 charset
+`[a-z0-9][a-z0-9._-]*` with everything else percent-encoded — so
+`_id` atom ⇄ CURIE ⇄ `id/3` term round-trips for every collection in
+`COLLECTION_PROLOG_MODE`. A 24-char ObjectId hex passes through untouched.
+
+Two corpus conventions follow from this:
+
+- **`prolog/identity.json` (`area: kinp-identity`)** pins the accessor rules
+  (`id_kind/2`, `id_namespace/2`, `id_local/2`), the legacy-atom bridge
+  (`entity_id/2`, `entity_curie/2`, `curie/2`), and world scoping (`id_world/2`,
+  `same_world/2`). Its `kb` clauses mirror `src/identity/identity-predicates.ts`
+  verbatim — a native engine consults the same text.
+- **Bindings stay scalar.** A case must never bind a query variable directly to
+  an `id/3` term: the binding format (§ "Prolog case format") is atoms/numbers,
+  and engines render compound terms differently. Project the column through a
+  rule instead — `quest_available(L) :- quest(id(ent, _, L), _, _, _, active).`
+  — exactly like the anonymous-variable rule. Literal `id/3` terms in the *query
+  goal* are fine (`quest_objective(id(ent, 'insimul:world:alderforest', 'q1'),
+  Idx, Goal)`), which is how `gameplay.json` addresses a specific quest.
+
+**Amendments for the native harness (US-83 re-vendor).** `gameplay.json` was
+rewritten in lockstep with this change and `identity.json` is new, so a native
+harness re-vendoring the corpus must:
+
+1. Parse compound terms in `kb`/`query` — the corpus is no longer atom-only.
+   `expected` is unchanged (still scalar bindings).
+2. Reproduce `libinsimul`'s JSON binding shape for compounds
+   (`{"functor":…, "args":[…]}`) only if it chooses to expose them; no case
+   requires it, by the scalar-binding rule above.
+3. Keep the two identifier spellings distinct: `'insimul:world:alderforest'` is
+   an **atom** (quoted — it contains `:`), never a term to be decomposed.
+
+Nothing in `insimul-native` was edited from this story.
 
 ## Radiant case format
 

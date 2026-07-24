@@ -86,6 +86,7 @@ describe('Prolog conformance corpus', () => {
       'arithmetic',
       'assert-retract',
       'gameplay-predicates',
+      'kinp-identity',
     ]) {
       expect(areas, `missing area file for "${required}"`).toContain(required);
     }

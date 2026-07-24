@@ -148,6 +148,57 @@ emitted JSON Schema counterparts. Conventions:
   (`assignedBy`, `mayorId`, `homeTownId`, `prerequisiteQuestIds`) are **library-scoped
   ids**, resolved on import.
 
+### KINP identity surface (US-1, `packages/core/src/identity/`)
+
+Insimul's adoption of the Koine Identity & Namespace Protocol
+(`koine/specs/identity.md`, spec 0.2.1 — the spec lives in the sibling `koine`
+checkout, read-only from here). Three files, one invariant: **Prolog is
+canonical and no id logic leaves it.**
+
+- `kinp.ts` — the grammar (IRI §3.1 / CURIE §3.2 / `id(Kind, Namespace, LocalId)`
+  §3.3) + the §3.4 prefix registry. Insimul binding: a world is
+  `insimul:world:<w>`; a world-scoped entity is `insimul:world:<w>:ent:<id>`, i.e.
+  **its namespace IS its world's CURIE**, so the world is recoverable from the
+  identifier alone; a global entity is `insimul:ent:<id>`; an offline-minted
+  provisional local is `insimul:local:ent:<id>` (§6).
+- `identity-predicates.ts` — `IDENTITY_PREDICATES_PROLOG`, the rule pack
+  (accessors, registry facts, `id_world/2`, `same_world/2`). Consulted like the
+  other packs (never asserted as player facts, so it never lands in a save).
+  Deliberately free of `sub_atom/5`-style string surgery so a native engine can
+  reproduce it verbatim — all encoding happens at mint time in TS.
+- `identity-facts.ts` — the bridge: `entity_id/2` + `entity_curie/2` + `curie/2`,
+  three ground facts per entity, the ONE place the legacy sanitized `_id` atom
+  meets its CURIE. `curie/2` for a world must be emitted before `id_world/2` can
+  resolve that world's entities (`worldIdentityFacts`).
+
+Gotchas:
+
+- **`sanitizeLocalId` is lossless** (percent-encoding over the §3.1 charset,
+  plus an `x-` guard prefix when the first char has to be escaped) — unlike the
+  converters' local `sanitizeAtom`, which is deliberately lossy. Never swap one
+  for the other; the round-trip test (`__tests__/kinp.test.ts`) is the contract.
+- **`parseCurie` anchors on the LAST two segments** because a namespace may
+  contain `:`.
+- `predicate-schema.ts` gained `buildPredicateIdMap()` / `PREDICATE_ID_MAP` /
+  `curieForPredicateArgument()`: which argument of which predicate holds an
+  entity id, derived mechanically from the `fieldMap`s (so it can't drift) plus
+  explicit `STORED_ID_ARGUMENTS` for the stored-prologContent quest/action
+  predicates. A new `*Id` field must be added to `ID_FIELD_TARGETS` or the
+  completeness test fails; a block with no id arguments needs a
+  `NON_ENTITY_ID_BLOCKS` rationale.
+- The identity pack is in `buildPredicateSchemaSnapshot()`'s sources, so it moves
+  the schema hash. The committed value lives in
+  `packages/core/conformance/predicate-schema-hash.json` (drift-guarded by
+  `src/conformance/__tests__/predicate-schema-hash.test.ts`) — regenerate and
+  commit it with any predicate change.
+- **Corpus rule: bindings stay scalar.** Never bind a query variable straight to
+  an `id/3` term — `extractBindings` in `tau-engine.ts` collapses a compound to
+  its functor name (`"id"`). Project the column through a rule
+  (`quest_available(L) :- quest(id(ent,_,L),_,_,_,active).`); literal `id/3`
+  terms *inside the query goal* are fine. Documented in `conformance/README.md`
+  § "KINP identifiers in the corpus", together with the amendments the native
+  harness needs when it re-vendors the corpus.
+
 ### Conformance corpus (US-CE5)
 
 `packages/core/conformance/` is the language-neutral, data-only cross-engine
