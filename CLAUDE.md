@@ -509,6 +509,33 @@ tasklist 91; the 7 un-inverted modules remain).
   the tests you filtered out — that is how "18,459 lines" got into a draft when the real
   non-test total is 17,946. Sum the per-file counts yourself when a number goes in a doc.
 
+### There is a SECOND core surface: `src/editor/` (US-1, 101-editor-plugin-core)
+
+`packages/core/src/editor/` (+ `src/archetypes/taxonomy.ts`) is the **edit-time**
+contract the three engine editor plugins mirror — session/token lifecycle, the v1
+operation table, the generation-job reducer + poller, the world browser, the
+conversation tester, the archetype match primitives. It is NOT the runtime
+contract, and the two must not entangle: **a shipping game embeds the runtime core
+and not the editor core.**
+
+- The full inventory, classification and drift report is
+  `packages/core/docs/editor-plugin-core-analysis.md`, drift-guarded by
+  `src/editor/__tests__/editor-plugin-core-analysis.test.ts`. Read it before
+  touching anything under `src/editor/`, `src/archetypes/`, or the three engine
+  plugins — it already measured what they duplicate, so don't re-measure.
+- **`src/index.ts` currently re-exports 5 of the 6 editor modules from the flat
+  runtime barrel.** That is the entanglement, recorded as a finding rather than
+  fixed; the guard compares the barrel against a marked fenced block in the doc, in
+  both directions, so removing an export is a doc edit rather than a silent pass.
+- **The editor plugins are in sibling submodule checkouts, not this repo** —
+  `unity/Editor`, `unreal/Source/InsimulEditor`, `godot/addons/insimul/editor`. A
+  babylon worktree can read them for analysis but must never write there, so
+  anything measured across them is dated in the doc, not guarded.
+- `packages/core/conformance/` has **no editor area** — binding, placement and
+  re-import have no cross-engine parity gate, which is why the three legs have
+  already diverged on manifest field names, archetype roots and resolver
+  tie-breaks. Adding `conformance/editor/` is part of the first slice.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`
