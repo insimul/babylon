@@ -67,7 +67,6 @@
     "shared/quest/main-quest-chapters.ts",
     "shared/quest/portfolio-types.ts",
     "shared/quests/assessment-quest-bridge.ts",
-    "shared/quests/quest-storage-provider.ts",
     "shared/quests/save-game-quest-storage.ts",
     "shared/settlement-layout-svg.ts",
     "shared/skill-tree/index.ts",

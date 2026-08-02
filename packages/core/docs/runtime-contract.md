@@ -186,6 +186,56 @@ behaviour change and belongs to its own story, not to the import-path-only move
 US-3 made. Until it happens, an adapter implements these interfaces and gets the
 59 modules above; the seven arrive with the inversion.
 
+### 2.2 Quest seed generation — `IQuestSeedSource`
+
+The same pattern, for the one capability that is *authoring* rather than
+*engine*: generating quest content.
+[`quests/quest-seed-source.ts`](../src/quests/quest-seed-source.ts) declares
+`IQuestSeedSource`, the whole surface the runtime quest orchestrator
+(`GameQuestManager`) asks a host for — twenty methods, one per generator call
+site, plus two sub-capabilities (`IQuestGuildSource`, `IQuestChainSource`) it
+holds for its lifetime.
+
+It is separate from `EngineHostAdapter` on purpose. Those five hooks are
+*engine* seams — an adapter author writing `combat_system.gd` implements them.
+This one is a *content* seam: the implementation is seventeen quest generators
+(~17k lines) that live in the closed authoring platform and must not be vendored
+into the open runtime (`docs/PLATFORM_SPLIT_AND_ENGINE_PLUGINS.md` §A0). Core
+states the capability; the platform hands in an implementation at export time;
+no closed generator ever appears in an open repo. An engine adapter, in
+contrast, normally supplies nothing here — an exported game's quests are already
+in its world export.
+
+| what the host supplies | core needs it for | platform reference implementation | fallback when absent |
+| --- | --- | --- | --- |
+| `IQuestSeedSource` | Generating quests on demand and on world triggers: seed, assignment, business-roleplay, emergency, mystery, reading, side, fetch, multi-NPC, shopping, crafting, number-practice, weather/time, error-correction, adaptive, plus pool replenishment and daily rotation. | the seventeen `shared/quests/*` generators (closed) | `NULL_QUEST_SEED_SOURCE` — no quests are generated; a world plays with the quests its export already carries. |
+| `IQuestGuildSource` | Finding the guild-master NPC for a guild and walking its quest ladder. | `quests/guild-quest-manager.ts` (closed) | `NULL_QUEST_GUILD_SOURCE` — no guilds. |
+| `IQuestChainSource` | Chain-completion bonuses and unlocking the next quest in a linear chain. | `quests/quest-chain-manager.ts` (closed) | `NULL_QUEST_CHAIN_SOURCE` — chains never complete or advance. |
+
+Two shape rules make the interface satisfiable without leaking the closed side:
+
+- **Each option bag mirrors what the orchestrator already passes** — it builds
+  them from `QuestStorageProvider` reads (world, characters, settlements,
+  businesses, existing quests) — so the platform's implementation is a
+  delegating wrapper, not a rewrite, and the ported orchestrator's behaviour is
+  unchanged.
+- **Payloads core does not interpret are `unknown`** (learning profiles,
+  language progress, recurring-quest status, guild progress). Core owns the call
+  graph, never the authoring vocabulary.
+
+Generators return drafts (`InsertQuest`) and never persist; the orchestrator
+saves, so it can stamp world/player/language fields and attach Prolog content
+uniformly. `QuestStorageProvider` — the storage surface both sides read through
+— moved into core with this story
+([`quests/quest-storage-provider.ts`](../src/quests/quest-storage-provider.ts),
+re-export shim left at `@shared/quests/quest-storage-provider`).
+
+**Declared, not yet wired**, exactly as §2.1: `GameQuestManager` is still a
+`.d.ts` type surface in `packages/babylon` at this story. Moving the
+implementation into core behind this interface is US-2 of
+`94-quest-manager-interface`, and supplying the platform-side implementation is
+tasklist 97.
+
 ---
 
 ## 3. What is NOT covered, by design

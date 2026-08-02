@@ -10,6 +10,9 @@
  *     describes core.
  *  2. Every host hook (`export interface I…`) in `host-contracts.ts` is named in
  *     it, with its Babylon reference implementation.
+ *  3. The same for the host-supplied capabilities in `quests/quest-seed-source.ts`
+ *     (§2.2), which follow the identical "interface here, implementation handed
+ *     in" shape but are supplied by the authoring platform rather than an engine.
  *
  * Both are string searches for the backticked name, which is how the document
  * refers to every module and interface.
@@ -27,6 +30,7 @@ const PACKAGE_ROOT = join(GAME_ENGINE_DIR, '..', '..');
 const DOC_PATH = join(PACKAGE_ROOT, 'docs', 'runtime-contract.md');
 const LOGIC_DIR = join(GAME_ENGINE_DIR, 'logic');
 const HOST_CONTRACTS = join(GAME_ENGINE_DIR, 'host-contracts.ts');
+const QUEST_SEED_SOURCE = join(GAME_ENGINE_DIR, '..', 'quests', 'quest-seed-source.ts');
 
 /** Module ids as the document spells them: `Name`, or `actions/Name` in a subdir. */
 function listRuntimeModules(): string[] {
@@ -73,6 +77,27 @@ describe('runtime contract document', () => {
       `these interfaces are exported from host-contracts.ts but not named in ` +
         `docs/runtime-contract.md §2 — add a row giving what core needs it for, the ` +
         `Babylon reference implementation, and the fallback when it is absent:\n  ${undocumented.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('names every host-supplied quest-seed capability and its null fallback', () => {
+    const src = readFileSync(QUEST_SEED_SOURCE, 'utf8');
+    const interfaces = Array.from(src.matchAll(/^export interface (I[A-Z]\w*)/gm)).map(
+      (m) => m[1],
+    );
+    const fallbacks = Array.from(src.matchAll(/^export const (NULL_\w+)/gm)).map((m) => m[1]);
+    // Guards the guard: both lists must be non-empty for the assertions to bite.
+    expect(interfaces.length).toBeGreaterThan(0);
+    expect(fallbacks.length).toBeGreaterThan(0);
+
+    const undocumented = [...interfaces, ...fallbacks].filter(
+      (name) => !doc.includes(`\`${name}\``),
+    );
+    expect(
+      undocumented,
+      `these are exported from quests/quest-seed-source.ts but not named in ` +
+        `docs/runtime-contract.md §2.2 — add a row giving what core needs it for, the ` +
+        `platform reference implementation, and the fallback when it is absent:\n  ${undocumented.join('\n  ')}`,
     ).toEqual([]);
   });
 });
