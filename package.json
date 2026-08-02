@@ -31,7 +31,8 @@
     "publish:dry-run": "node scripts/release/npm-publish-dry-run.mjs",
     "release:dry-run": "node scripts/release/publish-web-packages.mjs",
     "check:core-standalone": "node scripts/check-core-standalone.mjs",
-    "shims:inventory": "node scripts/build-shim-inventory.mjs"
+    "shims:inventory": "node scripts/build-shim-inventory.mjs",
+    "logic:classify": "node scripts/classify-logic-boundary.mjs"
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

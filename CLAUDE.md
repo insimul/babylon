@@ -392,6 +392,40 @@ To keep core `@shared`-free, US-CE6 removed the last pure-type edges two ways:
   the editor-layer `assessment/` module into core. Keep stand-ins in sync if the
   Babylon-side shape changes.
 
+### The logic/ boundary classification (US-2, 93-runtime-logic-to-core)
+
+`scripts/classify-logic-boundary.mjs` (`npm run logic:classify`) walks the transitive
+first-party closure of every module under
+`packages/babylon/src/engine/game-engine/logic/` and writes `shared/LOGIC_BOUNDARY.json`:
+class **(a)** whole closure already in logic/ or core, **(b)** blocked on real source not
+yet in core, **(c)** genuinely Babylon-coupled. Narrative + the US-3 plan:
+`packages/core/docs/logic-boundary-classification.md`. Drift-guarded in
+`shared/__tests__/import-hygiene.test.ts`.
+
+Reusable lessons from writing it:
+
+- **"Zero `@babylonjs` imports" proves almost nothing on its own.** Coupling arrives via
+  an `import type` from `rendering/`, via a `@shared/*` shim that resolves into
+  `packages/babylon/src`, or via a browser global — none of which name an engine package.
+  Any future "is this tree portable?" question needs a closure walk, not a grep.
+- **Track `import type` edges separately from value edges.** A type-only path erases at
+  runtime and is breakable with a structural stand-in (the `visual-types.ts` precedent);
+  a value path is a real dependency. 4 of the 10 class-(c) modules are type-only, and one
+  of them (`AmbientLifeBehaviorSystem`) drags a dozen `@babylonjs` paths into its reported
+  closure through a single `import type`. Key the DFS on `(file, typeOnlySoFar)` — with a
+  plain `seen` set, whichever path is visited first silently decides.
+- **Shims must be transparent to a closure walk, or the arrow reads backwards.**
+  `game-engine/data-source.ts` is one line re-exporting *into* core; counting it as a
+  dependency claims core depends on babylon. Detect a shim structurally (strip
+  import/export-from statements; if nothing is left, it carries no source) rather than by
+  directory, since shim chains cross `shared/ → babylon/ → core`.
+- **Make the human judgement a table the guard checks.** `COUPLING_VERDICTS` (one entry
+  per class-(c) module) and `BLOCKER_RESOLUTIONS` (one per class-(b) blocker, with a
+  `moveTo` the guard asserts is inside `packages/core/src`) live in the script next to the
+  analysis. A newly-introduced coupling therefore fails CI as "undocumented" rather than
+  landing silently, and the forbidden resolution — re-exporting from babylon back into
+  core — is unrepresentable.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`

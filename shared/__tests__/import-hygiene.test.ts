@@ -907,3 +907,111 @@ describe('shim inventory: shared/SHIM_INVENTORY.json is current (US-1, 93-runtim
     ).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-2 (93-runtime-logic-to-core) — shared/LOGIC_BOUNDARY.json drift guard.
+//
+// The classification says, for every module under game-engine/logic/, whether it is
+// engine-agnostic and moving (a), engine-agnostic but blocked on a dependency not yet
+// in core (b), or genuinely Babylon-coupled despite the @babylonjs import scan (c).
+// US-3 plans against it and the engine adapters size their work from it, so it must be
+// a live measurement rather than a snapshot of what was true one afternoon.
+//
+// The guard also enforces AC2 and AC3 of the story:
+//   - every class-(c) module carries a recorded disposition (named, not papered over);
+//   - every class-(b) blocker carries a prescribed resolution whose target is inside
+//     packages/core/src — i.e. the "re-export from babylon back into core" route, which
+//     would invert the dependency arrow US-1's guard protects, is unrepresentable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type BoundaryReport = {
+  counts: Record<string, number>;
+  blockers: {
+    file: string;
+    zone: string;
+    blocks: number;
+    resolution: { via: string; moveTo: string; why: string } | null;
+    blocked: string[];
+  }[];
+  files: {
+    file: string;
+    class: 'a' | 'b' | 'c';
+    disposition?: string | null;
+    verdict?: string | null;
+    valueCoupled?: boolean;
+    couplings?: { kind: string; detail: string; typeOnly: boolean; via: string; path: string }[];
+    blockers?: { file: string; typeOnly: boolean; path: string }[];
+  }[];
+};
+
+const LOGIC_DIR_SEGMENT = ['packages', 'babylon', 'src', 'engine', 'game-engine', 'logic'].join('/');
+const LOGIC_BOUNDARY_PATH = join(SHARED, 'LOGIC_BOUNDARY.json');
+const readBoundary = (): BoundaryReport => JSON.parse(readFileSync(LOGIC_BOUNDARY_PATH, 'utf8'));
+
+describe('logic boundary: shared/LOGIC_BOUNDARY.json is current (US-2, 93-runtime-logic-to-core)', () => {
+  it('matches a fresh classification of game-engine/logic/', async () => {
+    const { classify } = (await import('../../scripts/classify-logic-boundary.mjs')) as {
+      classify: () => BoundaryReport;
+    };
+    const fresh = classify();
+    const committed = readBoundary();
+
+    expect(fresh.counts.total, 'classifier scanned nothing — the guard would pass vacuously').toBeGreaterThan(50);
+    expect(
+      { counts: fresh.counts, blockers: fresh.blockers, files: fresh.files },
+      'shared/LOGIC_BOUNDARY.json is stale. Run `npm run logic:classify` and commit the result.',
+    ).toEqual({ counts: committed.counts, blockers: committed.blockers, files: committed.files });
+  });
+
+  it('names the specific coupling for every class-(c) module (AC2)', () => {
+    const committed = readBoundary();
+    const classC = committed.files.filter((f) => f.class === 'c');
+    expect(classC.length, 'no class-(c) modules found — the assertions below would be vacuous').toBeGreaterThan(0);
+
+    const unexplained = classC.filter((f) => !f.disposition || !f.verdict || !(f.couplings ?? []).length);
+    expect(
+      unexplained.map((f) => f.file),
+      'Class-(c) modules with no recorded coupling/disposition. Add an entry to COUPLING_VERDICTS in ' +
+        'scripts/classify-logic-boundary.mjs — a Babylon-coupled file must be named, not papered over:\n' +
+        unexplained.map((f) => `  ${f.file}`).join('\n'),
+    ).toEqual([]);
+
+    const badDisposition = classC.filter((f) => !['stays', 'invert', 'platform-surface'].includes(f.disposition ?? ''));
+    expect(badDisposition.map((f) => f.file), 'Unknown disposition value').toEqual([]);
+  });
+
+  it('prescribes a core-bound resolution for every class-(b) blocker (AC3)', () => {
+    const committed = readBoundary();
+    expect(committed.blockers.length, 'no blockers found — the assertions below would be vacuous').toBeGreaterThan(0);
+
+    const unresolved = committed.blockers.filter((b) => !b.resolution?.moveTo || !b.resolution?.why);
+    expect(
+      unresolved.map((b) => b.file),
+      'Class-(b) blockers with no prescribed resolution. Add an entry to BLOCKER_RESOLUTIONS in ' +
+        'scripts/classify-logic-boundary.mjs before US-3 moves anything that depends on them:\n' +
+        unresolved.map((b) => `  ${b.file} (blocks ${b.blocks})`).join('\n'),
+    ).toEqual([]);
+
+    // The one resolution route the story forbids: satisfying core by re-exporting out of
+    // the Babylon package. Every prescribed target has to land inside core.
+    const wrongDirection = committed.blockers.filter((b) => !b.resolution!.moveTo.startsWith(`${CORE_SRC_SEGMENT}/`));
+    expect(
+      wrongDirection.map((b) => `${b.file} -> ${b.resolution!.moveTo}`),
+      'A blocker resolution points outside packages/core/src. Class-(b) dependencies are resolved by ' +
+        'moving them into core or inverting them — never by re-exporting from babylon back into core, ' +
+        "which would invert the dependency arrow US-1's guard exists to protect:\n" +
+        wrongDirection.map((b) => `  ${b.file} -> ${b.resolution!.moveTo}`).join('\n'),
+    ).toEqual([]);
+  });
+
+  it('classifies every non-test module under game-engine/logic/ exactly once', () => {
+    const committed = readBoundary();
+    const onDisk = walk(join(ROOT, LOGIC_DIR_SEGMENT))
+      .map((f) => relative(ROOT, f).split('\\').join('/'))
+      .filter((f) => !/\.test\.tsx?$/.test(f) && !f.includes('/__tests__/'))
+      .sort();
+    const classified = committed.files.map((f) => f.file).sort();
+    expect(classified, 'LOGIC_BOUNDARY.json does not cover the directory exactly').toEqual(onDisk);
+    expect(committed.counts.a + committed.counts.b + committed.counts.c).toBe(committed.counts.total);
+  });
+});
