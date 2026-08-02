@@ -7,10 +7,10 @@
     "source": "Not a shim — real source still living in shared/."
   },
   "counts": {
-    "core": 86,
+    "core": 87,
     "babylon": 259,
     "mixed": 0,
-    "source": 73,
+    "source": 72,
     "total": 418
   },
   "shims": {
@@ -89,6 +89,7 @@
       "shared/quest-types/strategy.ts",
       "shared/quest-types/survival.ts",
       "shared/quest-types/types.ts",
+      "shared/quests/quest-storage-provider.ts",
       "shared/quests/types.ts",
       "shared/relationship-tiers.ts",
       "shared/save-envelope.ts",
@@ -146,7 +147,7 @@
       "shared/game-engine/logic/FishingSystem.ts",
       "shared/game-engine/logic/GameEventBus.ts",
       "shared/game-engine/logic/GamePrologEngine.ts",
-      "shared/game-engine/logic/GameQuestManager.d.ts",
+      "shared/game-engine/logic/GameQuestManager.ts",
       "shared/game-engine/logic/GameTextTypes.ts",
       "shared/game-engine/logic/GameTimeManager.ts",
       "shared/game-engine/logic/GameTruthSync.ts",
@@ -431,7 +432,6 @@
       "shared/quest/main-quest-chapters.ts",
       "shared/quest/portfolio-types.ts",
       "shared/quests/assessment-quest-bridge.ts",
-      "shared/quests/quest-storage-provider.ts",
       "shared/quests/save-game-quest-storage.ts",
       "shared/settlement-layout-svg.ts",
       "shared/skill-tree/index.ts",

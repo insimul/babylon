@@ -59,6 +59,13 @@ export * from './quest-branching';
 export * from './timed-challenge';
 export * from './quest-types';
 export * from './quests/types';
+export * from './quests/quest-storage-provider';
+
+// ── Quest seed generation contract (94-quest-manager-interface US-1) ───────
+// The capability a host supplies so the runtime quest orchestrator can generate
+// quests. The generators themselves are closed authoring code; core states the
+// shape and never names one. See docs/runtime-contract.md §2.2.
+export * from './quests/quest-seed-source';
 
 // ── Narrative / relationship / NPC context contract (US-CE3) ───────────────
 export * from './narrative-arc-types';

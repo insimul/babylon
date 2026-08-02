@@ -23,12 +23,17 @@
  * ---------------------------------
  * A full standalone bundle of `BabylonGame` is intentionally NOT achievable in this
  * repo: `@babylonjs/*` are runtime deps of the exported game (not re-bundled by this
- * smoke test), and a handful of engine modules ship here as TYPE-ONLY `.d.ts` surfaces
- * (e.g. `GameQuestManager.d.ts`) whose concrete implementation the platform injects at
- * export time. The exported-game ENVIRONMENT provides all of these. This smoke test
- * therefore externalizes third-party leaves and any first-party specifier that resolves
- * to a `.d.ts`-only / missing module, and bundles the FIRST-PARTY consolidated graph —
- * which is precisely the surface the consolidation moved and the surface at risk.
+ * smoke test). The exported-game ENVIRONMENT provides those. This smoke test therefore
+ * externalizes third-party leaves and any first-party specifier that resolves to a
+ * `.d.ts`-only / missing module, and bundles the FIRST-PARTY consolidated graph — which
+ * is precisely the surface the consolidation moved and the surface at risk.
+ *
+ * The `.d.ts`-only escape hatch is currently UNUSED and the "externalized" line prints
+ * empty: `GameQuestManager.d.ts` was the last type-only surface here, and US-2 of
+ * `94-quest-manager-interface` replaced it with real code in `packages/core` (its closed
+ * generator dependency inverted behind `IQuestSeedSource`). The hatch stays because the
+ * platform may inject another such surface; a NON-empty list is the signal to check that
+ * the exported-game environment really does provide what is named.
  */
 import { build } from 'vite';
 import { existsSync, mkdirSync, rmSync, writeFileSync, symlinkSync, readdirSync } from 'node:fs';
