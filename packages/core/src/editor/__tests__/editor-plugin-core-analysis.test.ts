@@ -33,12 +33,24 @@ const PACKAGE_ROOT = join(SRC_DIR, '..');
 const DOC_PATH = join(PACKAGE_ROOT, 'docs', 'editor-plugin-core-analysis.md');
 const INDEX_PATH = join(SRC_DIR, 'index.ts');
 
-/** Module ids relative to `src/`, as the document spells them (`editor/operations`). */
+/**
+ * Module ids relative to `src/`, as the document spells them
+ * (`editor/operations`, `editor/binding/resolver`). Recursive since US-2, which
+ * gave the editor surface subdirectories — a module cannot hide from the
+ * analysis by being one level down.
+ */
 function listModules(area: string): string[] {
-  return readdirSync(join(SRC_DIR, area), { withFileTypes: true })
-    .filter((e) => e.isFile() && e.name.endsWith('.ts') && !e.name.endsWith('.test.ts'))
-    .map((e) => `${area}/${e.name.replace(/\.ts$/, '')}`)
-    .sort();
+  const out: string[] = [];
+  for (const entry of readdirSync(join(SRC_DIR, area), { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (entry.name === '__tests__') continue;
+      out.push(...listModules(`${area}/${entry.name}`));
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts')) continue;
+    out.push(`${area}/${entry.name.replace(/\.ts$/, '')}`);
+  }
+  return out.sort();
 }
 
 describe('editor-plugin-core analysis document', () => {

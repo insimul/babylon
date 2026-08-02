@@ -180,27 +180,34 @@ entangled. Both sides currently violate that:
   whole of `Runtime/Binding/` sit under the `Insimul.Runtime` asmdef —
   `autoReferenced: true`, no `excludePlatforms` — so ~2,000 lines of edit-time
   policy compile into every Unity player.
-- **Core does the same thing in TypeScript.** `src/index.ts` re-exports these
-  editor modules from the flat runtime barrel, so anything importing
-  `@insimul/core` pulls edit-time view-models into its graph:
+- **Core did the same thing in TypeScript.** `src/index.ts` re-exported five
+  editor modules (`operations`, `editor-session`, `world-browser`,
+  `generation-console`, `job-poller`) from the flat runtime barrel, so anything
+  importing `@insimul/core` pulled edit-time view-models into its graph. Only
+  `editor/conversation-tester` was deep-import-only, and only because of a name
+  collision, not by design.
+
+  **US-2 emptied that list** — the barrel now names no editor module and the
+  surface is deep-import-only (`@insimul/core/editor`, `@insimul/core/editor/<module>`):
 
   <!-- barrelled-editor-modules -->
   ```
-  editor/operations
-  editor/editor-session
-  editor/world-browser
-  editor/generation-console
-  editor/job-poller
   ```
 
-  Only `editor/conversation-tester` is deep-import-only, and only because of a
-  name collision, not by design. The list above is drift-guarded in both
-  directions — it fails if the barrel gains a module and if it loses one, so
-  US-2 emptying it is a doc edit, not a silent pass.
+  The block is drift-guarded in both directions, so a re-added export fails as
+  loudly as a removed one. `src/editor/__tests__/editor-surface.test.ts` guards
+  the same invariant from the other side: no runtime module may import `editor/`,
+  and no editor module may import the flat barrel.
 
-US-2's first acceptance criterion ("must not be entangled") therefore starts by
-*fixing an existing violation*, not by avoiding a hypothetical one: the editor
-surface becomes deep-import-only (`@insimul/core/editor/*`), with a guard.
+  `archetypes/taxonomy` stays in the runtime barrel deliberately — 168 lines of
+  pure string grammar with no view-model, transport or session state, i.e. a
+  shared *type*, which US-2's criterion explicitly allows.
+
+US-2's first acceptance criterion ("must not be entangled") therefore started by
+*fixing an existing violation*, not by avoiding a hypothetical one. **The Unity
+half is not fixed** — `Runtime/{Binding,Scene}` still compiles into every player
+build — and it cannot be from this worktree; it is adoption work for US-3's
+per-engine note.
 
 ---
 
@@ -410,3 +417,108 @@ The editor core binds the same artifact. Note the one asymmetry US-3 must handle
 the runtime rule is "nothing on a per-frame path crosses the boundary", and the
 editor has no per-frame path at all — a whole-world import crossing the ABI once
 per click is a different cost profile, and a cheaper one.
+
+---
+
+## 7. Epilogue — what US-2 landed
+
+*Written 2026-08-02, after implementing §6's first slice. §§0–6 above are the
+US-1 analysis and are left as measured; this section records the outcome so a
+reader does not have to diff the tree to find out which recommendations were
+taken.*
+
+### 7.1 The modules
+
+Everything below is **deep-import-only**: `@insimul/core/editor` for the area
+barrel, `@insimul/core/editor/<path>` for one module. Nothing is re-exported
+from `src/index.ts`.
+
+The whole editor surface, US-1's six modules and US-2's nine together:
+
+| Module | What it owns |
+|---|---|
+| `editor/index` | the editor-area barrel |
+| `editor/operations` | the v1 operation table + `resolveOperation` (US-GE1) |
+| `editor/editor-session` | session/token lifecycle, health probe (US-GE1) |
+| `editor/world-browser` | world list/detail, compatibility badge, import dry run (US-GE2) |
+| `editor/generation-console` | the generation-job lifecycle reducer (US-GE2) |
+| `editor/job-poller` | the polling fallback + teardown semantics (US-GE2) |
+| `editor/conversation-tester` | the NPC conversation tester view-model (US-GE3) |
+| `editor/host-contracts` | `SceneMutator`, `AssetResolver`, `ProgressSink`, `EditorHostAdapter`, plus in-memory `Recording*` references |
+| `editor/binding/index` | the binding-area barrel |
+| `editor/binding/resolver` | `matchArchetype`, the specificity ordering, `BindingResolver` (tier sort, `resolve`, `collectUnbound`) |
+| `editor/binding/pack` | pack parse, canonical serialize, taxonomy validation (`validateBindingSource`, `validateArchetypeKeys`) |
+| `editor/scene/index` | the scene-area barrel |
+| `editor/scene/placement` | `quantizeSceneCoord`, `sampleTerrainHeight`, `computePlacement`, the canonical manifest, `parseManifestNodes` |
+| `editor/reimport/index` | the re-import-area barrel |
+| `editor/reimport/diff` | `placedNodesEquivalent`, `computeReimportDiff`, `serializeDiffReport`, `applyReimport` |
+
+The three host interfaces are what §2's class (b) turns into: core decides,
+`SceneMutator` / `AssetResolver` / `ProgressSink` execute. The Babylon reference
+lives outside core, at
+`packages/babylon/src/engine/editor/babylon-editor-host.ts`
+(`BabylonSceneMutator` over `TransformNode`s, `BabylonAssetResolver` mapping a
+binding handle to a URL, `BabylonProgressSink`), and is tested end-to-end against
+a real `NullEngine` scene: IR → placement → scene → hand edit → regeneration →
+re-import, with the hand edit surviving. That is also the seed for the editor
+plugin Babylon does not yet have.
+
+### 7.2 The three drifts, settled
+
+- **§5.4 (two resolver tie-breaks)** — the C++ ordering wins and is now the one
+  contract: `(matchedSegments, kind)` with `Exact > Descendant > Wildcard`, ties
+  keeping the earlier-declared entry. It is total (no tie falls through to a
+  per-engine rule), it is what the only cross-engine fixture already pins, and it
+  is what two of the four legs already do. `archetypeSpecificity`'s
+  `exact ? 2N : 2N-1` keeps its existing callers but no longer decides
+  resolution. **Owed by the TS/C# legs**: adopt kind-based tie-breaking.
+- **§5.3 (keys outside the taxonomy)** — matching stays root-agnostic on purpose,
+  because a resolver that silently dropped `road.*` would hide the finding rather
+  than report it. `validateBindingSource` classifies an unknown root as an
+  **error**, and the match-all `*` and a shadowed duplicate as **warnings**;
+  `validateArchetypeKeys` names the non-conformant keys a scene generator emits.
+  **Owed by Godot**: emit `terrain.chunk` / `terrain.texture.road` and stop
+  emitting `road.*` and `interior.*`, or propose the roots.
+- **§5.1 (the forked manifest)** — the canonical form is `assetRef` for the asset
+  handle, and `bindingSource` carrying the resolving tier's `name` **verbatim**.
+  Two of three legs already write `assetRef`, and a tier name is data (`packs`,
+  `insimul-placeholder`), not an enum, so title-casing it loses information.
+  **Owed by Godot**: rename `scene` → `assetRef`, drop the case-folding.
+  **Owed by Unity**: emit the layer name on the re-import path too, not the
+  `BindingSourceKind` enum name (its scene path already does).
+
+### 7.3 The parity gate that did not exist
+
+`packages/core/conformance/editor/` is the answer to §5's root cause. Three
+data-only fixtures, run by `src/conformance/__tests__/editor-corpus.test.ts` and
+readable verbatim by a native harness:
+
+| Fixture | Pins |
+|---|---|
+| `binding-resolver.json` | the chain. Its default sources + first nine cases ARE the shared matrix Unreal and Godot vendor; six more cover the settled tie-break, stable ordering and the unbound report. |
+| `scene-placement.json` | the golden IR + the CC0 placeholder tier → the manifest. Verified node-for-node identical to Unity's committed `golden-placement-manifest.json`, so the port is exact, not merely plausible. |
+| `reimport.json` | the five-way policy. Its canonical report is byte-identical to the `golden-diff-report.json` all three legs commit, plus the mutator call order the goldens cannot express. |
+
+Regenerate the derived `expected*` values with `npm run editor-goldens`
+(`packages/core/scripts/emit-editor-goldens.ts`); the inputs and the per-class id
+lists are authored by hand, so the corpus never merely proves the code agrees
+with itself.
+
+### 7.4 Deliberately still open
+
+- **§4.3's two product risks are consolidated, not fixed.** The `generated` flag
+  is still opt-out with no per-field ownership, and only direct children of the
+  generated root are diffed. Both are now pinned by named tests in
+  `src/editor/__tests__/reimport-diff.test.ts` that say *what today's behaviour
+  is*, so a later story changing the policy has something to change. Fixing them
+  is a behaviour change needing a creator-facing design; doing it silently while
+  consolidating would put core at odds with three engines' own goldens.
+- **The World IR projection.** `PlacementWorldIR` is the placement-relevant
+  subset of the exported world document — the shape all three engines already
+  parse and pin. Projecting core's full `WorldIR` (`game-engine/ir-types.ts`)
+  into it is NOT implemented, because `RoadIR` and `NatureObjectIR` carry no
+  stable id while every placed node and every re-import match key needs one. That
+  is §3's open question (bare local ids versus KINP CURIEs) wearing a different
+  hat, and it is not guessed here.
+- **Adoption.** Unchanged from §6: one tasklist per engine repo, specified by
+  US-3. Nothing in the three engine checkouts was modified by US-2.

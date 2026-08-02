@@ -1,0 +1,178 @@
+{
+  "area": "editor-binding",
+  "description": "Cross-engine contract for the asset-binding resolution CHAIN (US-2 of 101-editor-plugin-core). The default `sources` block and the first nine cases are the shared resolver matrix the Unreal and Godot legs already vendor byte-for-byte (unreal Tests/fixtures/resolver-matrix.json, godot addons/insimul/editor/binding/fixtures/resolver-matrix.json); Unity had no copy, which is why the tie-break drifted. Sources are a FALLBACK chain — project (100) -> packs (50) -> placeholder (0); the first source with ANY match wins outright, and within it the most specific entry wins. Specificity is (matchedSegments, kind) with kind Exact > Descendant > Wildcard, ties keeping the earlier-declared entry: the settled ordering from docs/editor-plugin-core-analysis.md §5.4. `expect: null` means the query resolves to nothing. A case may override `sources` for itself.",
+  "version": 1,
+  "sources": [
+    {
+      "name": "project",
+      "priority": 100,
+      "entries": [
+        { "key": "building.residential.house", "scene": "res://project/house_custom.tscn" },
+        { "key": "character.npc.merchant", "scene": "res://project/merchant_custom.tscn" }
+      ]
+    },
+    {
+      "name": "packs",
+      "priority": 50,
+      "entries": [
+        { "key": "building.residential", "scene": "res://packs/residential.tscn" },
+        { "key": "building.*", "scene": "res://packs/building_generic.tscn" },
+        { "key": "prop.furniture", "scene": "res://packs/furniture.tscn" }
+      ]
+    },
+    {
+      "name": "placeholder",
+      "priority": 0,
+      "entries": [{ "key": "*", "scene": "res://placeholder/cube.tscn" }]
+    }
+  ],
+  "cases": [
+    {
+      "name": "exact-in-project-wins",
+      "query": "building.residential.house",
+      "expect": { "source": "project", "key": "building.residential.house" }
+    },
+    {
+      "name": "descendant-falls-to-packs",
+      "query": "building.residential.cottage",
+      "expect": { "source": "packs", "key": "building.residential" }
+    },
+    {
+      "name": "wildcard-in-packs",
+      "query": "building.commercial.shop",
+      "expect": { "source": "packs", "key": "building.*" }
+    },
+    {
+      "name": "exact-more-specific-than-wildcard-same-source",
+      "query": "building.residential",
+      "expect": { "source": "packs", "key": "building.residential" }
+    },
+    {
+      "name": "exact-npc-in-project",
+      "query": "character.npc.merchant",
+      "expect": { "source": "project", "key": "character.npc.merchant" }
+    },
+    {
+      "name": "unmatched-npc-falls-to-placeholder",
+      "query": "character.npc.guard",
+      "expect": { "source": "placeholder", "key": "*" }
+    },
+    {
+      "name": "descendant-prop-in-packs",
+      "query": "prop.furniture.chair",
+      "expect": { "source": "packs", "key": "prop.furniture" }
+    },
+    {
+      "name": "exact-prop-in-packs",
+      "query": "prop.furniture",
+      "expect": { "source": "packs", "key": "prop.furniture" }
+    },
+    {
+      "name": "fully-unknown-falls-to-placeholder",
+      "query": "vehicle.cart",
+      "expect": { "source": "placeholder", "key": "*" }
+    },
+
+    {
+      "name": "higher-priority-tier-wins-even-when-less-specific",
+      "description": "The chain is a fallback, not a merge: a project override matching only by wildcard beats an EXACT match in a lower tier. This is what makes an override an override.",
+      "sources": [
+        {
+          "name": "project",
+          "priority": 100,
+          "entries": [{ "key": "building.*", "scene": "project/override" }]
+        },
+        {
+          "name": "packs",
+          "priority": 50,
+          "entries": [{ "key": "building.residential.house", "scene": "packs/house" }]
+        }
+      ],
+      "query": "building.residential.house",
+      "expect": { "source": "project", "key": "building.*", "assetRef": "project/override" }
+    },
+    {
+      "name": "descendant-beats-wildcard-at-equal-depth",
+      "description": "THE settled tie-break (§5.4). Both entries match with 2 matched segments; kind decides, so the plain ancestor (Descendant) wins over `building.residential.*` (Wildcard). Under core's older `exact ? 2N : 2N-1` scoring these TIE and the winner depended on a per-engine fallback.",
+      "sources": [
+        {
+          "name": "packs",
+          "priority": 50,
+          "entries": [
+            { "key": "building.residential.*", "scene": "packs/wildcard" },
+            { "key": "building.residential", "scene": "packs/descendant" }
+          ]
+        }
+      ],
+      "query": "building.residential.house",
+      "expect": { "source": "packs", "key": "building.residential", "assetRef": "packs/descendant" }
+    },
+    {
+      "name": "earlier-entry-wins-on-a-full-tie",
+      "description": "Two entries with the same key and the same score: the earlier-declared one is kept (the resolver never replaces on Compare == 0), so a duplicate key can never win.",
+      "sources": [
+        {
+          "name": "packs",
+          "priority": 50,
+          "entries": [
+            { "key": "prop.*", "scene": "packs/first" },
+            { "key": "prop.*", "scene": "packs/second" }
+          ]
+        }
+      ],
+      "query": "prop.bench",
+      "expect": { "source": "packs", "key": "prop.*", "assetRef": "packs/first" }
+    },
+    {
+      "name": "equal-priority-tiers-keep-insertion-order",
+      "description": "sortSourcesByPriority is a STABLE sort, so two tiers at the same priority resolve in the order they were added.",
+      "sources": [
+        { "name": "first", "priority": 50, "entries": [{ "key": "item.*", "scene": "first/item" }] },
+        { "name": "second", "priority": 50, "entries": [{ "key": "item.potion", "scene": "second/potion" }] }
+      ],
+      "query": "item.potion",
+      "expect": { "source": "first", "key": "item.*", "assetRef": "first/item" }
+    },
+    {
+      "name": "mesh-is-the-handle-when-scene-is-absent",
+      "sources": [
+        { "name": "packs", "priority": 50, "entries": [{ "key": "prop.rock", "mesh": "packs/rock.mesh" }] }
+      ],
+      "query": "prop.rock",
+      "expect": { "source": "packs", "key": "prop.rock", "assetRef": "packs/rock.mesh" }
+    },
+    {
+      "name": "no-tier-matches",
+      "sources": [
+        { "name": "packs", "priority": 50, "entries": [{ "key": "building.*", "scene": "packs/b" }] }
+      ],
+      "query": "prop.bench",
+      "expect": null
+    },
+    {
+      "name": "empty-chain-resolves-nothing",
+      "sources": [],
+      "query": "building.residential",
+      "expect": null
+    }
+  ],
+  "unboundCases": [
+    {
+      "name": "placeholder-tier-binds-everything",
+      "usedKeys": ["building.residential", "prop.furniture", "vehicle.cart", "building.residential"],
+      "expect": { "requestedCount": 3, "boundCount": 3, "missingKeys": [] }
+    },
+    {
+      "name": "missing-keys-are-distinct-and-ascending",
+      "sources": [
+        {
+          "name": "packs",
+          "priority": 50,
+          "entries": [{ "key": "building.*", "scene": "packs/b" }]
+        }
+      ],
+      "usedKeys": ["prop.bench", "building.house", "", "item.potion", "prop.bench"],
+      "expect": { "requestedCount": 3, "boundCount": 1, "missingKeys": ["item.potion", "prop.bench"] }
+    }
+  ]
+}

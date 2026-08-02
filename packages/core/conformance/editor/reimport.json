@@ -1,0 +1,215 @@
+{
+  "area": "editor-reimport",
+  "description": "Cross-engine contract for the five-way re-import diff policy and its apply orchestration (US-2 of 101-editor-plugin-core). `oldManifest`/`newManifest` are the shared re-import fixtures all three engine legs vendor (unity Tests/Editor/fixtures/reimport/, unreal Tests/fixtures/reimport/, godot addons/insimul/editor/reimport/fixtures/), and `expectedCanonicalReport` is byte-identical to the golden-diff-report.json they each commit — the one place in the whole editor layer where all three genuinely converge today. The five nodes cover every class at once: building.a unchanged, building.b moved (updated), prop.c new (added), prop.d a hand edit the new manifest still lists (skipped, NOT overwritten), prop.e generated and dropped (deprecated, never deleted), prop.f a hand edit absent from the new manifest (skipped). NOTE the `Placeholder`/`Project` bindingSource values are Unity's title-cased BindingSourceKind spelling, carried VERBATIM so the golden report stays comparable; §5.1 settles the canonical spelling for newly generated manifests as the tier name, and the diff only ever compares these strings for equality.",
+  "version": 1,
+  "oldManifest": {
+    "manifestVersion": 1,
+    "seed": "reimport-golden",
+    "nodeCount": 5,
+    "nodes": [
+      {
+        "entityId": "building.a",
+        "kind": "building",
+        "archetype": "building.residential",
+        "assetRef": "placeholder:building",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 5
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      {
+        "entityId": "building.b",
+        "kind": "building",
+        "archetype": "building.commercial",
+        "assetRef": "placeholder:building",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 20,
+          "y": 1,
+          "z": 8
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1.3,
+          "y": 1.3,
+          "z": 1.3
+        }
+      },
+      {
+        "entityId": "prop.d",
+        "kind": "prop",
+        "archetype": "prop.custom_statue",
+        "assetRef": "Assets/Art/HandPlacedStatue.prefab",
+        "bindingSource": "Project",
+        "generated": false,
+        "position": {
+          "x": 7,
+          "y": 0,
+          "z": 2
+        },
+        "rotationY": 1.5708,
+        "scale": {
+          "x": 2,
+          "y": 2,
+          "z": 2
+        }
+      },
+      {
+        "entityId": "prop.e",
+        "kind": "prop",
+        "archetype": "prop.tree",
+        "assetRef": "placeholder:prop",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 15,
+          "y": 0,
+          "z": 12
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      {
+        "entityId": "prop.f",
+        "kind": "prop",
+        "archetype": "prop.custom_fountain",
+        "assetRef": "Assets/Art/HandPlacedFountain.prefab",
+        "bindingSource": "Project",
+        "generated": false,
+        "position": {
+          "x": 9,
+          "y": 0,
+          "z": 9
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      }
+    ]
+  },
+  "newManifest": {
+    "manifestVersion": 1,
+    "seed": "reimport-golden",
+    "nodeCount": 4,
+    "nodes": [
+      {
+        "entityId": "building.a",
+        "kind": "building",
+        "archetype": "building.residential",
+        "assetRef": "placeholder:building",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 5
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      {
+        "entityId": "building.b",
+        "kind": "building",
+        "archetype": "building.commercial",
+        "assetRef": "placeholder:building",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 22,
+          "y": 1.5,
+          "z": 8
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1.3,
+          "y": 1.3,
+          "z": 1.3
+        }
+      },
+      {
+        "entityId": "prop.c",
+        "kind": "prop",
+        "archetype": "prop.tree",
+        "assetRef": "placeholder:prop",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 3,
+          "y": 0,
+          "z": 3
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      {
+        "entityId": "prop.d",
+        "kind": "prop",
+        "archetype": "prop.lamp",
+        "assetRef": "placeholder:prop",
+        "bindingSource": "Placeholder",
+        "generated": true,
+        "position": {
+          "x": 7,
+          "y": 0,
+          "z": 2
+        },
+        "rotationY": 0,
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      }
+    ]
+  },
+  "expectedReport": {
+    "reportVersion": 1,
+    "added": [
+      "prop.c"
+    ],
+    "updated": [
+      "building.b"
+    ],
+    "unchanged": [
+      "building.a"
+    ],
+    "skipped": [
+      "prop.d",
+      "prop.f"
+    ],
+    "deprecated": [
+      "prop.e"
+    ]
+  },
+  "expectedCanonicalReport": "{\"added\":[\"prop.c\"],\"counts\":{\"added\":1,\"deprecated\":1,\"skipped\":2,\"unchanged\":1,\"updated\":1},\"deprecated\":[\"prop.e\"],\"reportVersion\":1,\"skipped\":[\"prop.d\",\"prop.f\"],\"unchanged\":[\"building.a\"],\"updated\":[\"building.b\"]}",
+  "expectedMutatorCalls": [
+    "update:building.b",
+    "add:prop.c",
+    "deprecate:prop.e"
+  ]
+}
