@@ -68,10 +68,11 @@ Four things make the wasm case different:
    `insimul/native` is frequently not present at any sibling path.
 
 4. **A silent fallback is worse than a big repo.** If the artifact could go
-   missing, the tempting recovery is to fall back to tau-prolog — which would
-   make the US-2 parity diff compare tau-prolog against itself and pass
-   vacuously. Committing the bytes removes the failure mode instead of handling
-   it.
+   missing, the tempting recovery is to fall back to a second interpreter — which
+   would have made the US-2 parity diff compare tau-prolog against itself and pass
+   vacuously. Committing the bytes removes the failure mode instead of handling it.
+   Since US-3 there is no second interpreter at all, so a missing artifact means
+   no Prolog: all the more reason it cannot be optional.
 
 The cost is ~2.2 MB of binary in git history, once, plus ~2.2 MB per refresh.
 Measured transfer cost to a *game* is lower: 562 KB gzipped, 415 KB brotli.
@@ -129,7 +130,7 @@ packaged `@insimul/prolog-wasm`.
 - the engine actually solves a goal through `WasmPrologEngine`.
 
 Because the vendored copy is the only source, "artifact unavailable" and "tests
-red" are the same event: there is no path where a missing engine degrades
-quietly to tau-prolog. `loadPrologWasm()` rejects with
-`PrologWasmUnavailableError`, whose message names this document and the two
-commands above.
+red" are the same event: there is no path where a missing engine degrades quietly
+to something else (tau-prolog was that something else until US-3 deleted it).
+`loadPrologWasm()` rejects with `PrologWasmUnavailableError`, whose message names
+this document and the two commands above.

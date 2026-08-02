@@ -274,21 +274,25 @@ world state work at all; without it an engine has a KB and a world that drift.
 
 Honest list. Nothing here is fatal; all of it is unfinished.
 
-**1. Two different Prolog implementations.** The browser runs **tau-prolog**
-(`src/prolog/tau-engine.ts`, with `tau-prolog-patch.ts` patching `globalThis`).
-The native engines link **libinsimul**, the C Prolog substrate in the sibling
-`insimul-native` checkout (Trealla-derived; tracked by tasklist **91**). They are
-different implementations of the same corpus and they disagree — on operator
-directives, on library loading (tau needs `:- use_module(library(lists))` in the
-program even when the module is registered), and on solution order.
+**1. ~~Two different Prolog implementations.~~ RESOLVED by tasklist 91.** The
+browser used to run **tau-prolog** while the native engines linked
+**libinsimul** — two implementations of the same corpus that disagreed on
+library loading, on error reporting and on unbound bindings. Tasklist **91**
+put both behind one interface (`src/prolog/prolog-engine.ts`), diffed them over
+the corpus and the shipped rule packs in one process
+(`docs/tau-wasm-parity.md`), and then deleted tau-prolog. The browser now runs
+libinsimul/Trealla compiled to wasm32 — the *same engine source* as Unity,
+Unreal, Godot and the Rust server, not a second implementation of it.
 
-The mitigation exists and is deliberately partial: `conformance/prolog/*.json`
-is a language-neutral parity corpus — **76 cases** across arithmetic,
-unification, backtracking, negation, lists, assert/retract, gameplay, and the
-KINP identity/equivalence/world packs — compared as an unordered multiset so
-either engine may enumerate in any order. 76 cases is a gate, not a proof of
-equivalence. Until 91 lands, treat any Prolog behaviour not covered by a
-conformance case as unspecified across engines.
+What remains is a gate rather than a proof: `conformance/prolog/*.json` is a
+language-neutral parity corpus — **76 cases** across arithmetic, unification,
+backtracking, negation, lists, assert/retract, gameplay, and the KINP
+identity/equivalence/world packs — compared as an unordered multiset so a native
+engine may enumerate in any order. One case carries a documented, printed
+amendment (`AMENDMENTS` in `prolog-corpus.test.ts`, matching libinsimul's three
+harnesses). An adapter that links libinsimul inherits the web runtime's Prolog
+behaviour; one that brings its own interpreter is back in the old position and
+should read `docs/tau-wasm-parity.md` first.
 
 **2. The seven un-inverted modules** (§2.1, 5,900 lines) — including
 `GamePrologEngine` itself. An adapter today gets the 59 modules and must supply

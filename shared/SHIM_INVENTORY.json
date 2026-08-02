@@ -7,11 +7,11 @@
     "source": "Not a shim — real source still living in shared/."
   },
   "counts": {
-    "core": 88,
+    "core": 86,
     "babylon": 259,
     "mixed": 0,
     "source": 73,
-    "total": 420
+    "total": 418
   },
   "shims": {
     "core": [
@@ -67,8 +67,6 @@
       "shared/prolog/quest-converter.ts",
       "shared/prolog/quest-hydrator.ts",
       "shared/prolog/rule-converter.ts",
-      "shared/prolog/tau-engine.ts",
-      "shared/prolog/tau-prolog-patch.ts",
       "shared/prolog/tott-converter.ts",
       "shared/prolog/tott-predicate-map.ts",
       "shared/prolog/tott-predicates.ts",

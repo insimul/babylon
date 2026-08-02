@@ -17,9 +17,22 @@
  * pack agree, not a hand-written transcription of the scenario.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { TauPrologEngine } from '../../prolog/tau-engine';
+import { createPrologEngine, type PrologEngine } from '../../prolog/prolog-engine';
+
+// wasm has no finalizers: every engine a test builds must be released, or the
+// module's indirect function table runs out of slots (see PrologEngine.destroy).
+const live: PrologEngine[] = [];
+async function newEngine(): Promise<PrologEngine> {
+  const engine = await createPrologEngine();
+  live.push(engine);
+  return engine;
+}
+afterEach(() => {
+  for (const e of live) e.destroy?.();
+  live.length = 0;
+});
 import { IDENTITY_PREDICATES_PROLOG } from '../identity-predicates';
 import { EQUIVALENCE_PREDICATES_PROLOG } from '../equivalence-predicates';
 import {
@@ -109,8 +122,8 @@ function argosReconciliation(): string[] {
   return [equivalenceFact(outcome.link)];
 }
 
-async function fabric(): Promise<TauPrologEngine> {
-  const engine = new TauPrologEngine();
+async function fabric(): Promise<PrologEngine> {
+  const engine = await newEngine();
   const program = [
     IDENTITY_PREDICATES_PROLOG,
     EQUIVALENCE_PREDICATES_PROLOG,
@@ -197,7 +210,7 @@ describe('§6 — offline world-gen still works', () => {
   it('mints provisional locals with no authority round-trip and reconciles later', async () => {
     // Authoring emits no link to any authority: the entity simply exists.
     const provisional = provisionalEntityId('tmp-npc-42');
-    const engine = new TauPrologEngine();
+    const engine = await newEngine();
     const consulted = await engine.consult(
       [
         IDENTITY_PREDICATES_PROLOG,

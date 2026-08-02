@@ -1,7 +1,7 @@
 /**
  * PrologKBOptimizer
  *
- * Wraps {@link TauPrologEngine} with three optimizations used by the
+ * Wraps a {@link PrologEngine} with three optimizations used by the
  * in-browser game runtime to keep initial load cheap on limited hardware:
  *
  *   1. Lazy shard loading — world facts are grouped by named shard
@@ -26,10 +26,10 @@
  */
 
 import {
-  TauPrologEngine,
+  type PrologEngine,
   type QueryResult,
   type EngineStats,
-} from './tau-engine';
+} from './prolog-engine';
 
 export type QualityPresetName = 'minimal' | 'low' | 'medium' | 'high' | 'ultra';
 
@@ -104,7 +104,7 @@ interface ResidentShard extends FactShard {
 }
 
 export class PrologKBOptimizer {
-  private readonly engine: TauPrologEngine;
+  private readonly engine: PrologEngine;
   private preset: QualityPreset;
 
   private readonly shards = new Map<string, FactShard>();
@@ -119,7 +119,7 @@ export class PrologKBOptimizer {
   private totalQueryTimeMs = 0;
   private totalShardLoadTimeMs = 0;
 
-  constructor(engine: TauPrologEngine, preset: QualityPreset = QUALITY_PRESETS.medium) {
+  constructor(engine: PrologEngine, preset: QualityPreset = QUALITY_PRESETS.medium) {
     this.engine = engine;
     this.preset = preset;
   }

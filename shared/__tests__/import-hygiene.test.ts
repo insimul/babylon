@@ -1015,3 +1015,100 @@ describe('logic boundary: shared/LOGIC_BOUNDARY.json is current (US-2, 93-runtim
     expect(committed.counts.a + committed.counts.b + committed.counts.c).toBe(committed.counts.total);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// US-3 (91-babylon-prolog-wasm) — tau-prolog is gone and stays gone.
+//
+// The web runtime now executes the SAME Prolog engine as Unity, Unreal, Godot
+// and the Rust server (libinsimul/Trealla, compiled to wasm32). A second
+// interpreter creeping back — even in one test helper — reintroduces exactly
+// the split this tasklist existed to end: two engines that disagree on error
+// wording, on unbound bindings and on which predicates are builtins.
+//
+// A dependency that is merely dropped from package.json comes back the first
+// time someone types `npm i tau-prolog`. This is the standing guard.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** The retired interpreter, spelled so this file does not trip its own guard. */
+const RETIRED_ENGINE = ['tau', 'prolog'].join('-');
+
+/** Modules the swap deleted. Their presence means the removal was reverted. */
+const REMOVED_MODULES = [
+  'packages/core/src/prolog/tau-engine.ts',
+  'packages/core/src/prolog/tau-prolog-patch.ts',
+  'packages/core/src/prolog/tau-prolog.d.ts',
+  'shared/prolog/tau-engine.ts',
+  'shared/prolog/tau-prolog-patch.ts',
+];
+
+/** True when a specifier resolves to the retired engine or its wrapper module. */
+function namesRetiredEngine(spec: string): boolean {
+  const s = spec.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, '');
+  // The npm package itself (bare or deep), and the two wrapper modules that
+  // were its only in-repo importers.
+  return (
+    s === RETIRED_ENGINE ||
+    s.startsWith(`${RETIRED_ENGINE}/`) ||
+    /(^|\/)tau-engine$/.test(s) ||
+    /(^|\/)tau-prolog-patch$/.test(s)
+  );
+}
+
+describe(`no ${RETIRED_ENGINE}: the web runtime has exactly one Prolog engine (US-3)`, () => {
+  const sources = collectSources();
+
+  it('scans a non-trivial number of sources (guard is actually wired up)', () => {
+    // Without this, deleting collectSources' body would make every assertion
+    // below pass by examining nothing.
+    expect(sources.length).toBeGreaterThan(300);
+  });
+
+  it('has no source file importing it, under shared/ or packages/', () => {
+    const offenders: string[] = [];
+    for (const file of sources) {
+      const text = stripCommentsAndStrings(readFileSync(file, 'utf8'));
+      let m: RegExpExecArray | null;
+      ANY_IMPORT.lastIndex = 0;
+      while ((m = ANY_IMPORT.exec(text)) !== null) {
+        if (namesRetiredEngine(m[1])) offenders.push(`${relative(ROOT, file)} -> ${m[1]}`);
+      }
+    }
+    expect(
+      offenders,
+      `${RETIRED_ENGINE} was removed in US-3 (91-babylon-prolog-wasm): the browser, Unity, ` +
+        'Unreal, Godot and the Rust server all run libinsimul now. Build engines through ' +
+        '`createPrologEngine()` (packages/core/src/prolog/prolog-engine.ts) instead of ' +
+        'importing an interpreter directly:\n' +
+        offenders.map((o) => `  ${o}`).join('\n'),
+    ).toEqual([]);
+  });
+
+  it('does not list it as a dependency in any package manifest', () => {
+    const manifests = ['package.json'].concat(
+      readdirSync(PACKAGES, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && existsSync(join(PACKAGES, d.name, 'package.json')))
+        .map((d) => `packages/${d.name}/package.json`),
+    );
+    // Non-vacuity: the workspace really does have package manifests to check.
+    expect(manifests.length).toBeGreaterThan(3);
+
+    const offenders: string[] = [];
+    for (const rel of manifests) {
+      const pkg = JSON.parse(readFileSync(join(ROOT, rel), 'utf8')) as Record<string, unknown>;
+      for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+        const deps = pkg[field] as Record<string, string> | undefined;
+        if (deps && RETIRED_ENGINE in deps) offenders.push(`${rel} (${field})`);
+      }
+    }
+    expect(offenders, `${RETIRED_ENGINE} is still declared as a dependency`).toEqual([]);
+  });
+
+  it('has no leftover engine module on disk', () => {
+    const survivors = REMOVED_MODULES.filter((f) => existsSync(join(ROOT, f)));
+    expect(
+      survivors,
+      'These modules were deleted in US-3. If one is back, the engine swap was reverted ' +
+        'rather than extended — reopen the story instead of re-landing the file.',
+    ).toEqual([]);
+  });
+});

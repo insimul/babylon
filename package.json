@@ -36,7 +36,6 @@
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",
-    "tau-prolog": "^0.3.4",
     "@babylonjs/core": "^8.54.1",
     "@babylonjs/gui": "^8.54.1",
     "@babylonjs/inspector": "^8.56.1",

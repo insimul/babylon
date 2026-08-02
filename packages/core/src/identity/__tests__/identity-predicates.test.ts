@@ -3,21 +3,34 @@
  *
  * `conformance/prolog/identity.json` pins the CLAUSES (so a native engine can
  * run them as data); this suite proves the SHIPPED pack behaves identically
- * when consulted into tau-prolog together with the bridge facts minted by
+ * when consulted into the runtime engine together with the bridge facts minted by
  * `identityFacts()` — i.e. that the id logic really lives in Prolog and the
  * TypeScript side only hands over terms.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { TauPrologEngine } from '../../prolog/tau-engine';
+import { createPrologEngine, type PrologEngine } from '../../prolog/prolog-engine';
+
+// wasm has no finalizers: every engine a test builds must be released, or the
+// module's indirect function table runs out of slots (see PrologEngine.destroy).
+const live: PrologEngine[] = [];
+async function newEngine(): Promise<PrologEngine> {
+  const engine = await createPrologEngine();
+  live.push(engine);
+  return engine;
+}
+afterEach(() => {
+  for (const e of live) e.destroy?.();
+  live.length = 0;
+});
 import { IDENTITY_PREDICATES_PROLOG } from '../identity-predicates';
 import { entityIdentity, identityFacts, worldIdentityFacts } from '../identity-facts';
 
 const WORLD = 'alderforest';
 
-async function engineWithIdentity(extra: string[] = []): Promise<TauPrologEngine> {
-  const engine = new TauPrologEngine();
+async function engineWithIdentity(extra: string[] = []): Promise<PrologEngine> {
+  const engine = await newEngine();
   const program = [
     IDENTITY_PREDICATES_PROLOG,
     ...worldIdentityFacts(WORLD),

@@ -11,7 +11,7 @@
  * gameplay-state predicates that action prerequisites reference.
  */
 
-import type { TauPrologEngine } from '../../prolog/tau-engine';
+import type { PrologEngine } from '../../prolog/prolog-engine';
 import type { GameEventBus, GameEvent } from './GameEventBus';
 import { GAMEPLAY_PREDICATES } from '../../prolog/gameplay-predicates';
 
@@ -99,7 +99,7 @@ function sanitize(str: string): string {
 // ─── GameTruthSync ──────────────────────────────────────────────────────────
 
 export class GameTruthSync {
-  private engine: TauPrologEngine;
+  private engine: PrologEngine;
   private eventBus: GameEventBus;
   private unsubscribe: (() => void) | null = null;
 
@@ -136,7 +136,7 @@ export class GameTruthSync {
   /** Set of all known NPC IDs (populated during initializeNpcTruths). */
   private knownNpcIds = new Set<string>();
 
-  constructor(eventBus: GameEventBus, engine: TauPrologEngine) {
+  constructor(eventBus: GameEventBus, engine: PrologEngine) {
     this.eventBus = eventBus;
     this.engine = engine;
     this.subscribe();

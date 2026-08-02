@@ -2,7 +2,7 @@
  * Rule-to-Prolog Converter
  *
  * Converts Insimul rule definitions (conditions/effects in JSON or DSL format)
- * into Prolog predicates that can be evaluated by tau-prolog.
+ * into Prolog predicates the runtime engine can evaluate.
  *
  * Supports:
  * - Ensemble format (JSON conditions with predicates)
@@ -779,19 +779,23 @@ function splitArgs(argsStr: string): string[] {
 // ── Prolog Validation ───────────────────────────────────────────────────────
 
 /**
- * Validate Prolog content syntax using tau-prolog.
+ * Validate Prolog content syntax by consulting it into a throwaway KB.
  * Returns errors if any.
  */
 export async function validatePrologSyntax(prologContent: string): Promise<string[]> {
   // Dynamic import to avoid circular deps if needed
-  const { TauPrologEngine } = await import('./tau-engine');
-  const engine = new TauPrologEngine();
+  const { createPrologEngine } = await import('./prolog-engine');
+  const engine = await createPrologEngine();
 
-  const result = await engine.consult(prologContent);
-  if (!result.success) {
-    return [result.error || 'Invalid Prolog syntax'];
+  try {
+    const result = await engine.consult(prologContent);
+    if (!result.success) {
+      return [result.error || 'Invalid Prolog syntax'];
+    }
+    return [];
+  } finally {
+    engine.destroy?.();
   }
-  return [];
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

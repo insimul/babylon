@@ -1,20 +1,24 @@
 /**
- * `WasmPrologEngine` satisfies the same {@link PrologEngine} contract
- * `TauPrologEngine` does (US-1, 91-babylon-prolog-wasm).
+ * `WasmPrologEngine` satisfies the {@link PrologEngine} contract
+ * (US-1 → US-3, 91-babylon-prolog-wasm).
  *
- * The assertions here are shaped as a CONTRACT SUITE run over both engines, so
- * a behaviour this repo depends on cannot be true of one engine and false of
- * the other without a red test. It is intentionally not the parity diff — US-2
- * runs the full conformance corpus through both and classifies every
- * divergence; this file just pins the surface the seam promises.
+ * The assertions are shaped as a CONTRACT SUITE parameterised over the engine
+ * kinds, not written against `WasmPrologEngine` directly. Until US-3 that list
+ * held two entries (tau-prolog and wasm), so a behaviour this repo depends on
+ * could not be true of one engine and false of the other without a red test.
+ * tau is gone and the list is a singleton — keep the shape, so adding an engine
+ * means adding one row rather than rewriting the file.
  */
 import { describe, expect, it } from 'vitest';
-import { TauPrologEngine } from '../tau-engine';
 import { WasmPrologEngine, collapseTerm } from '../wasm-engine';
-import { DEFAULT_PROLOG_ENGINE, createPrologEngine, type PrologEngine } from '../prolog-engine';
+import {
+  DEFAULT_PROLOG_ENGINE,
+  createPrologEngine,
+  type PrologEngine,
+  type PrologEngineKind,
+} from '../prolog-engine';
 
-const ENGINES: Array<{ kind: 'tau' | 'wasm'; make: () => Promise<PrologEngine> }> = [
-  { kind: 'tau', make: async () => new TauPrologEngine() },
+const ENGINES: Array<{ kind: PrologEngineKind; make: () => Promise<PrologEngine> }> = [
   { kind: 'wasm', make: () => WasmPrologEngine.create() },
 ];
 
@@ -35,7 +39,7 @@ describe.each(ENGINES)('PrologEngine contract — $kind', ({ kind, make }) => {
   });
 
   it('keeps every consulted chunk rather than replacing the previous one', async () => {
-    // The regression `TauPrologEngine.consult` documents: a caller consults
+    // The regression the engine wrapper exists to avoid: a caller consults
     // world content, quests and several rule packs into ONE engine.
     const engine = await make();
     await engine.consult('a(1).');
@@ -128,8 +132,9 @@ describe.each(ENGINES)('PrologEngine contract — $kind', ({ kind, make }) => {
   it('surfaces a query error rather than throwing', async () => {
     const engine = await make();
     const result = await engine.query('undefined_predicate_xyz(X)');
-    // The MESSAGE differs between engines by design — US-2 classifies that.
-    // What both must do is report, not throw and not pretend to succeed.
+    // The MESSAGE is engine-specific (engine-behaviour.test.ts pins the exact
+    // wording). What the seam promises is that it REPORTS — no throw, and no
+    // pretending to succeed.
     expect(result.success).toBe(false);
     expect(result.error).toBeTruthy();
   });
@@ -141,29 +146,30 @@ describe('createPrologEngine', () => {
   });
 
   it('selects the engine at construction, not by a build flag', async () => {
-    // Both engines exist in ONE process — the property US-2's parity diff needs.
-    const tau = await createPrologEngine({ kind: 'tau' });
-    const wasm = await createPrologEngine({ kind: 'wasm' });
-    expect(tau.kind).toBe('tau');
-    expect(wasm.kind).toBe('wasm');
+    // The property that let US-2 diff two engines in ONE process, kept for the
+    // next engine: `kind` is an argument, and independent instances coexist.
+    const a = await createPrologEngine({ kind: 'wasm' });
+    const b = await createPrologEngine({ kind: 'wasm' });
+    expect(a.kind).toBe('wasm');
+    expect(b.kind).toBe('wasm');
 
-    await tau.consult('e(tau).');
-    await wasm.consult('e(wasm).');
-    expect((await tau.query('e(X)')).bindings).toEqual([{ X: 'tau' }]);
-    expect((await wasm.query('e(X)')).bindings).toEqual([{ X: 'wasm' }]);
+    await a.consult('e(first).');
+    await b.consult('e(second).');
+    expect((await a.query('e(X)')).bindings).toEqual([{ X: 'first' }]);
+    expect((await b.query('e(X)')).bindings).toEqual([{ X: 'second' }]);
   });
 
   it('rejects an unknown kind', async () => {
     await expect(
-      createPrologEngine({ kind: 'swipl' as unknown as 'tau' }),
+      createPrologEngine({ kind: 'swipl' as unknown as PrologEngineKind }),
     ).rejects.toThrow(/Unknown Prolog engine kind/);
   });
 });
 
 describe('collapseTerm', () => {
-  // The binding shape both engines promise: scalars only. Mirrors tau-prolog's
-  // extractBindings, which collapses a compound to its functor name — see
-  // conformance/README.md § "KINP identifiers in the corpus".
+  // The binding shape the seam promises: scalars only. Mirrors what
+  // tau-prolog's extractBindings did, collapsing a compound to its functor name
+  // — see conformance/README.md § "KINP identifiers in the corpus".
   it('passes scalars through', () => {
     expect(collapseTerm('ann')).toBe('ann');
     expect(collapseTerm(42)).toBe(42);

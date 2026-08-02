@@ -25,7 +25,7 @@ import { RadiantQuestDirector } from '../RadiantQuestDirector';
  * ride in as pre-generated `content` (a world export's Prolog blob).
  */
 async function makeEngineWithPack(): Promise<GamePrologEngine> {
-  const engine = new GamePrologEngine();
+  const engine = await GamePrologEngine.create();
   await engine.initialize({
     characters: [{ id: 'c1', firstName: 'Anne', lastName: 'Herb', occupation: 'herbalist' }],
     settlements: [{ id: 's1', name: 'town1' }],

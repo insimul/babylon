@@ -1,21 +1,24 @@
 /**
- * The Prolog engine seam (US-1, 91-babylon-prolog-wasm).
+ * The Prolog engine seam (US-1 → US-3, 91-babylon-prolog-wasm).
  *
- * Two implementations sit behind {@link PrologEngine}:
+ * ONE implementation sits behind {@link PrologEngine}:
  *
- *   - `TauPrologEngine`  (./tau-engine)   — tau-prolog, a pure-JS interpreter.
- *   - `WasmPrologEngine` (./wasm-engine)  — libinsimul/Trealla compiled to
+ *   - `WasmPrologEngine` (./wasm-engine) — libinsimul/Trealla compiled to
  *     wasm32, i.e. the SAME engine Unity, Unreal, Godot and the Rust server run.
  *
- * The point of the interface is that the choice is made **at construction**,
- * never by a build flag: US-2 runs both over the conformance corpus in one
- * process to diff them, which a compile-time switch would make impossible.
+ * There used to be a second, `TauPrologEngine` (tau-prolog, pure JS). US-1 put
+ * both behind this interface so US-2 could run them over the conformance corpus
+ * **in one process** and diff them; US-3 deleted the tau leg once that diff came
+ * back with no class-(c) divergence. The evidence is
+ * `packages/core/docs/tau-wasm-parity.md`; the git history of this file is where
+ * the tau implementation lives now.
  *
- * `createPrologEngine()` uses dynamic `import()` deliberately. Selecting `wasm`
- * must not pull tau-prolog into the bundle (that is the dependency this
- * tasklist exists to delete), and selecting `tau` must not download a 2 MB
- * `.wasm`. A bundler splits the two into separate chunks on the strength of
- * these two `import()` calls alone.
+ * The seam itself stays. The choice of interpreter is made **at construction**,
+ * never by a build flag, so a future second engine (a native binding, a newer
+ * Trealla) can be diffed against this one the same way rather than swapped in
+ * blind. `createPrologEngine()` keeps its dynamic `import()` for the same
+ * reason it had one before: the engine and its 2 MB `.wasm` land in their own
+ * bundler chunk instead of the entry chunk.
  */
 
 /**
@@ -39,23 +42,24 @@ export interface EngineStats {
   dynamicPredicates: string[];
 }
 
-/** Which interpreter backs a {@link PrologEngine}. */
-export type PrologEngineKind = 'tau' | 'wasm';
-
 /**
- * The engine used when a caller does not choose one.
+ * Which interpreter backs a {@link PrologEngine}.
  *
- * US-3 flips this to `'wasm'` and deletes the tau leg; until then the default
- * stays `'tau'` so US-2 diffs a *changed* default against the shipping one
- * rather than against itself.
+ * A one-member union today. It is deliberately still a union: adding an engine
+ * must remain a construction-time choice (so the newcomer can be diffed against
+ * `wasm` in one process, the way US-2 diffed `wasm` against tau-prolog) rather
+ * than a build flag.
  */
-export const DEFAULT_PROLOG_ENGINE: PrologEngineKind = 'tau';
+export type PrologEngineKind = 'wasm';
+
+/** The engine used when a caller does not choose one. */
+export const DEFAULT_PROLOG_ENGINE: PrologEngineKind = 'wasm';
 
 /**
  * The knowledge-base surface every Insimul Prolog caller goes through.
  *
- * This is the pre-existing `TauPrologEngine` API, extracted verbatim — no
- * caller changes shape, which is the whole point of introducing the seam
+ * This is the pre-existing `TauPrologEngine` API, extracted verbatim in US-1 —
+ * no caller changed shape, which is the whole point of introducing the seam
  * before swapping the engine underneath it.
  */
 export interface PrologEngine {
@@ -97,8 +101,8 @@ export interface PrologEngine {
   /**
    * Release engine-owned resources.
    *
-   * Optional because a pure-JS engine has none — `TauPrologEngine` does not
-   * implement it. `WasmPrologEngine` does, and for it this is NOT optional
+   * Optional because a pure-JS engine has none — the retired `TauPrologEngine`
+   * did not implement it. `WasmPrologEngine` does, and for it this is NOT
    * hygiene: wasm has no finalizers, so an undestroyed KB leaks a handle in the
    * module's indirect function table. US-2 found the ceiling empirically — a
    * harness that builds one engine per corpus case dies with
@@ -122,19 +126,15 @@ export interface CreatePrologEngineOptions {
  * that used to `new TauPrologEngine()` synchronously must `await` this instead,
  * so a wasm-backed runtime cannot race its own startup.
  *
- * A wasm load failure REJECTS. It never falls back to tau-prolog: a silent
- * fallback would make US-2's parity diff compare tau against itself and pass
- * vacuously.
+ * A wasm load failure REJECTS, with a message naming how to rebuild the
+ * artifact. There is no fall-through to a Prolog-less mode and no second
+ * interpreter to fall back to — see `wasm-loader.ts`.
  */
 export async function createPrologEngine(
   options: CreatePrologEngineOptions = {},
 ): Promise<PrologEngine> {
   const kind = options.kind ?? DEFAULT_PROLOG_ENGINE;
   switch (kind) {
-    case 'tau': {
-      const { TauPrologEngine } = await import('./tau-engine');
-      return new TauPrologEngine(options.limit);
-    }
     case 'wasm': {
       const { WasmPrologEngine } = await import('./wasm-engine');
       return WasmPrologEngine.create(options.limit);

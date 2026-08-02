@@ -2,10 +2,12 @@
 
 Language-neutral, data-only fixtures that pin the **engine-agnostic contract**
 carved out of `shared/` into `@insimul/core`. Everything here is JSON (plus the
-golden save files) so a native harness — the future `libinsimul` C/C++ Prolog
-runtime for the Unreal/Unity/Godot plugins — can consume the **same** cases as the
-TypeScript `tau-prolog` engine and prove semantic parity. **Write cases as data,
-never as code.**
+golden save files) so every harness — `libinsimul`'s C, Rust and wasm legs for
+the Unreal/Unity/Godot plugins and the Rust server, and the TypeScript runner in
+this package — consumes the **same** cases and proves semantic parity. Since
+tasklist 91 the web runtime executes that same engine (libinsimul compiled to
+wasm32), so this corpus now gates one engine across every platform rather than
+two against each other. **Write cases as data, never as code.**
 
 ## Layout
 
@@ -80,8 +82,10 @@ Field semantics (a conforming engine MUST reproduce these):
 - **`kb`** — an array of Prolog clause strings (facts, rules, and directives such
   as `:- dynamic(counter/1).` or `:- use_module(library(lists)).`). The harness
   consults the whole array as one program before running the query. Lists-library
-  predicates (`member/2`, `length/2`, `nth0/3`, …) require the
-  `:- use_module(library(lists)).` directive in `kb`.
+  predicates (`member/2`, `length/2`, `nth0/3`, …) are resident in the runtime
+  engine, but cases carry `:- use_module(library(lists)).` anyway: it was
+  required by tau-prolog, it is harmless here, and a conforming engine that needs
+  it must not be broken by its absence.
 - **`query`** — one Prolog goal, without the trailing `.`. It may be a conjunction
   (`p(X), q(Y)`) and may contain side-effecting builtins (`assertz/1`, `retract/1`)
   whose effects must be visible later in the *same* query.
@@ -96,27 +100,31 @@ Field semantics (a conforming engine MUST reproduce these):
     anonymous `_` and variables local to rule bodies never appear.
 
 **Order-independence.** `expected` is compared as an unordered multiset — a
-conforming engine need not enumerate solutions in the same order as `tau-prolog`,
-only produce the same set. Do not rely on solution order in a case.
+conforming engine need not enumerate solutions in any particular order, only
+produce the same set. Do not rely on solution order in a case.
 
-**Two engines run this corpus in-repo (US-2, 91-babylon-prolog-wasm).** Besides
-`prolog-corpus.test.ts` (which checks the shipping engine against `expected`),
-`src/conformance/__tests__/prolog-engine-parity.test.ts` runs every case through
-BOTH `TauPrologEngine` and `WasmPrologEngine` (libinsimul/Trealla — the same
-engine the native harnesses run) and diffs the two legs against each other,
-including solution ORDER. Exactly one case differs, and it is a Trealla-vs-tau
-predicate-name collision, not a wrong answer:
+**Amendments (US-2/US-3, 91-babylon-prolog-wasm).** The corpus was authored
+against tau-prolog and is deliberately left **unamended on disk**: it is the
+source copy the native repos vendor byte-identically, so editing a case to please
+one engine would erase the evidence downstream. Exactly one case needs a rewrite
+to run, and every harness applies the SAME one, in memory, with a printed
+`[AMEND]` line — never a skip:
 
 - **`assert-retract.json::asserta-prepends`** uses `log/1` as a user dynamic
   predicate. ISO reserves `log` only as an evaluable functor, so tau-prolog
-  accepts it; Trealla additionally registers the arithmetic/list functors
+  accepted it; Trealla additionally registers the arithmetic/list functors
   (`log`, `sin`, `max`, `gcd`, `sum_list`, …) as **static builtin predicates**,
   so `asserta(log(0))` raises `permission_error(modify, static_procedure,
-  log/1)`. The native legs apply a printed **amendment** (rename the predicate
-  to `entry`) rather than skipping the case — see `insimul-native`'s
-  `conformance/WASM_PARITY.md`. **A new case must not use a Trealla builtin name
-  as a user predicate.** Full report and classification:
-  `packages/core/docs/tau-wasm-parity.md`.
+  log/1)`. The amendment renames the predicate to `entry`. **A new case must not
+  use a Trealla builtin name as a user predicate.**
+
+The tables live in `src/conformance/__tests__/prolog-corpus.test.ts`
+(`AMENDMENTS`) here and in `tests/conformance.c`,
+`rust/insimul/tests/conformance.rs` and `tests/wasm_conformance.mjs` in
+`insimul-native` — keep them in lockstep. The TS runner executes every case
+UNAMENDED first, so a stale entry fails as stale rather than masking a
+regression. Full report and classification:
+`packages/core/docs/tau-wasm-parity.md`.
 
 ## KINP identifiers in the corpus
 
@@ -215,8 +223,8 @@ Three conventions a native harness must honour:
   `:- dynamic(same_as/3).` — one case does, deliberately.
 - **`kinp_member/2` is local on purpose.** The cycle-safe closure walker needs a
   membership check; using `member/2` would require `:- use_module(library(lists)).`
-  in every case (see the tau-prolog gotcha above), so the pack ships its own
-  two-clause predicate and stays library-free.
+  in every case for any engine that does not have the module resident, so the
+  pack ships its own two-clause predicate and stays library-free.
 - **Bindings stay scalar**, as everywhere else: project each `id/3` column
   through `id_local/2` / `id_namespace/2` rather than binding the term.
 
@@ -425,10 +433,11 @@ authored shape becomes load-bearing for import.
 
 ## Purpose — the cross-engine parity gate
 
-`@insimul/core` is the contract every engine plugin implements. Today one engine
-(`tau-prolog`, TypeScript) runs this corpus via
-`src/conformance/__tests__/prolog-corpus.test.ts`. When `libinsimul` (native
-Prolog) lands, its C test harness reads these very JSON files and asserts the same
+`@insimul/core` is the contract every engine plugin implements. The TypeScript
+runner (`src/conformance/__tests__/prolog-corpus.test.ts`) and `libinsimul`'s C,
+Rust and wasm harnesses all read these very JSON files and assert the same
 `expected` sets — any divergence is a contract violation, caught here rather than
-in gameplay. Add cases here whenever a Prolog behaviour becomes load-bearing for
-save files, quests, or NPC reasoning.
+in gameplay. Since tasklist 91 the web runtime IS the wasm leg, so a divergence
+between the browser and a native plugin would have to come from the wrapper, not
+from the interpreter. Add cases here whenever a Prolog behaviour becomes
+load-bearing for save files, quests, or NPC reasoning.

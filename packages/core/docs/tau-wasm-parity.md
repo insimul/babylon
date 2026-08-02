@@ -289,13 +289,112 @@ consult accumulation + de-duplication.
 
 ## Reproducing
 
+The two-engine harnesses could only exist while both engines did. After US-3
+(below) the surviving checks are:
+
 ```
-npx vitest run packages/core/src/conformance/__tests__/prolog-engine-parity.test.ts \
-               packages/core/src/prolog/__tests__/engine-behaviour-parity.test.ts \
+npx vitest run packages/core/src/conformance/__tests__/prolog-corpus.test.ts \
+               packages/core/src/prolog/__tests__/engine-behaviour.test.ts \
                packages/core/src/prolog/__tests__/engine-builtin-collisions.test.ts
 ```
 
-All three run under the root `npm test`. The wasm artifact is committed
+`prolog-engine-parity.test.ts` (the corpus diff) was deleted with the tau leg;
+`engine-behaviour-parity.test.ts` became `engine-behaviour.test.ts`, keeping the
+wasm half of each assertion as the standing contract. To re-run the diff itself,
+check out `a43eb3e` (the US-2 commit), where both engines are present.
+
+All of these run under the root `npm test`. The wasm artifact is committed
 (`src/prolog/vendor/prolog-wasm/`, see `prolog-wasm-acquisition.md`), so no native
-checkout is needed — and a missing artifact fails loudly rather than falling back
-to tau, which would make this entire diff compare tau against itself.
+checkout is needed — and a missing artifact fails loudly rather than degrading to
+a Prolog-less mode.
+
+---
+
+# Epilogue — US-3: tau-prolog removed
+
+**Written after the swap landed.** The report above is the evidence that
+justified it and is left as authored; this section records what actually
+happened to each moving part.
+
+## What was removed
+
+`tau-engine.ts`, `tau-prolog-patch.ts`, `tau-prolog.d.ts`, their two
+`shared/prolog/` shims, the `tau-prolog` root dependency, and the legacy
+`tau-engine.test.ts` tsx harness (with its exclusion from both `vitest.config.ts`
+files). `packages/core/src/prolog/__tests__/helpers/prolog-test-bed.ts` went too:
+it reached into tau's `session` object directly, and had no consumers.
+
+`DEFAULT_PROLOG_ENGINE` is `'wasm'` and `PrologEngineKind` is a one-member
+union. **The seam itself stays** — the choice of interpreter is still a
+construction argument, so the next engine can be diffed against this one the way
+this one was diffed against tau, rather than swapped in blind. `GamePrologEngine`
+lost its default constructor argument: there is no longer any synchronous path to
+a working engine, so callers must `await GamePrologEngine.create()`.
+
+## The corpus keeps its one amendment, and prints it
+
+`conformance/prolog/*.json` is still **unamended on disk** — it is the source
+copy libinsimul's C, Rust and wasm harnesses vendor byte-identically, and editing
+a case to please one engine would erase the evidence downstream. D-2
+(`asserta-prepends` using `log/1`, which Trealla owns as a static builtin) is
+handled the way libinsimul handles it: `prolog-corpus.test.ts` carries an
+`AMENDMENTS` table, renames the predicate **in memory**, and prints an `[AMEND]`
+line. Every case is run **unamended first**, so an entry that is no longer needed
+fails as stale and a case that newly needs one fails as unamended — the table
+cannot silently grow into a way of hiding failures.
+
+## Bundle size
+
+Measured with the real export-shell `vite build`
+(`npm run test:export-shell -- --keep`), which mirrors an exported game. Same
+fixture, same flags, three commits:
+
+| build | JS (raw) | JS (gzip) | `.wasm` (raw) | `.wasm` (gzip) |
+|---|---|---|---|---|
+| pre-tasklist `94cbfa7` — tau only | 5,155,330 | 1,037,068 | — | — |
+| after US-2 `a43eb3e` — both engines | 5,301,475 | 1,078,705 | 2,091,359 | 561,937 |
+| **after US-3 `914a40f` — wasm only** | **4,839,899** | **1,008,849** | **2,091,359** | **561,937** |
+
+- **US-3's own delta:** −461,576 bytes of JS raw (−8.7%), −69,856 gzip (−6.5%).
+  Most of it comes out of the ENTRY chunk (5,006,056 → 4,558,116 raw), because
+  `GamePrologEngine` imported `TauPrologEngine` statically — tau was never
+  code-split off the critical path. A 13,719-byte `tau-engine-*.js` chunk also
+  disappears.
+- **The whole tasklist's delta,** which is the number that matters to a web
+  game: −315,431 JS raw / −28,219 JS gzip, **plus a new 2,091,359-byte
+  `.wasm` asset (561,937 gzip)**. Net over the wire: **≈ +521 KB gzip**.
+- That wasm asset is fetched during boot, not lazily — `BabylonGame.initializeSystems()`
+  awaits `GamePrologEngine.create()`. It is a separate, cacheable, streaming-compilable
+  request rather than JS the browser must parse, but it is on the boot path and
+  should be counted as such.
+
+This is a real cost, knowingly taken: it buys one engine across the browser,
+Unity, Unreal, Godot and the Rust server instead of two that disagree.
+
+## Follow-up owed to `insimul/server`
+
+`insimul/server`'s `CLAUDE.md` states that tau-prolog and Trealla disagree, and
+cites that as the reason its test-harness routes were delegated to Node rather
+than ported to Rust. After this tasklist that describes **history, not the
+running system** — there is no tau-prolog left in the web runtime to disagree
+with anything.
+
+That repo is not part of this worktree, so the edit belongs to whoever next works
+there. The correction it should carry, on this repo's evidence:
+
+- **Solution order does NOT diverge.** All 21 multi-solution corpus cases
+  enumerated byte-identically on both engines (US-2, guarded with a floor of 15
+  cases so the check could not pass vacuously). This was one of the two
+  disagreements cited; it did not reproduce for anything the corpus or the
+  shipped rule packs cover.
+- **Error wording DOES diverge** (D-3) — but only the wording; the ISO error
+  *class* is always the same, and nothing in this repo string-matches `.error`
+  (verified by scan). It is not a semantic disagreement.
+- **The remaining real differences** (D-4, D-5) are cases where **tau-prolog was
+  wrong**: it leaked the anonymous `_` into binding sets, and bound an unbound
+  variable to its own name — a value indistinguishable from a genuine atom. The
+  Rust/Trealla answer was the correct one in both.
+
+So the accurate statement is not "the engines disagree, so the port could not be
+verified" but "the engines agreed everywhere it mattered, and where they differed
+tau was the one that was wrong." A Rust port of those routes is unblocked.

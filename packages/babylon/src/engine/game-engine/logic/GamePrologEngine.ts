@@ -10,14 +10,15 @@
  *   - Quest completion evaluation
  *
  * WHICH interpreter runs is chosen at CONSTRUCTION, never by a build flag
- * (US-1, 91-babylon-prolog-wasm): `tau` is tau-prolog, `wasm` is libinsimul/
- * Trealla compiled to wasm32 — the same engine Unity, Unreal, Godot and the
- * Rust server run. Prefer `await GamePrologEngine.create()`; the synchronous
- * constructor cannot instantiate a wasm module and so only accepts an
- * already-built engine.
+ * (US-1 → US-3, 91-babylon-prolog-wasm). Today there is one: `wasm`,
+ * libinsimul/Trealla compiled to wasm32 — the same engine Unity, Unreal, Godot
+ * and the Rust server run. tau-prolog was the other until US-3 removed it.
+ *
+ * Because a wasm module cannot be instantiated synchronously, there is no
+ * synchronous path to a working engine: use `await GamePrologEngine.create()`.
+ * The constructor now REQUIRES an already-built engine.
  */
 
-import { TauPrologEngine } from '@shared/prolog/tau-engine';
 import {
   createPrologEngine,
   type CreatePrologEngineOptions,
@@ -99,24 +100,24 @@ export class GamePrologEngine {
   private actionToActivityMap = new Map<string, string>();
 
   /**
-   * @param engine the interpreter to run on. Omitted, it is tau-prolog — the
-   *   only engine that can be built synchronously. To run on the wasm engine
-   *   use {@link GamePrologEngine.create}, which awaits the module load; there
-   *   is deliberately no synchronous path that could race its own startup.
+   * @param engine the already-built interpreter to run on. There is no default:
+   *   the wasm module cannot be instantiated synchronously, so a synchronous
+   *   path to a working engine would have to race its own startup. Use
+   *   {@link GamePrologEngine.create}, which awaits the module load.
    */
-  constructor(engine?: PrologEngine) {
-    this.engine = engine ?? new TauPrologEngine();
+  constructor(engine: PrologEngine) {
+    this.engine = engine;
   }
 
   /**
    * Build a GamePrologEngine on the selected interpreter.
    *
    * Async because instantiating a wasm module is. A load failure REJECTS —
-   * there is no fall-through to a Prolog-less mode and no silent fallback to
-   * tau-prolog (which would make the US-2 parity diff vacuous).
+   * there is no fall-through to a Prolog-less mode and no second interpreter to
+   * silently fall back to.
    *
-   *   const engine = await GamePrologEngine.create();                // default
-   *   const engine = await GamePrologEngine.create({ kind: 'wasm' }); // libinsimul
+   *   const engine = await GamePrologEngine.create();                // default (wasm)
+   *   const engine = await GamePrologEngine.create({ kind: 'wasm' }); // explicit
    */
   static async create(options: CreatePrologEngineOptions = {}): Promise<GamePrologEngine> {
     return new GamePrologEngine(await createPrologEngine(options));
@@ -2147,7 +2148,8 @@ sumlist([H|T], S) :- sumlist(T, S1), S is S1 + H.
 
   /**
    * Assert taxonomy facts for an item (category, material, baseType, rarity, IS-A chain).
-   * Safe to call multiple times; duplicate facts are idempotent in tau-prolog.
+   * Safe to call multiple times; the engine wrapper stores facts in a set, so a
+   * duplicate assert is idempotent.
    */
   private async assertItemTaxonomy(itemName: string, taxonomy: ItemTaxonomy): Promise<void> {
     if (taxonomy.category) {

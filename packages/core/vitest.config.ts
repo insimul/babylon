@@ -18,7 +18,6 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'src/prolog/tau-engine.test.ts',
       'src/game-engine/logic/VisualVocabularyDetector.test.ts',
       'src/game-engine/logic/VocabularyCollectionSystem.test.ts',
       'src/game-engine/logic/SaveConflictResolver.test.ts',

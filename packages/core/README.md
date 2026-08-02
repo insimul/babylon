@@ -69,7 +69,7 @@ They are **not** the same layer, and neither contains the other:
 | Language | TypeScript, source-distributed | C, with a C ABI |
 | Repo | this one (`packages/core`), extraction pending | sibling checkout `../insimul-native` |
 | Consumed by | every engine adapter — Babylon, Unity, Unreal, Godot | the native engine wrappers (Unity P/Invoke, an Unreal ThirdParty module, a Godot GDExtension) |
-| Relationship | defines *what* is true of a world | one implementation of the engine that *evaluates* it (the browser uses tau-prolog instead) |
+| Relationship | defines *what* is true of a world | the engine that *evaluates* it — including in the browser, which runs its wasm32 build (tasklist 91) |
 
 Rule of thumb: if it is a **type, schema, or rule the whole system agrees on**,
 it belongs here. If it **runs Prolog**, it is the native substrate.
