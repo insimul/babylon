@@ -39,7 +39,8 @@
     "test": "vitest run",
     "schemas": "vite-node scripts/emit-schemas.ts",
     "wasm:vendor": "node scripts/vendor-prolog-wasm.mjs",
-    "quest-goldens": "vite-node scripts/emit-quest-goldens.ts"
+    "quest-goldens": "vite-node scripts/emit-quest-goldens.ts",
+    "editor-goldens": "vite-node scripts/emit-editor-goldens.ts"
   },
   "keywords": [
     "insimul",

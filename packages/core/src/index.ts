@@ -105,22 +105,19 @@ export type { World } from './quest-types';
 // Emitted JSON Schemas live in packages/core/schemas/ (npm run schemas).
 export * from './schemas';
 
-// ── Editor v1 client contract (US-GE1) ─────────────────────────────────────
-// The engine-agnostic operation resolver + reference editor session the native
-// editor clients (Godot v1_client.gd / insimul_editor_session.gd) mirror.
-export * from './editor/operations';
-export * from './editor/editor-session';
-// US-GE2 — the World Browser + Generation Console dock view-models (list/detail/
-// compatibility badge; job lifecycle reducer; polling-fallback poller w/ teardown).
-export * from './editor/world-browser';
-export * from './editor/generation-console';
-export * from './editor/job-poller';
-// US-GE3 — the in-editor NPC Conversation Tester view-model (character picker,
-// streaming transcript reducer, recorded-reasoning fallback, teardown-safe controller).
-// Deep-import-only (`@insimul/core/editor/conversation-tester`): its `ConversationState`
-// (reducer accumulator) collides with the proto/conversation `ConversationState` enum
-// re-exported above, so it is intentionally left out of the flat barrel — same pattern
-// as the collision-avoiding modules noted in CLAUDE.md (core-extraction).
+// ── The editor core is NOT re-exported here (US-2, 101-editor-plugin-core) ──
+// `src/editor/` + `src/archetypes/taxonomy.ts` are the EDIT-TIME contract the
+// native editor plugins mirror — sessions, the v1 operation table, the
+// generation console, the world browser, the conversation tester, and the
+// binding/placement/re-import cores US-2 added. A shipping game embeds the
+// RUNTIME core and not the editor core, so re-exporting them from this flat
+// barrel pulled edit-time view-models into every consumer's graph (the
+// entanglement recorded in docs/editor-plugin-core-analysis.md §3).
+//
+// The editor surface is deep-import-only: `@insimul/core/editor` for the area
+// barrel, `@insimul/core/editor/<module>` for one module. Re-adding an
+// `export * from './editor/…'` line here fails
+// `src/editor/__tests__/editor-surface.test.ts`.
 
 // ── Default-UI view-models (US-GU1) ────────────────────────────────────────
 // The engine-agnostic panel registry, loading-screen model, and notification

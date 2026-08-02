@@ -509,6 +509,121 @@ tasklist 91; the 7 un-inverted modules remain).
   the tests you filtered out — that is how "18,459 lines" got into a draft when the real
   non-test total is 17,946. Sum the per-file counts yourself when a number goes in a doc.
 
+### There is a SECOND core surface: `src/editor/` (US-1, 101-editor-plugin-core)
+
+`packages/core/src/editor/` (+ `src/archetypes/taxonomy.ts`) is the **edit-time**
+contract the three engine editor plugins mirror — session/token lifecycle, the v1
+operation table, the generation-job reducer + poller, the world browser, the
+conversation tester, the archetype match primitives. It is NOT the runtime
+contract, and the two must not entangle: **a shipping game embeds the runtime core
+and not the editor core.**
+
+- The full inventory, classification and drift report is
+  `packages/core/docs/editor-plugin-core-analysis.md`, drift-guarded by
+  `src/editor/__tests__/editor-plugin-core-analysis.test.ts`. Read it before
+  touching anything under `src/editor/`, `src/archetypes/`, or the three engine
+  plugins — it already measured what they duplicate, so don't re-measure.
+- **The editor surface is DEEP-IMPORT-ONLY.** `src/index.ts` names no editor
+  module; reach for `@insimul/core/editor` or `@insimul/core/editor/<path>`.
+  Two guards, in opposite directions: the analysis doc's marked fenced block
+  (now empty) is compared against the barrel as a SET, and
+  `src/editor/__tests__/editor-surface.test.ts` fails on a barrel re-export, on a
+  runtime module importing `editor/`, and on an editor module importing the flat
+  barrel. `archetypes/taxonomy` IS still barrelled on purpose — pure string
+  grammar, a shared *type*, no view-model/transport/session state.
+- **The editor plugins are in sibling submodule checkouts, not this repo** —
+  `unity/Editor`, `unreal/Source/InsimulEditor`, `godot/addons/insimul/editor`. A
+  babylon worktree can read them for analysis but must never write there, so
+  anything measured across them is dated in the doc, not guarded.
+
+### The three shared editor cores (US-2, 101-editor-plugin-core)
+
+`editor/{binding,scene,reimport}` + `editor/host-contracts` are the capabilities
+every engine plugin implemented and core did not. Conventions and gotchas:
+
+- **`editor/host-contracts.ts` is the edit-time twin of
+  `game-engine/host-contracts.ts`** — same direction (what the plugin hands core),
+  same three rules (narrow to what core actually calls; no engine/DOM types; every
+  hook optional with a documented fallback). Three interfaces: `SceneMutator`
+  (update/add/deprecate — no hook for `unchanged`/`skipped`, they are no-ops BY
+  POLICY), `AssetResolver`, `ProgressSink`. Babylon reference:
+  `packages/babylon/src/engine/editor/babylon-editor-host.ts`, tested against a
+  real `NullEngine` `Scene` (that works fine in vitest and is fast — no fake
+  objects needed).
+- **Matching is root-agnostic; taxonomy conformance is a separate diagnostic.**
+  The resolver accepts a bare `*` and a key rooted outside `ARCHETYPE_ROOTS`,
+  because a resolver that silently dropped `road.*` would HIDE the drift instead
+  of reporting it. `validateBindingSource` / `validateArchetypeKeys` (in
+  `binding/pack.ts`) are where a key meets the taxonomy, with error vs warning
+  severities. Don't "fix" this by tightening `matchArchetype`.
+- **Specificity for RESOLUTION is `(matchedSegments, kind)`**, `Exact >
+  Descendant > Wildcard`, ties keeping the earlier entry — NOT
+  `archetypeSpecificity`'s `exact ? 2N : 2N-1`, under which a descendant and a
+  wildcard at equal depth tie. The old scoring keeps its existing callers.
+- **`quantizeSceneCoord` rounds halves AWAY FROM ZERO**, because the engine legs
+  use C++ `std::round`; JS `Math.round` rounds half toward `+∞` and disagrees on
+  exact negative halves. And divide by the exact inverse (1000) after rounding —
+  multiplying by the inexact `0.001` lexeme turns 1.4 into 1.4000000000000001.
+- **One canonical serializer**: the editor artifacts use `save-export`'s
+  `canonicalStringify`, not a fourth hand-rolled one. `JSON.stringify` of the
+  quantized numbers reproduces the engines' canonical output byte-for-byte (the
+  committed golden diff report matches exactly).
+- **`conformance/editor/`** is the parity gate that did not exist (three fixtures;
+  format in `conformance/README.md` § "Editor fixture format"). Derived `expected*`
+  values regenerate with `npm run editor-goldens`; INPUTS and the per-class id
+  lists stay authored so the corpus never just proves the code agrees with itself.
+  The placement expectation was verified node-for-node against Unity's committed
+  `golden-placement-manifest.json` — do that when porting math, rather than
+  trusting that the formulas look the same.
+- **§4.3's two re-import product risks are consolidated, NOT fixed** (the
+  `generated` flag is opt-out with no per-field ownership; only direct children of
+  the generated root are diffed). Named tests in `reimport-diff.test.ts` pin
+  today's behaviour so a later policy story has something to change. Changing it
+  while consolidating would put core at odds with three engines' own goldens.
+- **`PlacementWorldIR` is the placement-relevant subset of the EXPORTED world
+  document**, not a second World IR. Projecting core's full `WorldIR` into it is
+  deliberately unimplemented: `RoadIR`/`NatureObjectIR` carry no stable id while
+  every placed node needs one, which is the KINP-CURIE-vs-local-id question. Don't
+  guess an id-minting policy to close it.
+
+### The editor-core adoption spec (US-3, 101-editor-plugin-core)
+
+`packages/core/docs/editor-core-adoption.md` is what the four per-engine adoption
+tasklists open on. Drift-guarded by `src/editor/__tests__/editor-core-adoption.test.ts`
+(every non-barrel editor module needs an adoption line; every `export interface`
+in `editor/host-contracts.ts` must be named; one `### 2.x` note per engine).
+
+- **The language boundary is inherited, not re-derived** — `docs/UNIFICATION_ROADMAP.md`
+  decision 1 (answered by tasklist 100, bridge promoted to `native/corebridge/` by
+  104): a C ABI over **`libinsimulcore`**, TypeScript in embedded QuickJS behind it.
+  Adopting more of core = **adding a row to `native/corebridge/js/entry.js`'s method
+  table** and re-vendoring the bundle. Do not invent an editor-specific mechanism;
+  the roadmap names this tasklist when it says so.
+- **The ABI is one-way, so the callback-shaped modules DON'T cross it.**
+  `insimul_core_call` drives the JS job queue until the promise settles, host
+  functions are installed synchronously in C, and Unity's runtime ABI is
+  deliberately poll-only for IL2CPP. So `EditorSession`, `JobPoller` and
+  `ConversationController` stay host-side thin drivers; the pure parsers/reducers
+  and `binding`/`scene/placement`/`reimport/diff` cross. `host-contracts` is
+  implemented in the host's own language against a report that arrived as JSON —
+  never registered as a QuickJS callback.
+- **Edit-time inverts the runtime's cost profile**: no per-frame path, but one
+  multi-MB payload per click. The returned string is owned by the handle and valid
+  only until the next call — copy eagerly. Page (a `placeChunk`-style method) if it
+  ever gets too big; a streaming ABI would fork decision 1.
+- **The editor's existing HTTP boundary is NOT a licence for a second mechanism.**
+  The closed pipelines service stays behind HTTP; `@insimul/core` comes in over the
+  ABI. Two dependencies, only one moved.
+- Sizing: ~9,760 of 18,159 source lines deletable across the three engines (Unreal
+  4,264 + 2,927 tests = 67% of its module; Unity ~49%, and its adoption also fixes
+  the ~2,000 lines of edit-time policy compiled into every player build; Godot 58%,
+  collapsing its GDScript/C++ double implementation). Babylon deletes nothing —
+  it has no editor plugin (roadmap decision 3), so it is sequenced last.
+- **Net-new ≠ port.** The binding-editor view-model (641 lines, 3 engines, 0 in core)
+  is the recommended SECOND slice; Godot lacks an imported-world registry; Unreal
+  and Godot lack an edit-time content-library importer. Unreal's PCG/Landscape work
+  is engine-specific and is explicitly not a gap for the others.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`

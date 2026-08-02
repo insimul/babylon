@@ -16,7 +16,9 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../../shared/*"]
+      "@shared/*": ["../../shared/*"],
+      "@insimul/core": ["../core/src/index.ts"],
+      "@insimul/core/*": ["../core/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
