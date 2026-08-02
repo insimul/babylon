@@ -56,7 +56,7 @@ const RESOURCE_RULES = [
   'production_blocked(Location, Product) :- depends_on(Product, Material), resource(Location, Material, Amount), Amount =< 0',
 
   // Wealth from resources
-  'location_wealth(Location, Wealth) :- findall(V, (resource(Location, R, Amount), resource_price(R, _, Price), V is Amount * Price), Values), sum_list(Values, Wealth)',
+  'location_wealth(Location, Wealth) :- findall(V, (resource(Location, R, Amount), resource_price(R, _, Price), V is Amount * Price), Values), insimul_sum_list(Values, Wealth)',
 
   // Capacity constraints
   'over_capacity(Location, Resource) :- resource(Location, Resource, Amount), resource_capacity(Location, Resource, Cap), Amount > Cap',
@@ -247,10 +247,23 @@ export function getAdvancedPredicates(): string {
   }
   lines.push('');
 
-  // Helper: sum_list (not always available)
+  // Helper: list summation.
+  //
+  // NAMESPACED ON PURPOSE (US-2, 91-babylon-prolog-wasm). tau-prolog ships no
+  // `sum_list/2`, so this pack used to define one — but Trealla (the engine
+  // behind `WasmPrologEngine`, and behind Unity/Unreal/Godot/the Rust server)
+  // registers `sum_list/2` as a STATIC builtin, and asserting a clause for it
+  // raises `permission_error(modify, static_procedure, sum_list/2)`. Because
+  // libinsimul's consult is transactional, that one clause failed the WHOLE
+  // pack, so no advanced predicate loaded at all on the shared engine.
+  //
+  // `insimul_`-prefixing it makes the definition ours on every engine instead
+  // of shadowing one engine's builtin. See `docs/tau-wasm-parity.md` (D-1) and
+  // the guard in `src/prolog/__tests__/engine-builtin-collisions.test.ts`,
+  // which probes every registered predicate name against the real engine.
   lines.push('% Helper predicates');
-  lines.push('sum_list([], 0).');
-  lines.push('sum_list([H|T], Sum) :- sum_list(T, Rest), Sum is H + Rest.');
+  lines.push('insimul_sum_list([], 0).');
+  lines.push('insimul_sum_list([H|T], Sum) :- insimul_sum_list(T, Rest), Sum is H + Rest.');
   lines.push('');
 
   const sections: { name: string; rules: string[] }[] = [

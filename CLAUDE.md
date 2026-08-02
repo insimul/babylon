@@ -887,3 +887,56 @@ build flag: the parity story needs both engines alive in ONE process.
 - Building the artifact needs emsdk + cmake and a network clone of the pinned
   Trealla commit; do it out-of-source (`scripts/build_wasm.sh --build-dir <abs path>`)
   so a sibling checkout is never dirtied.
+
+### What the two engines actually disagree about (US-2, 91-babylon-prolog-wasm)
+
+Both engines were run over the 76-case Prolog corpus **in one process** and
+diffed, plus the shape axes a corpus cannot reach. Full report + classification:
+`packages/core/docs/tau-wasm-parity.md`. **No class-(c) divergence — US-3 is not
+blocked.** Three harnesses, all under the root `npm test`:
+`src/conformance/__tests__/prolog-engine-parity.test.ts` (the corpus diff, with
+the `DIVERGENCES` classification table: an unlisted difference fails as
+"undocumented", a class-`'c'` entry fails outright),
+`src/prolog/__tests__/engine-behaviour-parity.test.ts` (shape axes + the 8 rule
+packs `GamePrologEngine.initialize()` consults), and
+`src/prolog/__tests__/engine-builtin-collisions.test.ts`.
+
+- **Trealla registers arithmetic/list functors as STATIC BUILTIN PREDICATES**
+  (`log/1`, `sin/1`, `max/2`, `gcd/2`, `sum_list/2`, …); tau-prolog registers
+  them as evaluable functors only. A pack that defines one raises
+  `permission_error(modify, static_procedure, …)`, and since **libinsimul's
+  consult is transactional** the ONE clause kills the WHOLE pack — and then
+  every later consult on that engine, because both wrappers re-consult the
+  accumulated program. `advanced-predicates.ts` shipped exactly this
+  (`sum_list/2`, defined because tau has none), so on wasm *no rule pack loaded
+  at all*. It is now `insimul_sum_list/2`. **Never shadow an engine builtin;
+  prefix ours `insimul_`.** The guard asks the REAL engine about all 612
+  `buildPredicateSchemaSnapshot()` names rather than carrying a list that would
+  rot — and note Trealla is not self-consistent, `assertz(log(1))` is accepted
+  while `asserta(log(0))` raises, so probe both directions.
+- **A failed consult used to brick the wasm engine.** Transactional consult +
+  "keep every consulted program and re-consult the union" meant the bad source
+  stayed in `consultedPrograms` and every later `query()` re-reported its syntax
+  error, while tau kept working. `WasmPrologEngine.consult()` now rolls a failed
+  program (and the dynamic decls it introduced) back. A wrapper artifact, not an
+  interpreter difference — which is exactly why it had to go.
+- **wasm KBs need explicit release.** wasm has no finalizers; one engine per
+  corpus case dies with `RuntimeError: table index is out of bounds` partway
+  through 76. Hence the optional `PrologEngine.destroy?()`. A long-lived engine
+  (the browser builds one) never needs it; a harness that builds many does.
+- **tau was WRONG twice, and wasm fixes both**: the anonymous `_` in a query goal
+  leaked into bindings as `{"_":"_"}` (wasm omits `_`-prefixed names — so it also
+  drops a *named* `_Y`), and an unbound variable bound to its own name as a string
+  (`X: "X"`, indistinguishable from a real atom) where wasm reports `null`.
+- **Error wording differs on every path; the ISO error CLASS never does.** tau
+  wraps in `throw(…)`, renders indicators canonically (`/(nosuch,1)`) and blames
+  `top_level/0`. Survivable only because nothing in the repo string-matches
+  `.error` — verified by scan. Don't start.
+- **Solution ORDER does not diverge** on any of the 21 multi-solution corpus
+  cases, contrary to what insimul/server's CLAUDE.md leads you to expect. The
+  harness fails if that ever changes, with a floor of 15 multi-solution cases so
+  it cannot pass vacuously.
+- **The corpus is deliberately left unamended here.** It is the source copy the
+  native repos vendor byte-identically; amending it to please one engine would
+  erase the evidence downstream. Record the case in `DIVERGENCES` instead —
+  `insimul-native` handles its leg with a *printed* amendment, never a skip.

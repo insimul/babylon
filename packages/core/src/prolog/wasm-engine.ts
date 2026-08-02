@@ -103,19 +103,45 @@ export class WasmPrologEngine implements PrologEngine {
     await this.rebuild();
   }
 
+  /**
+   * Load a program, keeping earlier ones.
+   *
+   * ROLLBACK ON FAILURE (US-2): libinsimul's consult is transactional — a
+   * source that does not parse, or whose clauses cannot all be asserted, loads
+   * nothing. tau-prolog's loader is per-clause and keeps what it managed to
+   * read. Because both wrappers re-consult the WHOLE accumulated program on
+   * every mutation (see `rebuild()`), retaining a program that failed would
+   * make the failure permanent: every later `query()` on this engine would
+   * report the original consult error, while the same sequence against
+   * tau-prolog keeps working. That is a wrapper artifact, not an interpreter
+   * difference, so the program (and any dynamic declarations it introduced) is
+   * rolled back and the engine stays usable — exactly as tau's does.
+   */
   async consult(program: string): Promise<{ success: boolean; error?: string }> {
     const trimmed = program.trim();
-    if (trimmed && !this.consultedPrograms.includes(trimmed)) {
-      this.consultedPrograms.push(trimmed);
-    }
+    const addedProgram = Boolean(trimmed) && !this.consultedPrograms.includes(trimmed);
+    if (addedProgram) this.consultedPrograms.push(trimmed);
 
+    const addedDynamic: string[] = [];
     const dynamicRegex = /:-\s*dynamic\s*\(?\s*([a-z_]\w*\s*\/\s*\d+)\s*\)?\s*\./g;
     let match: RegExpExecArray | null;
     while ((match = dynamicRegex.exec(program)) !== null) {
-      this.dynamicPredicates.add(match[1].replace(/\s/g, ''));
+      const signature = match[1].replace(/\s/g, '');
+      if (!this.dynamicPredicates.has(signature)) {
+        this.dynamicPredicates.add(signature);
+        addedDynamic.push(signature);
+      }
     }
 
-    return this.rebuild();
+    const result = await this.rebuild();
+    if (!result.success) {
+      if (addedProgram) this.consultedPrograms.pop();
+      for (const signature of addedDynamic) this.dynamicPredicates.delete(signature);
+      const rolledBack = await this.rebuild();
+      // Report the consult's own error, not the (successful) rollback.
+      if (rolledBack.success) this.loadError = undefined;
+    }
+    return result;
   }
 
   async assertFact(fact: string): Promise<boolean> {

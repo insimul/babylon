@@ -93,6 +93,21 @@ export interface PrologEngine {
   import(program: string): Promise<{ success: boolean; error?: string }>;
 
   getStats(): EngineStats;
+
+  /**
+   * Release engine-owned resources.
+   *
+   * Optional because a pure-JS engine has none — `TauPrologEngine` does not
+   * implement it. `WasmPrologEngine` does, and for it this is NOT optional
+   * hygiene: wasm has no finalizers, so an undestroyed KB leaks a handle in the
+   * module's indirect function table. US-2 found the ceiling empirically — a
+   * harness that builds one engine per corpus case dies with
+   * `RuntimeError: table index is out of bounds` partway through 76 cases.
+   *
+   * A long-lived engine (the browser runtime builds exactly one) never needs
+   * this; a harness or tool that builds many does.
+   */
+  destroy?(): void;
 }
 
 export interface CreatePrologEngineOptions {

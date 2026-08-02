@@ -99,6 +99,25 @@ Field semantics (a conforming engine MUST reproduce these):
 conforming engine need not enumerate solutions in the same order as `tau-prolog`,
 only produce the same set. Do not rely on solution order in a case.
 
+**Two engines run this corpus in-repo (US-2, 91-babylon-prolog-wasm).** Besides
+`prolog-corpus.test.ts` (which checks the shipping engine against `expected`),
+`src/conformance/__tests__/prolog-engine-parity.test.ts` runs every case through
+BOTH `TauPrologEngine` and `WasmPrologEngine` (libinsimul/Trealla — the same
+engine the native harnesses run) and diffs the two legs against each other,
+including solution ORDER. Exactly one case differs, and it is a Trealla-vs-tau
+predicate-name collision, not a wrong answer:
+
+- **`assert-retract.json::asserta-prepends`** uses `log/1` as a user dynamic
+  predicate. ISO reserves `log` only as an evaluable functor, so tau-prolog
+  accepts it; Trealla additionally registers the arithmetic/list functors
+  (`log`, `sin`, `max`, `gcd`, `sum_list`, …) as **static builtin predicates**,
+  so `asserta(log(0))` raises `permission_error(modify, static_procedure,
+  log/1)`. The native legs apply a printed **amendment** (rename the predicate
+  to `entry`) rather than skipping the case — see `insimul-native`'s
+  `conformance/WASM_PARITY.md`. **A new case must not use a Trealla builtin name
+  as a user predicate.** Full report and classification:
+  `packages/core/docs/tau-wasm-parity.md`.
+
 ## KINP identifiers in the corpus
 
 Entity ids in the corpus are **KINP identifiers** (`koine/specs/identity.md`

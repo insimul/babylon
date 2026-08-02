@@ -819,7 +819,7 @@ knows_about(NpcId, Topic) :-
 player_avg_pronunciation(Player, Avg) :-
     findall(S, pronunciation_score(Player, _, S, _), Scores),
     Scores \\= [],
-    sum_list(Scores, Total),
+    insimul_sum_list(Scores, Total),
     length(Scores, Count),
     Avg is Total / Count.
 
