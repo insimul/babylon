@@ -1,5 +1,5 @@
 {
-  "description": "Grandfathered NON-SHIM source files that still live under shared/ (or the deprecated packages/{typescript,babylon-game}/src) as of babylon-consolidation US-BC5. The two-package endgame allows non-shim source ONLY under packages/{core,babylon}; these are pre-existing engine-agnostic GAME/DOMAIN modules (language-learning, assessment, quest, narrative, onboarding, procedural, telemetry) awaiting a FUTURE core/domain-package extraction. The source-location guard (shared/__tests__/import-hygiene.test.ts, US-BC5) fails if a NEW non-shim file lands outside packages/{core,babylon}, and fails if an entry here stops being a non-shim file (was moved out or converted to a shim) — so this list may only SHRINK, deliberately. Do NOT add new entries to make the guard pass; move the code into packages/{core,babylon} and leave a shim instead.",
+  "description": "Grandfathered NON-SHIM source files that still live under shared/ (or the deprecated packages/{typescript,babylon-game}/src) as of babylon-consolidation US-BC5. The two-package endgame allows non-shim source ONLY under packages/{core,babylon}; these are pre-existing engine-agnostic GAME/DOMAIN modules (language-learning, assessment, quest, narrative, onboarding, procedural, telemetry) awaiting a FUTURE core/domain-package extraction. The source-location guard (shared/__tests__/import-hygiene.test.ts, US-BC5) fails if a NEW non-shim file lands outside packages/{core,babylon}, and fails if an entry here stops being a non-shim file (was moved out or converted to a shim) \u2014 so this list may only SHRINK, deliberately. Do NOT add new entries to make the guard pass; move the code into packages/{core,babylon} and leave a shim instead.",
   "files": [
     "shared/assessment/assessment-types.ts",
     "shared/assessment/cefr-mapping.ts",
@@ -66,8 +66,6 @@
     "shared/onboarding/index.ts",
     "shared/onboarding/language-onboarding.ts",
     "shared/onboarding/onboarding-types.ts",
-    "shared/procedural/noise.ts",
-    "shared/procedural/poisson-disc-sampling.ts",
     "shared/quest-difficulty-adjustment.ts",
     "shared/quest-difficulty.ts",
     "shared/quest/main-quest-chapters.ts",
