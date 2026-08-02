@@ -147,7 +147,7 @@
       "shared/game-engine/logic/FishingSystem.ts",
       "shared/game-engine/logic/GameEventBus.ts",
       "shared/game-engine/logic/GamePrologEngine.ts",
-      "shared/game-engine/logic/GameQuestManager.d.ts",
+      "shared/game-engine/logic/GameQuestManager.ts",
       "shared/game-engine/logic/GameTextTypes.ts",
       "shared/game-engine/logic/GameTimeManager.ts",
       "shared/game-engine/logic/GameTruthSync.ts",

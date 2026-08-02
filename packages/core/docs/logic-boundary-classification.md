@@ -25,6 +25,15 @@
 >   `game-engine/visual-types.ts`, so `runtime-types.ts` re-exports them rather than
 >   redeclaring, keeping one core-side declaration of each.
 >
+> **Later amendment — US-2 of `94-quest-manager-interface`.** The class-(c) row
+> `GameQuestManager.d.ts` is gone: that path was never an implementation, only a type
+> surface standing in for a class that lived in the closed authoring platform. The
+> implementation is now `packages/core/src/game-engine/logic/GameQuestManager.ts`, its
+> dependency on the seventeen closed quest generators inverted behind `IQuestSeedSource`
+> (`quests/quest-seed-source.ts`, runtime-contract §2.2). A fresh `npm run logic:classify`
+> therefore reports **60 class (a) · 1 class (b) · 9 class (c)**, and three (not four) of
+> the class-(c) modules are coupled only through `import type`.
+>
 > Everything below is US-2's analysis as written, kept as the record of what was decided
 > before anything moved.
 

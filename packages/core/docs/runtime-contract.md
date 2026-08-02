@@ -24,22 +24,25 @@ and `ItemCategory`.
 
 ## 1. What core provides
 
-The shared runtime is `src/game-engine/logic/` — **59 modules, 17,946 lines**,
-moved out of the Babylon package by US-3 unchanged except for their import
-paths. It is engine-agnostic in the strict sense: no `@babylonjs/*`, no `react`,
-no DOM (core's `tsconfig.json` omits the `dom` lib), and it typechecks and tests
-standalone with cwd = `packages/core`.
+The shared runtime is `src/game-engine/logic/` — **60 modules, 18,959 lines**.
+Fifty-nine moved out of the Babylon package by US-3 unchanged except for their
+import paths; `GameQuestManager` arrived from the closed authoring platform in
+US-2 of `94-quest-manager-interface`, with its generator dependency inverted
+behind §2.2's `IQuestSeedSource`. It is engine-agnostic in the strict sense: no
+`@babylonjs/*`, no `react`, no DOM (core's `tsconfig.json` omits the `dom` lib),
+and it typechecks and tests standalone with cwd = `packages/core`.
 
 Alongside it core provides the **contract** layer the runtime operates on: the
 save-file format and its migrations, the World IR, quest and language types, the
 KINP identity/equivalence/world surface, the radiant-quest generator, the Prolog
 toolchain (`src/prolog/`) with its predicate schema, and the zod/JSON schemas.
 
-### 1.1 Quest and narrative state — 15 modules, 5,299 lines
+### 1.1 Quest and narrative state — 16 modules, 6,312 lines
 
 | module | lines | what it is |
 | --- | --- | --- |
 | `QuestCompletionEngine` | 1,897 | Prolog-backed objective evaluation and completion detection. The flagship. |
+| `GameQuestManager` | 1,013 | Quest generation/completion/lifecycle orchestrator. Drives §2.2's `IQuestSeedSource`, persists through `QuestStorageProvider`, and wires itself to `GameEventBus` for automatic triggers. |
 | `DynamicQuestWaypointDirector` | 478 | Chooses which waypoint a live quest should point at. |
 | `NoticeGenerator` | 428 | Notice-board copy for generated quests. |
 | `QuestMarkerService` | 340 | Quest → marker records (positions in, markers out; no meshes). |
@@ -184,7 +187,7 @@ runtime.
 Declaring the interfaces here is what US-4 owed; performing the inversion is a
 behaviour change and belongs to its own story, not to the import-path-only move
 US-3 made. Until it happens, an adapter implements these interfaces and gets the
-59 modules above; the seven arrive with the inversion.
+60 modules above; the seven arrive with the inversion.
 
 ### 2.2 Quest seed generation — `IQuestSeedSource`
 
@@ -230,11 +233,14 @@ uniformly. `QuestStorageProvider` — the storage surface both sides read throug
 ([`quests/quest-storage-provider.ts`](../src/quests/quest-storage-provider.ts),
 re-export shim left at `@shared/quests/quest-storage-provider`).
 
-**Declared, not yet wired**, exactly as §2.1: `GameQuestManager` is still a
-`.d.ts` type surface in `packages/babylon` at this story. Moving the
-implementation into core behind this interface is US-2 of
-`94-quest-manager-interface`, and supplying the platform-side implementation is
-tasklist 97.
+**Wired on the core side** (US-2 of `94-quest-manager-interface`), unlike §2.1:
+`GameQuestManager` is real code in `src/game-engine/logic/` and calls nothing but
+this interface. It takes its source through `GameQuestManagerConfig.seedSource`,
+defaulting to `NULL_QUEST_SEED_SOURCE`; the Babylon adapter forwards
+`BabylonGameConfig.questSeedSource`. The two `.d.ts` type surfaces that stood in
+for the implementation are gone. Supplying the platform-side implementation —
+a delegating wrapper over the seventeen closed generators, passed in at game
+construction — is tasklist 97.
 
 ---
 
@@ -345,7 +351,7 @@ behaviour; one that brings its own interpreter is back in the old position and
 should read `docs/tau-wasm-parity.md` first.
 
 **2. The seven un-inverted modules** (§2.1, 5,900 lines) — including
-`GamePrologEngine` itself. An adapter today gets the 59 modules and must supply
+`GamePrologEngine` itself. An adapter today gets the 60 modules and must supply
 its own equivalent of those seven.
 
 **3. `StreetNetworkLayout` and the duplicate-shape types** — blocked on US-RS4

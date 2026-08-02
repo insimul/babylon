@@ -48,7 +48,7 @@
         "logic/FishingSystem.ts",
         "logic/GameEventBus.ts",
         "logic/GamePrologEngine.ts",
-        "logic/GameQuestManager.d.ts",
+        "logic/GameQuestManager.ts",
         "logic/GameTextTypes.ts",
         "logic/GameTimeManager.ts",
         "logic/GameTruthSync.ts",

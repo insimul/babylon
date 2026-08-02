@@ -19,7 +19,7 @@ import type { GameEventBus } from '../logic/GameEventBus';
 import type { LanguageGamificationTracker } from './LanguageGamificationTracker';
 import type { BabylonQuestTracker } from './BabylonQuestTracker';
 import type { IDataSource as DataSource } from '@shared/game-engine/data-source';
-import type { GameQuestManager, QuestCompletionResult } from '@shared/game-engine/logic/GameQuestManager';
+import type { GameQuestManager, QuestCompletionResult } from '@insimul/core/game-engine/logic/GameQuestManager';
 import { computeSkillRewards, applySkillRewards, type SkillReward } from '@shared/language/quest-skill-rewards';
 
 // ── Types ────────────────────────────────────────────────────────────────────

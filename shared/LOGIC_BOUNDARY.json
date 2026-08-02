@@ -7,9 +7,9 @@
     "typeOnly": "The coupling/blocker is reached only through `import type` edges, which erase at runtime — breakable with a structural stand-in in core (the US-CE6 visual-types.ts precedent). A value edge is a real runtime dependency."
   },
   "counts": {
-    "a": 59,
+    "a": 60,
     "b": 1,
-    "c": 10,
+    "c": 9,
     "total": 70
   },
   "blockers": [
@@ -347,34 +347,8 @@
       ]
     },
     {
-      "file": "packages/babylon/src/engine/game-engine/logic/GameQuestManager.d.ts",
-      "class": "c",
-      "disposition": "platform-surface",
-      "verdict": "Not an implementation — a .d.ts type surface whose concrete class is injected by the platform at export time (the CLAUDE.md \".d.ts rather than vendoring\" rule). It is class (c) only because it references the GamePrologEngine shim. Nothing to move; it follows whatever GamePrologEngine does.",
-      "valueCoupled": false,
-      "couplings": [
-        {
-          "kind": "babylon-runtime",
-          "detail": "packages/babylon/src/engine/game-engine/rendering/DebugConsoleEntries.ts",
-          "typeOnly": true,
-          "via": "packages/babylon/src/engine/game-engine/rendering/DebugConsoleEntries.ts",
-          "path": "packages/babylon/src/engine/game-engine/logic/GameQuestManager.d.ts -> shared/game-engine/logic/GamePrologEngine.ts -> packages/babylon/src/engine/game-engine/logic/GamePrologEngine.ts -> packages/babylon/src/engine/game-engine/debug-event-bus.ts -> packages/babylon/src/engine/game-engine/rendering/DebugConsoleEntries.ts"
-        },
-        {
-          "kind": "babylon-runtime",
-          "detail": "packages/babylon/src/engine/game-engine/rendering/DebugLabelUtils.ts",
-          "typeOnly": true,
-          "via": "packages/babylon/src/engine/game-engine/rendering/DebugLabelUtils.ts",
-          "path": "packages/babylon/src/engine/game-engine/logic/GameQuestManager.d.ts -> shared/game-engine/logic/GamePrologEngine.ts -> packages/babylon/src/engine/game-engine/logic/GamePrologEngine.ts -> packages/babylon/src/engine/game-engine/rendering/DebugLabelUtils.ts"
-        },
-        {
-          "kind": "babylonjs",
-          "detail": "@babylonjs/core",
-          "typeOnly": true,
-          "via": "packages/babylon/src/engine/game-engine/rendering/DebugLabelUtils.ts",
-          "path": "packages/babylon/src/engine/game-engine/logic/GameQuestManager.d.ts -> shared/game-engine/logic/GamePrologEngine.ts -> packages/babylon/src/engine/game-engine/logic/GamePrologEngine.ts -> packages/babylon/src/engine/game-engine/rendering/DebugLabelUtils.ts"
-        }
-      ]
+      "file": "packages/babylon/src/engine/game-engine/logic/GameQuestManager.ts",
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/GameTextTypes.ts",

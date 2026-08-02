@@ -159,14 +159,11 @@ const COUPLING_VERDICTS = {
       'on-screen prompts; splitting it is a rewrite, not a move. Revisit after US-4 defines the ' +
       'prompt/UI adapter surface.',
   },
-  'packages/babylon/src/engine/game-engine/logic/GameQuestManager.d.ts': {
-    disposition: 'platform-surface',
-    summary:
-      'Not an implementation — a .d.ts type surface whose concrete class is injected by the ' +
-      'platform at export time (the CLAUDE.md ".d.ts rather than vendoring" rule). It is class ' +
-      '(c) only because it references the GamePrologEngine shim. Nothing to move; it follows ' +
-      'whatever GamePrologEngine does.',
-  },
+  // NOTE: GameQuestManager.d.ts used to have a 'platform-surface' verdict here. US-2 of
+  // 94-quest-manager-interface deleted that type surface — the real implementation is now
+  // packages/core/src/game-engine/logic/GameQuestManager.ts, its closed generator dependency
+  // inverted behind IQuestSeedSource — so the file it described no longer exists and the
+  // path is a plain class-(a) shim.
 };
 
 /** Browser globals that cannot exist in core (its tsconfig omits the `dom` lib). */

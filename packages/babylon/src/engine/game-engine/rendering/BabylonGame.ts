@@ -156,7 +156,10 @@ import {
   hidePrologDebugPanel,
   disposePrologDebugPanel,
 } from "@shared/game-engine/rendering/PrologDebugger";
-import { GameQuestManager } from "@shared/game-engine/logic/GameQuestManager";
+// Real implementation, imported straight from the contract package — no @shared alias and
+// no `.d.ts` type surface any more (US-2 of 94-quest-manager-interface).
+import { GameQuestManager } from "@insimul/core/game-engine/logic/GameQuestManager";
+import type { IQuestSeedSource } from "@insimul/core/quests/quest-seed-source";
 import { VRAccessibilityManager } from "@shared/game-engine/rendering/VRAccessibilityManager";
 import { NPCTalkingIndicator } from "@shared/game-engine/rendering/NPCTalkingIndicator";
 import { NPCAmbientConversationManager } from "@shared/game-engine/rendering/NPCAmbientConversationManager";
@@ -445,6 +448,14 @@ interface BabylonGameConfig {
   assetMounts?: Array<{ prefix: string; baseUrl: string; priority: number }>;
   /** External loading overlay (React). When set, BabylonGame skips its own DOM overlay. */
   loadingHost?: LoadingHost;
+  /**
+   * Where GameQuestManager gets generated quest content. The seventeen quest
+   * generators are closed authoring content, so the host injects them here
+   * (the authoring platform passes its own implementation). Absent, the manager
+   * falls back to `NULL_QUEST_SEED_SOURCE`: existing quests still complete,
+   * unlock and get distributed to NPCs, but no new ones are generated.
+   */
+  questSeedSource?: IQuestSeedSource;
 }
 
 /** Clean Prolog syntax from objective descriptions for end-user display */
@@ -5460,6 +5471,7 @@ export class BabylonGame {
       this.gameQuestManager = new GameQuestManager({
         storage: questStorageProvider,
         eventBus: this.eventBus,
+        seedSource: this.config.questSeedSource,
         prologEngine: this.prologEngine,
         worldId: this.config.worldId,
         playerName: (this.config as any).playerName || 'Player',
