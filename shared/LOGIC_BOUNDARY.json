@@ -7,8 +7,8 @@
     "typeOnly": "The coupling/blocker is reached only through `import type` edges, which erase at runtime — breakable with a structural stand-in in core (the US-CE6 visual-types.ts precedent). A value edge is a real runtime dependency."
   },
   "counts": {
-    "a": 41,
-    "b": 19,
+    "a": 59,
+    "b": 1,
     "c": 10,
     "total": 70
   },
@@ -16,138 +16,14 @@
     {
       "file": "packages/babylon/src/engine/game-engine/types.ts",
       "zone": "babylon",
-      "blocks": 13,
+      "blocks": 1,
       "resolution": {
         "via": "move-subset",
         "moveTo": "packages/core/src/game-engine/runtime-types.ts",
-        "why": "The single biggest blocker (13 logic modules). The file declares itself engine-agnostic (\"must NOT import any engine-specific modules\") and imports nothing, but it is under @ts-nocheck for genuine duplicate-interface bugs — InteriorTemplateConfig, InteriorLayoutTemplate, StreetNode, StreetNetwork, UnifiedBuildingTypeConfig are each declared twice or more with divergent shapes. Every one of those duplicates is interior/ street GEOMETRY, and none is in the ~20-symbol subset logic/ imports (Action*, InventoryItem, Container*, Crafting*, GameSaveState, AnimationState, NPCRole, NoticeArticle, ILocalAIProvider, ...). So move the clean subset into core as a real checked module and have babylon types.ts re-export it — babylon -> core is the allowed direction. Do NOT drag the @ts-nocheck into core."
+        "why": "US-3 DID this move: the 52-declaration engine-agnostic closure logic/ depends on (Action*, ACTION_UI_CONFIGS, InventoryItem, Container*, Crafting*, Rule*, Need*, GameSaveState + its Saved* closure, AnimationState, NPCRole, NoticeArticle, ILocalAIProvider, ...) now lives in packages/core/src/game-engine/runtime-types.ts as a REAL, CHECKED module, and this file re-exports it explicitly. What is left blocking is ONE module, StreetNetworkLayout.ts, whose imported symbols (StreetNode, StreetNetwork, StreetSegment) ARE among the duplicate-interface bugs the @ts-nocheck here quarantines — StreetNode is declared twice with divergent shapes ({position,elevation,type} vs {x,z,intersectionOf}), which is why StreetNetworkLayout casts every literal through `as unknown as`. Lifting those would either drag the @ts-nocheck into core or silently change the shape other Babylon consumers see. It is also street GEOMETRY generation, which US-4 keeps per-engine by design. So it stays until US-RS4 dedupes the interfaces."
       },
       "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/BusinessBehaviorSystem.ts",
-        "packages/babylon/src/engine/game-engine/logic/ContainerManager.ts",
-        "packages/babylon/src/engine/game-engine/logic/GameTextTypes.ts",
-        "packages/babylon/src/engine/game-engine/logic/LocalNpcConversation.ts",
-        "packages/babylon/src/engine/game-engine/logic/NPCModelVariety.ts",
-        "packages/babylon/src/engine/game-engine/logic/NoticeGenerator.ts",
-        "packages/babylon/src/engine/game-engine/logic/QuestMinimapMarkers.ts",
-        "packages/babylon/src/engine/game-engine/logic/ResidenceActivitySystem.ts",
-        "packages/babylon/src/engine/game-engine/logic/SaveConflictResolver.ts",
-        "packages/babylon/src/engine/game-engine/logic/StreetNetworkLayout.ts",
-        "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts",
-        "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts",
-        "packages/babylon/src/engine/game-engine/logic/actions/ReadSignAction.ts"
-      ]
-    },
-    {
-      "file": "shared/language/phonetic-similarity.ts",
-      "zone": "shared",
-      "blocks": 4,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/language/phonetic-similarity.ts",
-        "why": "Dependency-free string-similarity algorithm (211 lines, zero imports). Straight git mv + shim."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts",
-        "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts",
-        "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts",
-        "packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts"
-      ]
-    },
-    {
-      "file": "shared/language/pronunciation-scoring.ts",
-      "zone": "shared",
-      "blocks": 4,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/language/pronunciation-scoring.ts",
-        "why": "Pure scoring maths (289 lines). Its only import is ./phonetic-similarity, so the two move together. Note the specifier carries a .js extension — rewrite it to extensionless on the move, matching the rest of core."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts",
-        "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts",
-        "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts",
-        "packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts"
-      ]
-    },
-    {
-      "file": "packages/babylon/src/engine/game-engine/action-selection.ts",
-      "zone": "babylon",
-      "blocks": 2,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/game-engine/action-selection.ts",
-        "why": "Dependency-free selection scoring (197 lines, zero imports). Straight git mv + shim."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/VolitionSystem.ts",
-        "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts"
-      ]
-    },
-    {
-      "file": "packages/babylon/src/engine/game-engine/quest-action-mapping.ts",
-      "zone": "babylon",
-      "blocks": 2,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/game-engine/quest-action-mapping.ts",
-        "why": "Dependency-free quest/action mapping table (474 lines, zero imports). Straight git mv + shim."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts",
-        "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts"
-      ]
-    },
-    {
-      "file": "packages/babylon/src/engine/game-engine/action-matrix.ts",
-      "zone": "babylon",
-      "blocks": 1,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/game-engine/action-matrix.ts",
-        "why": "Authored action data (1821 lines). Its only import is `type GameEventType` from logic/GameEventBus, which is class (a) and moves in the same US-3 wave — so this one moves WITH the wave rather than ahead of it. Ordering constraint, not an inversion."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts"
-      ]
-    },
-    {
-      "file": "packages/babylon/src/engine/game-engine/system-contracts.ts",
-      "zone": "babylon",
-      "blocks": 1,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/game-engine/system-contracts.ts",
-        "why": "Pure interface declarations (359 lines). Its only import is `./types`, so it moves AFTER the types.ts subset above — ordering constraint, not a second blocker."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/QuestMinimapMarkers.ts"
-      ]
-    },
-    {
-      "file": "shared/asset-paths.ts",
-      "zone": "shared",
-      "blocks": 1,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/asset-paths.ts",
-        "why": "Dependency-free path/constant helpers (187 lines, zero imports). Straight git mv + shim."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/NPCModelManifest.ts"
-      ]
-    },
-    {
-      "file": "shared/language/quest-templates.ts",
-      "zone": "shared",
-      "blocks": 1,
-      "resolution": {
-        "via": "move",
-        "moveTo": "packages/core/src/language/quest-templates.ts",
-        "why": "Dependency-free authored template data (1832 lines, zero imports). Straight git mv + shim."
-      },
-      "blocked": [
-        "packages/babylon/src/engine/game-engine/logic/DynamicQuestBoard.ts"
+        "packages/babylon/src/engine/game-engine/logic/StreetNetworkLayout.ts"
       ]
     }
   ],
@@ -340,14 +216,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/BusinessBehaviorSystem.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/BusinessBehaviorSystem.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/ClueStore.ts",
@@ -355,14 +224,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/ContainerManager.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/ContainerManager.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/ContentGatingManager.ts",
@@ -413,14 +275,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/DynamicQuestBoard.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "shared/language/quest-templates.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/DynamicQuestBoard.ts -> shared/language/language-quest-templates.ts -> shared/language/quest-templates.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/DynamicQuestWaypointDirector.ts",
@@ -523,14 +378,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/GameTextTypes.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/GameTextTypes.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/GameTimeManager.ts",
@@ -598,14 +446,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/LocalNpcConversation.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/LocalNpcConversation.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/MiningSystem.ts",
@@ -613,25 +454,11 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/NPCModelManifest.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "shared/asset-paths.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/NPCModelManifest.ts -> shared/asset-paths.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/NPCModelVariety.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/NPCModelVariety.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/NatureLODConfig.ts",
@@ -639,14 +466,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/NoticeGenerator.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/NoticeGenerator.ts -> packages/babylon/src/engine/game-engine/logic/GameTextTypes.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/NotificationStore.ts",
@@ -674,45 +494,11 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/quest-action-mapping.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts -> packages/babylon/src/engine/game-engine/quest-action-mapping.ts"
-        },
-        {
-          "file": "shared/language/phonetic-similarity.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts -> packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts -> shared/language/pronunciation-scoring.ts -> shared/language/phonetic-similarity.ts"
-        },
-        {
-          "file": "shared/language/pronunciation-scoring.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts -> packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts -> shared/language/pronunciation-scoring.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/quest-action-mapping.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts -> packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts -> packages/babylon/src/engine/game-engine/quest-action-mapping.ts"
-        },
-        {
-          "file": "shared/language/phonetic-similarity.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts -> packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts -> packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts -> shared/language/pronunciation-scoring.ts -> shared/language/phonetic-similarity.ts"
-        },
-        {
-          "file": "shared/language/pronunciation-scoring.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestDebugOverlay.ts -> packages/babylon/src/engine/game-engine/logic/QuestCompletionEngine.ts -> packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts -> shared/language/pronunciation-scoring.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/QuestMarkerService.ts",
@@ -720,19 +506,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/QuestMinimapMarkers.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/system-contracts.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestMinimapMarkers.ts -> shared/game-engine/system-contracts.ts -> packages/babylon/src/engine/game-engine/system-contracts.ts"
-        },
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/QuestMinimapMarkers.ts -> shared/game-engine/system-contracts.ts -> packages/babylon/src/engine/game-engine/system-contracts.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/QuestPostConditionValidator.ts",
@@ -782,14 +556,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/ResidenceActivitySystem.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/ResidenceActivitySystem.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/RomanceSystem.ts",
@@ -801,14 +568,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/SaveConflictResolver.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/SaveConflictResolver.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/StreetNetworkLayout.ts",
@@ -847,14 +607,7 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/VolitionSystem.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/action-selection.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/VolitionSystem.ts -> shared/game-engine/action-selection.ts -> packages/babylon/src/engine/game-engine/action-selection.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/WorldObjectActionManager.ts",
@@ -909,72 +662,19 @@
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/action-matrix.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts -> shared/game-engine/action-matrix.ts -> packages/babylon/src/engine/game-engine/action-matrix.ts"
-        },
-        {
-          "file": "packages/babylon/src/engine/game-engine/action-selection.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts -> shared/game-engine/action-selection.ts -> packages/babylon/src/engine/game-engine/action-selection.ts"
-        },
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ActionManager.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        },
-        {
-          "file": "shared/language/phonetic-similarity.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts -> shared/language/pronunciation-scoring.ts -> shared/language/phonetic-similarity.ts"
-        },
-        {
-          "file": "shared/language/pronunciation-scoring.ts",
-          "typeOnly": false,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ListenAndRepeatAction.ts -> shared/language/pronunciation-scoring.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/actions/ReadSignAction.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "packages/babylon/src/engine/game-engine/types.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/actions/ReadSignAction.ts -> shared/game-engine/types.ts -> packages/babylon/src/engine/game-engine/types.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts",
-      "class": "b",
-      "blockers": [
-        {
-          "file": "shared/language/phonetic-similarity.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts -> shared/language/pronunciation-scoring.ts -> shared/language/phonetic-similarity.ts"
-        },
-        {
-          "file": "shared/language/pronunciation-scoring.ts",
-          "typeOnly": true,
-          "path": "packages/babylon/src/engine/game-engine/logic/pronunciation-helpers.ts -> shared/language/pronunciation-scoring.ts"
-        }
-      ]
+      "class": "a"
     },
     {
       "file": "packages/babylon/src/engine/game-engine/logic/waypointFading.ts",

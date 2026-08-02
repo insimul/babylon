@@ -7,8 +7,11 @@ runtime that native engine plugins (Unreal/Unity/Godot) must be able to consume
 - the **save-file** format, its envelope/export helpers, and migrations
 - **world types** and world-snapshot versioning
 - the **playthrough overview** DTO
-- (added by later core-extraction stories) the Prolog toolchain, IR types,
-  quest types, and the `IDataSource` interface
+- the Prolog toolchain, IR types, quest types, and the `IDataSource` interface
+- the **shared runtime** — `src/game-engine/logic/`, ~18k lines of quest
+  completion, dialogue, inventory/containers, crafting/farming/mining/herbalism,
+  volition, truth sync, save-conflict resolution and the rest of what it takes to
+  *run* a world (see [The shared runtime](#the-shared-runtime-srcgame-enginelogic))
 
 ## Why this exists
 
@@ -70,6 +73,44 @@ They are **not** the same layer, and neither contains the other:
 
 Rule of thumb: if it is a **type, schema, or rule the whole system agrees on**,
 it belongs here. If it **runs Prolog**, it is the native substrate.
+
+## The shared runtime (`src/game-engine/logic/`)
+
+Everything above is the *contract*. This directory is the **implementation of it
+that every engine would otherwise write four times** — 59 modules moved out of
+the Babylon package by US-3 of `93-runtime-logic-to-core`, unchanged except for
+their import paths.
+
+Where the line falls:
+
+| | lives in | why |
+| --- | --- | --- |
+| `game-engine/logic/` | **here** | Quest completion, dialogue/conversation bridging, inventory + containers, crafting/farming/fishing/mining/herbalism, volition, relationships/romance, game time, truth sync, save-conflict resolution, notifications, onboarding. No scene graph, no browser. |
+| `game-engine/rendering/` | `@insimul/babylon` | One platform's adapter — meshes, GUI, input, cameras. Every engine writes its own. |
+
+Three logic modules stayed behind on purpose, and they are named, not hidden:
+`ActionHotspotIntegration` and `WorldObjectActionManager` are Babylon adapter
+glue by purpose, and `StreetNetworkLayout` depends on the duplicate-shape
+`StreetNode`/`StreetNetwork` interfaces still quarantined under `@ts-nocheck` in
+the Babylon `types.ts` (it is also street *geometry*, which stays per-engine).
+Seven more are reachable but need an inverted interface first — a debug/telemetry
+sink, a persistence lifecycle hook, a harvestable-resource query. The full
+classification, with the specific coupling for each, is
+[`docs/logic-boundary-classification.md`](./docs/logic-boundary-classification.md)
+and its machine-generated ground truth `shared/LOGIC_BOUNDARY.json`.
+
+These modules are **not** re-exported from the flat `src/index.ts` barrel — 59
+runtime systems collide on common names (`Action`, `GameEvent`, `ItemCategory`, …).
+Import them by subpath: `@insimul/core/game-engine/logic/QuestCompletionEngine`.
+The Babylon package reaches them through one-line re-export shims left at the old
+`game-engine/logic/*` paths, so `@shared/*` consumers and the export pipeline
+resolve unchanged.
+
+The engine-agnostic type subset those modules need lives in
+`src/game-engine/runtime-types.ts`: 52 declarations lifted out of the Babylon
+`types.ts` as a real, **checked** module. The `@ts-nocheck` on the Babylon file
+was deliberately left behind — core's entire value is that it typechecks
+standalone.
 
 ## Transport schemas (`src/schemas/`)
 

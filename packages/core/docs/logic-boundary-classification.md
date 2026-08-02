@@ -1,5 +1,33 @@
 # The game-engine/logic boundary, classified
 
+> **Status after US-3 (the move happened).** The sequence at the bottom of this
+> document was executed: the nine class-(b) blockers were resolved and **59 of the 70
+> modules now live in `packages/core/src/game-engine/logic/`**, with one-line re-export
+> shims at their old Babylon paths. A fresh `npm run logic:classify` reports **59 class
+> (a) · 1 class (b) · 10 class (c)** — the classifier walks the shims through to core, so
+> "class (a)" now means "already moved".
+>
+> Two things changed against the plan below, both recorded rather than papered over:
+>
+> - **`StreetNetworkLayout.ts` did not move** and is the single remaining class-(b)
+>   module. The claim below that "none of the duplicated types is in the subset `logic/`
+>   imports" is true of the other twelve blocked modules but **not** of this one: it
+>   imports `StreetNode` / `StreetNetwork` / `StreetSegment`, which are exactly the
+>   duplicate-shape interfaces the `@ts-nocheck` quarantines (hence its
+>   `as unknown as StreetNode` casts on every literal). Lifting them would either drag the
+>   `@ts-nocheck` into core or silently change the shape the other Babylon consumers see.
+>   It is also street *geometry* generation, which US-4 keeps per-engine. It moves when
+>   US-RS4 dedupes the interfaces.
+> - **The lifted `types.ts` subset is 52 declarations, not ~20.** The ~20 symbols `logic/`
+>   names directly pull a transitive closure — `GameSaveState` alone drags fourteen
+>   `Saved*` shapes. The closure was computed mechanically and verified to reach **none**
+>   of the five duplicated names. `Vec3`, `NeedType` and `ResourceType` were already in
+>   `game-engine/visual-types.ts`, so `runtime-types.ts` re-exports them rather than
+>   redeclaring, keeping one core-side declaration of each.
+>
+> Everything below is US-2's analysis as written, kept as the record of what was decided
+> before anything moved.
+
 **US-2 of `93-runtime-logic-to-core`.** Machine-generated ground truth lives in
 [`shared/LOGIC_BOUNDARY.json`](../../../shared/LOGIC_BOUNDARY.json) (regenerate with
 `npm run logic:classify`, drift-guarded by `shared/__tests__/import-hygiene.test.ts`).

@@ -65,64 +65,18 @@ const BLOCKER_RESOLUTIONS = {
     via: 'move-subset',
     moveTo: 'packages/core/src/game-engine/runtime-types.ts',
     why:
-      'The single biggest blocker (13 logic modules). The file declares itself engine-agnostic ' +
-      '("must NOT import any engine-specific modules") and imports nothing, but it is under ' +
-      '@ts-nocheck for genuine duplicate-interface bugs — InteriorTemplateConfig, ' +
-      'InteriorLayoutTemplate, StreetNode, StreetNetwork, UnifiedBuildingTypeConfig are each ' +
-      'declared twice or more with divergent shapes. Every one of those duplicates is interior/ ' +
-      'street GEOMETRY, and none is in the ~20-symbol subset logic/ imports (Action*, ' +
-      'InventoryItem, Container*, Crafting*, GameSaveState, AnimationState, NPCRole, ' +
-      'NoticeArticle, ILocalAIProvider, ...). So move the clean subset into core as a real ' +
-      'checked module and have babylon types.ts re-export it — babylon -> core is the allowed ' +
-      'direction. Do NOT drag the @ts-nocheck into core.',
-  },
-  'shared/language/phonetic-similarity.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/language/phonetic-similarity.ts',
-    why: 'Dependency-free string-similarity algorithm (211 lines, zero imports). Straight git mv + shim.',
-  },
-  'shared/language/pronunciation-scoring.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/language/pronunciation-scoring.ts',
-    why:
-      'Pure scoring maths (289 lines). Its only import is ./phonetic-similarity, so the two move ' +
-      'together. Note the specifier carries a .js extension — rewrite it to extensionless on the ' +
-      'move, matching the rest of core.',
-  },
-  'shared/asset-paths.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/asset-paths.ts',
-    why: 'Dependency-free path/constant helpers (187 lines, zero imports). Straight git mv + shim.',
-  },
-  'shared/language/quest-templates.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/language/quest-templates.ts',
-    why: 'Dependency-free authored template data (1832 lines, zero imports). Straight git mv + shim.',
-  },
-  'packages/babylon/src/engine/game-engine/action-selection.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/game-engine/action-selection.ts',
-    why: 'Dependency-free selection scoring (197 lines, zero imports). Straight git mv + shim.',
-  },
-  'packages/babylon/src/engine/game-engine/quest-action-mapping.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/game-engine/quest-action-mapping.ts',
-    why: 'Dependency-free quest/action mapping table (474 lines, zero imports). Straight git mv + shim.',
-  },
-  'packages/babylon/src/engine/game-engine/system-contracts.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/game-engine/system-contracts.ts',
-    why:
-      'Pure interface declarations (359 lines). Its only import is `./types`, so it moves AFTER ' +
-      'the types.ts subset above — ordering constraint, not a second blocker.',
-  },
-  'packages/babylon/src/engine/game-engine/action-matrix.ts': {
-    via: 'move',
-    moveTo: 'packages/core/src/game-engine/action-matrix.ts',
-    why:
-      'Authored action data (1821 lines). Its only import is `type GameEventType` from ' +
-      'logic/GameEventBus, which is class (a) and moves in the same US-3 wave — so this one ' +
-      'moves WITH the wave rather than ahead of it. Ordering constraint, not an inversion.',
+      'US-3 DID this move: the 52-declaration engine-agnostic closure logic/ depends on ' +
+      '(Action*, ACTION_UI_CONFIGS, InventoryItem, Container*, Crafting*, Rule*, Need*, ' +
+      'GameSaveState + its Saved* closure, AnimationState, NPCRole, NoticeArticle, ' +
+      'ILocalAIProvider, ...) now lives in packages/core/src/game-engine/runtime-types.ts as a ' +
+      'REAL, CHECKED module, and this file re-exports it explicitly. What is left blocking is ' +
+      'ONE module, StreetNetworkLayout.ts, whose imported symbols (StreetNode, StreetNetwork, ' +
+      'StreetSegment) ARE among the duplicate-interface bugs the @ts-nocheck here quarantines — ' +
+      'StreetNode is declared twice with divergent shapes ({position,elevation,type} vs ' +
+      '{x,z,intersectionOf}), which is why StreetNetworkLayout casts every literal through ' +
+      '`as unknown as`. Lifting those would either drag the @ts-nocheck into core or silently ' +
+      'change the shape other Babylon consumers see. It is also street GEOMETRY generation, ' +
+      'which US-4 keeps per-engine by design. So it stays until US-RS4 dedupes the interfaces.',
   },
 };
 

@@ -10,8 +10,18 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
-    // Legacy tsx harness (run via `npx tsx <file>`, no describe/it), not a vitest
-    // suite — mirrors the root vitest.config.ts exclusion.
-    exclude: ['**/node_modules/**', '**/dist/**', 'src/prolog/tau-engine.test.ts'],
+    // Legacy tsx harnesses (run via `npx tsx <file>`, no describe/it), not vitest
+    // suites — mirrors the root vitest.config.ts exclusions. The three
+    // game-engine/logic ones arrived with the US-3 runtime move
+    // (93-runtime-logic-to-core); they have a broken `/game-engine/...` absolute
+    // import, so `vitest run` fails on collection without this.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'src/prolog/tau-engine.test.ts',
+      'src/game-engine/logic/VisualVocabularyDetector.test.ts',
+      'src/game-engine/logic/VocabularyCollectionSystem.test.ts',
+      'src/game-engine/logic/SaveConflictResolver.test.ts',
+    ],
   },
 });

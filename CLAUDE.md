@@ -426,6 +426,46 @@ Reusable lessons from writing it:
   landing silently, and the forbidden resolution — re-exporting from babylon back into
   core — is unrepresentable.
 
+### The shared runtime now lives in core (US-3, 93-runtime-logic-to-core)
+
+The move US-2 planned is done: **59 of the 70 `game-engine/logic/` modules are
+`packages/core/src/game-engine/logic/`**, plus the eight blockers
+(`runtime-types`, `system-contracts`, `action-selection`, `action-matrix`,
+`quest-action-mapping` under `core/src/game-engine/`; `phonetic-similarity`,
+`pronunciation-scoring`, `quest-templates` under `core/src/language/`;
+`asset-paths` at `core/src/`). Every old path is a one-line re-export shim, so the
+`shared/game-engine/logic/X → babylon → core` chain resolves unchanged. Classifier
+now reads 59 (a) / 1 (b) / 10 (c).
+
+- **Shims from babylon into core use the `@insimul/core/<subpath>` specifier**, not a
+  relative path — the export-shell Vite config already aliases `@insimul/core` at the
+  vendored `/src/insimul-core`, so an exported game keeps building (verified with
+  `packages/babylon npm run test:export-shell`). Shims from `shared/` into core stay
+  relative (`../packages/core/src/...`), matching the existing US-CE convention.
+- **The moved modules are NOT in core's flat `index.ts` barrel** — 59 runtime systems
+  collide on `Action`, `GameEvent`, `ItemCategory`, … They are subpath-only
+  (`@insimul/core/game-engine/logic/QuestCompletionEngine`), the same call US-CE6 made
+  for `game-genres/types` and the feature-module type modules.
+- **Lifting a subset out of a `@ts-nocheck` file: compute the closure, don't eyeball it.**
+  The ~20 symbols `logic/` names from `game-engine/types.ts` expand to a **52**-declaration
+  transitive closure (`GameSaveState` alone drags fourteen `Saved*` shapes). A script walked
+  it and asserted it reaches none of the five duplicate-shape names before anything was
+  copied; `Vec3`/`NeedType`/`ResourceType` were already in `game-engine/visual-types.ts`, so
+  `runtime-types.ts` re-exports them instead of redeclaring. The Babylon `types.ts` then
+  re-exports the 52 **explicitly**, not via `export *` — a future duplicate is then a compile
+  error rather than a silently-shadowed name.
+- **One planned move was wrong and had to be dropped.** US-2's "none of the duplicated
+  types is in the subset `logic/` imports" is false for `StreetNetworkLayout.ts`, which
+  imports `StreetNode`/`StreetNetwork`/`StreetSegment` directly (hence its
+  `as unknown as StreetNode` casts). It stays in babylon until US-RS4 dedupes them.
+  Re-read a plan's premise against the files before executing it.
+- **Legacy tsx harnesses travel with their module and need the exclude re-pointed in
+  BOTH vitest configs** — the root one and the destination package's scoped one. The three
+  `game-engine/logic/*.test.ts` harnesses have now moved twice for this reason.
+- **Prove the move was import-path-only** rather than asserting it:
+  `git diff --cached -M -U0 --diff-filter=R` and filter out import/`from` lines — anything
+  left is a real edit that belongs in the story notes.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`

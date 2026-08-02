@@ -21,6 +21,75 @@
  * vectors and colors instead of engine-specific classes.
  */
 
+
+// ─── Engine-agnostic runtime subset (moved to @insimul/core) ─────────────────
+//
+// US-3 of 93-runtime-logic-to-core: the 52 declarations the shared runtime under
+// game-engine/logic/ depends on were lifted into packages/core/src/game-engine/
+// runtime-types.ts as a REAL, CHECKED module and are re-exported here so every
+// existing `@shared/game-engine/types` / `./types` consumer keeps resolving
+// unchanged. None of them is one of the duplicate-interface bugs the @ts-nocheck
+// above quarantines — those are all interior/street geometry and stay here.
+//
+// The re-export is EXPLICIT rather than `export *` so a future duplicate between
+// this file and core is a compile error, not a silently-shadowed name.
+export type {
+  Action,
+  ActionAnimationData,
+  ActionContext,
+  ActionDisplayMode,
+  ActionEffect,
+  ActionResult,
+  ActionState,
+  ActionUIConfig,
+  AnimationState,
+  Container,
+  ContainerItem,
+  ContainerType,
+  CraftedItem,
+  CraftingRecipe,
+  EquipmentSlot,
+  GameSaveState,
+  ILocalAIProvider,
+  InventoryItem,
+  ItemCategory,
+  ItemType,
+  LocalAIGenerateOptions,
+  NPCRole,
+  NPCState,
+  NeedModifier,
+  NeedState,
+  NoticeArticle,
+  PhotoNounLabel,
+  PlayerPhoto,
+  Rule,
+  RuleCondition,
+  RuleEffect,
+  RuleViolation,
+  SavedConversationRecord,
+  SavedInteriorState,
+  SavedLanguageProgressState,
+  SavedMainQuestState,
+  SavedMerchantState,
+  SavedNPCContact,
+  SavedNPCKnownDetails,
+  SavedNPCState,
+  SavedObjectiveProgress,
+  SavedPhotoBookState,
+  SavedQuestActiveState,
+  SavedReadingProgress,
+  SavedReadingProgressEntry,
+  SavedRelationshipDelta,
+  SavedReputationEntry,
+  SavedReputationState,
+  SavedTimeState,
+  ShopItem,
+  SurvivalEvent,
+} from '@insimul/core/game-engine/runtime-types';
+export {
+  ACTION_UI_CONFIGS,
+} from '@insimul/core/game-engine/runtime-types';
+
 // ─── Primitives ──────────────────────────────────────────────────────────────
 
 /** Engine-agnostic 3D vector (replaces Babylon Vector3, Unity Vector3, Godot Vector3) */
@@ -163,11 +232,6 @@ export interface WorldCharacter {
   disposition?: string;
 }
 
-export type NPCState = 'idle' | 'fleeing' | 'pursuing' | 'alert' | 'returning';
-export type NPCRole =
-  | 'civilian' | 'guard' | 'soldier' | 'merchant' | 'questgiver'
-  | 'farmer' | 'blacksmith' | 'innkeeper' | 'priest' | 'teacher'
-  | 'doctor' | 'child' | 'elder' | 'noble' | 'beggar' | 'sailor';
 
 export interface NPCDisplayInfo {
   id: string;
@@ -221,172 +285,20 @@ export interface WorldData {
 
 // ─── Actions ────────────────────────────────────────────────────────────────
 
-export interface Action {
-  id: string;
-  worldId: string | null;
-  name: string;
-  description: string | null;
-  content?: string | null;
-  actionType: 'social' | 'mental' | 'combat' | 'movement' | 'economic' | 'language';
-  category: string | null;
-  duration: number | null;
-  difficulty: number | null;
-  energyCost: number | null;
-  targetType: string | null;
-  requiresTarget: boolean | null;
-  range: number | null;
-  isAvailable: boolean | null;
-  cooldown: number | null;
-  verbPast: string | null;
-  verbPresent: string | null;
-  narrativeTemplates: string[];
-  customData: Record<string, any>;
-  tags: string[];
-  isBase?: boolean;
-  emitsEvent?: string | null;
-  gameActivityVerb?: string | null;
-  completesObjectiveType?: string | null;
-}
 
-export interface ActionState {
-  actionId: string;
-  lastUsed: number;
-  cooldownRemaining: number;
-  timesUsed: number;
-}
 
-export interface ActionContext {
-  actor: string;
-  target?: string;
-  location?: string;
-  timestamp: number;
-  playerEnergy: number;
-  playerPosition: { x: number; y: number };
-}
 
-export interface ActionAnimationData {
-  clip: string;
-  clipAlt?: string;
-  library: 'UAL1' | 'UAL2';
-  loop: boolean;
-  speed?: number;
-  blendIn?: number;
-}
 
-export interface ActionResult {
-  success: boolean;
-  message: string;
-  effects: ActionEffect[];
-  energyUsed: number;
-  narrativeText?: string;
-  animation?: ActionAnimationData;
-}
 
-export interface ActionEffect {
-  type: 'relationship' | 'attribute' | 'status' | 'event' | 'item' | 'knowledge' | 'gold';
-  target: string;
-  value: any;
-  description: string;
-}
 
-export type ActionDisplayMode = 'dialogue-choice' | 'radial-menu' | 'action-bar' | 'context-prompt' | 'trade-window';
 
-export interface ActionUIConfig {
-  display: ActionDisplayMode;
-  icon: string;
-  position?: 'around-player' | 'bottom' | 'context';
-  showCooldown?: boolean;
-  showEnergyCost?: boolean;
-  showRange?: boolean;
-  showDamage?: boolean;
-  showRelationshipImpact?: boolean;
-  hotkey?: number | string;
-  requiresTarget?: boolean;
-  autoTrigger?: boolean;
-}
 
-export const ACTION_UI_CONFIGS: Record<string, ActionUIConfig> = {
-  social: {
-    display: 'dialogue-choice',
-    icon: '💬',
-    showRelationshipImpact: true,
-    requiresTarget: true,
-  },
-  mental: {
-    display: 'radial-menu',
-    icon: '🧠',
-    position: 'around-player',
-    showCooldown: true,
-    showEnergyCost: true,
-  },
-  combat: {
-    display: 'action-bar',
-    icon: '⚔️',
-    position: 'bottom',
-    showCooldown: true,
-    showRange: true,
-    showDamage: true,
-  },
-  movement: {
-    display: 'context-prompt',
-    icon: '👟',
-    position: 'context',
-    autoTrigger: false,
-  },
-  economic: {
-    display: 'trade-window',
-    icon: '💰',
-    requiresTarget: true,
-  },
-};
 
 // ─── Rules ──────────────────────────────────────────────────────────────────
 
-export interface Rule {
-  id: string;
-  name: string;
-  description?: string;
-  content?: string;  // Prolog source — the canonical rule definition
-  ruleType: 'trigger' | 'volition' | 'trait' | 'default' | 'pattern';
-  category?: string;
-  priority?: number;
-  likelihood?: number;
-  conditions?: RuleCondition[];  // JS fallback; not stored in DB for rules
-  effects?: RuleEffect[];        // JS fallback; not stored in DB for rules
-  isActive?: boolean;
-  tags?: string[];
-}
 
-export interface RuleCondition {
-  type: string; // location, zone, action, energy, proximity, tag, has_item, item_count, item_type
-  property?: string;
-  operator?: string;
-  value?: any;
-  action?: string;
-  location?: string;
-  zone?: string;
-  // Item conditions
-  itemId?: string;     // for has_item: specific item ID
-  itemName?: string;   // for has_item: match by name
-  itemType?: string;   // for item_type: weapon, armor, key, etc.
-  quantity?: number;    // for item_count: minimum count required
-}
 
-export interface RuleEffect {
-  type: string;
-  action?: string;
-  value?: any;
-  message?: string;
-}
 
-export interface RuleViolation {
-  ruleId: string;
-  ruleName: string;
-  timestamp: Date;
-  severity: 'low' | 'medium' | 'high';
-  message: string;
-  location?: Vec3;
-}
 
 export interface GameContext {
   playerId?: string;
@@ -1073,48 +985,11 @@ export interface DamageResult {
 
 // ─── Inventory ──────────────────────────────────────────────────────────────
 
-export type ItemType = 'quest' | 'collectible' | 'key' | 'consumable' | 'weapon' | 'armor' | 'food' | 'drink' | 'material' | 'tool' | 'document' | 'environmental' | 'decoration' | 'furniture' | 'equipment' | 'container' | 'accessory' | 'ammunition';
 
-export type EquipmentSlot = 'weapon' | 'armor' | 'accessory';
 
-export interface InventoryItem {
-  id: string;
-  name: string;
-  description?: string;
-  type: ItemType;
-  quantity: number;
-  icon?: string;
-  questId?: string;
-  value?: number;
-  sellValue?: number;
-  weight?: number;
-  tradeable?: boolean;
-  equipped?: boolean;
-  effects?: Record<string, number>;
-  equipSlot?: EquipmentSlot;
-  // Taxonomy
-  category?: string;
-  material?: string;
-  baseType?: string;
-  rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-  possessable?: boolean;
-  // Translations keyed by language (e.g. { French: { targetWord: "Épée", pronunciation: "ay-PAY", category: "weapon" } })
-  translations?: Record<string, {
-    targetWord: string;
-    pronunciation: string;
-    category: string;
-  }>;
-}
 
 // ─── Mercantile ─────────────────────────────────────────────────────────────
 
-export interface ShopItem extends InventoryItem {
-  buyPrice: number;
-  sellPrice: number;
-  stock: number;
-  maxStock: number;
-  restockRate?: number;
-}
 
 export interface MerchantInventory {
   merchantId: string;
@@ -1137,40 +1012,8 @@ export interface TradeTransaction {
 
 // ─── Containers ─────────────────────────────────────────────────────────────
 
-export type ContainerType = 'chest' | 'cupboard' | 'barrel' | 'crate' | 'wardrobe' | 'shelf' | 'safe' | 'sack' | 'cabinet';
 
-export interface ContainerItem {
-  itemId: string;
-  itemName: string;
-  quantity: number;
-  metadata?: Record<string, any>;
-}
 
-export interface Container {
-  id: string;
-  worldId: string;
-  name: string;
-  containerType: ContainerType;
-  capacity: number; // max number of item slots
-  items: ContainerItem[];
-  locked: boolean;
-  lockDifficulty?: number; // 0-100, for lockpicking
-  keyItemId?: string; // item ID that unlocks this container
-  // Location
-  businessId?: string;
-  residenceId?: string;
-  lotId?: string;
-  positionX?: number;
-  positionY?: number;
-  positionZ?: number;
-  rotationY?: number;
-  // Visual
-  objectRole?: string; // maps to asset collection model key
-  // Loot respawn
-  respawns: boolean;
-  respawnTimeMinutes?: number;
-  lastOpenedAt?: string;
-}
 
 /** Simplified container view for UI browsing panels. */
 export interface GameContainer {
@@ -1240,32 +1083,8 @@ export interface StorageCapacity {
 
 // ─── Crafting ───────────────────────────────────────────────────────────────
 
-export type ItemCategory = 'tool' | 'weapon' | 'armor' | 'consumable' | 'material' | 'building_material' | 'utility';
 
-export interface CraftingRecipe {
-  id: string;
-  name: string;
-  description: string;
-  category: ItemCategory;
-  icon: string;
-  ingredients: Partial<Record<ResourceType, number>>;
-  craftTime: number;
-  outputQuantity: number;
-  requiredLevel: number;
-  unlocked: boolean;
-}
 
-export interface CraftedItem {
-  id: string;
-  recipeId: string;
-  name: string;
-  category: ItemCategory;
-  icon: string;
-  quantity: number;
-  durability?: number;
-  maxDurability?: number;
-  stats?: Record<string, number>;
-}
 
 // ─── Survival Needs ─────────────────────────────────────────────────────────
 
@@ -1283,31 +1102,8 @@ export interface NeedConfig {
   warningThreshold: number;
 }
 
-export interface NeedState {
-  id: NeedType;
-  current: number;
-  max: number;
-  decayRate: number;
-  isCritical: boolean;
-  isWarning: boolean;
-  modifiers: NeedModifier[];
-}
 
-export interface NeedModifier {
-  id: string;
-  needType: NeedType;
-  rateMultiplier: number;
-  duration: number;
-  startTime: number;
-  source: string;
-}
 
-export interface SurvivalEvent {
-  type: 'need_critical' | 'need_warning' | 'need_restored' | 'damage_from_need' | 'need_satisfied';
-  needType: NeedType;
-  value: number;
-  message: string;
-}
 
 // ─── Camera ─────────────────────────────────────────────────────────────────
 
@@ -1358,310 +1154,30 @@ export interface PlayerConfig {
 
 // ─── Save State ─────────────────────────────────────────────────────────────
 
-export interface SavedNPCState {
-  id: string;
-  position: Vec3;
-  state: NPCState;
-  disposition: number;
-  currentSchedulePhase?: string;
-  emotionalState?: string;
-  // v3: NPC schedule and interior data
-  currentDestination?: Vec3;
-  isInsideBuilding?: boolean;
-  insideBuildingId?: string;
-  schedulePhaseTimeRemaining?: number;
-}
 
-export interface SavedMerchantState {
-  merchantId: string;
-  goldReserve: number;
-  items: ShopItem[];
-}
 
-/** Interior scene state — which building the player is currently inside. */
-export interface SavedInteriorState {
-  buildingId: string;
-  buildingName: string;
-  buildingType: string;
-  layoutSeed: number;
-}
 
-/** Precise game time system state for full restoration. */
-export interface SavedTimeState {
-  gameHour: number;
-  gameMinute: number;
-  dayNumber: number;
-  timeScale: number;
-  isPaused: boolean;
-}
 
-/** Per-quest objective progress for partial progress tracking. */
-export interface SavedObjectiveProgress {
-  objectiveId: string;
-  completed: boolean;
-  currentCount: number;
-  targetCount: number;
-  evidence: string[];
-}
 
-/** Active quest state with detailed objective tracking. */
-export interface SavedQuestActiveState {
-  quests: Record<string, {
-    questId: string;
-    status: string;
-    objectives: SavedObjectiveProgress[];
-    conversationTurnCount?: number;
-    currentBranch?: string;
-    acceptedAt?: string;
-  }>;
-  trackedQuestId?: string;
-}
 
-/** Language learning progress snapshot. */
-export interface SavedLanguageProgressState {
-  targetLanguage: string;
-  overallFluency: number;
-  vocabularyMastery: Record<string, {
-    word: string;
-    translation: string;
-    masteryLevel: number;
-    timesCorrect: number;
-    timesIncorrect: number;
-    lastPracticed?: string;
-  }>;
-  grammarAccuracy: Record<string, {
-    patternId: string;
-    accuracy: number;
-    attempts: number;
-  }>;
-  conversationCount: number;
-  cefrLevel: string;
-  xp: number;
-  level: number;
-  streakDays: number;
-  totalWordsLearned: number;
-}
 
-/** Per-entity reputation state. */
-export interface SavedReputationEntry {
-  entityType: string;
-  entityId: string;
-  score: number;
-  standing: string;
-  violationCount: number;
-  isBanned: boolean;
-  banExpiry?: string;
-  outstandingFines: number;
-}
 
-/** Reputation state across all settlements/factions. */
-export interface SavedReputationState {
-  entries: SavedReputationEntry[];
-}
 
-/** NPC relationship delta from this playthrough. */
-export interface SavedRelationshipDelta {
-  fromCharacterId: string;
-  toCharacterId: string;
-  type: string;
-  strength: number;
-  reciprocal: number;
-  lastModified: number;
-}
 
-/** Main quest chapter progression state. */
-export interface SavedMainQuestState {
-  mainQuestId?: string;
-  currentChapterId?: string;
-  currentChapterIndex: number;
-  chaptersCompleted: string[];
-  objectiveProgress: Record<string, SavedObjectiveProgress>;
-}
 
-export interface GameSaveState {
-  version: number;
-  slotIndex: number;
-  savedAt: string;
-  gameTime: number;
-  player: {
-    position: Vec3;
-    rotation: Vec3;
-    gold: number;
-    health: number;
-    energy: number;
-    inventory: InventoryItem[];
-    /** Player's assessed CEFR language level (A1–C2), drives NPC language mode */
-    cefrLevel?: string;
-  };
-  npcs: SavedNPCState[];
-  relationships: Record<string, Record<string, { type: string; strength: number; trust?: number }>>;
-  romance: any;
-  merchants: SavedMerchantState[];
-  currentZone: { id: string; name: string; type: string } | null;
-  questProgress: Record<string, any>;
-  // Extended subsystem state (v2+)
-  temporaryStates?: any;
-  languageProgress?: any;
-  gamification?: any;
-  volition?: any;
-  ambientConversations?: any;
-  contentGating?: any;
-  skillTree?: any;
-  // v3 subsystem state
-  interiorState?: SavedInteriorState | null;
-  timeState?: SavedTimeState;
-  questActiveState?: SavedQuestActiveState;
-  languageProgressDetailed?: SavedLanguageProgressState;
-  reputationState?: SavedReputationState;
-  relationshipDeltas?: SavedRelationshipDelta[];
-  mainQuestState?: SavedMainQuestState;
-  /** Player's photo book */
-  photoBook?: SavedPhotoBookState;
-  /** JSON-encoded array of player-asserted Prolog fact strings (gameplay facts only).
-   *  Used alongside structured state fields for full Prolog reconstruction on load.
-   *  Legacy saves may contain full KB text (safely ignored on import). */
-  prologFacts?: string;
-  /** Serialized ClueStore state (investigation clues) */
-  clueState?: any;
-  /** Reading progress: which articles were read, quiz answers, comprehension scores */
-  readingProgress?: SavedReadingProgress;
-  /** NPC contact list: met status, conversation counts, disposition */
-  contacts?: Record<string, SavedNPCContact>;
-  /** Conversation history: recent NPC conversation summaries */
-  conversations?: SavedConversationRecord[];
-  /** Known NPC details: facts learned about NPCs during conversations */
-  npcKnownDetails?: Record<string, SavedNPCKnownDetails>;
-  /** Trigger that caused this save (for diagnostics) */
-  saveTrigger?: string;
-}
 
-/** Persisted reading progress for save/load. */
-export interface SavedReadingProgressEntry {
-  /** Whether the article has been opened/read */
-  read: boolean;
-  /** IDs of comprehension questions answered for this article */
-  answeredQuestionIds: string[];
-  /** Comprehension score (0-1 scale, ratio of correct answers) */
-  comprehensionScore: number;
-  /** ISO timestamp of when the article was first read */
-  readAt: string;
-}
 
-export interface SavedReadingProgress {
-  /** Per-article reading state keyed by article/text ID */
-  articles: Record<string, SavedReadingProgressEntry>;
-  /** Raw quiz answer log for detailed restoration */
-  quizAnswers: Array<{ articleId: string; selectedIndex: number; correctIndex: number; correct: boolean; answeredAt: number }>;
-}
 
-/** Persisted NPC contact entry for save/load. */
-export interface SavedNPCContact {
-  /** Whether the player has met (spoken to) this NPC */
-  met: boolean;
-  /** ISO timestamp of when the player first met this NPC */
-  firstMetAt: string;
-  /** Number of conversations had with this NPC */
-  conversationCount: number;
-  /** ISO timestamp of the most recent conversation */
-  lastSpokenAt: string;
-  /** Disposition/relationship score (-100 to 100) */
-  disposition: number;
-}
 
-/** Persisted conversation record for save/load. */
-export interface SavedConversationRecord {
-  /** NPC character ID */
-  npcId: string;
-  /** NPC display name */
-  npcName: string;
-  /** ISO timestamp of when the conversation occurred */
-  timestamp: string;
-  /** Number of player turns */
-  turnCount: number;
-  /** Target-language words used during the conversation */
-  wordsUsed: string[];
-  /** Percentage of target language usage (0-100) */
-  targetLanguagePercent: number;
-  /** Fluency points gained from this conversation */
-  fluencyGained: number;
-}
 
-/** Persisted NPC known details for save/load. */
-export interface SavedNPCKnownDetails {
-  /** Facts learned about this NPC (e.g. "Works as a baker", "Has two children") */
-  facts: string[];
-  /** ISO timestamps for when each fact was learned (parallel array with facts) */
-  learnedAt: string[];
-}
 
 // ─── Photography ────────────────────────────────────────────────────────────
 
-/** A noun label attached to a photo — identifies an object/NPC in the scene. */
-export interface PhotoNounLabel {
-  /** Unique id within the photo */
-  id: string;
-  /** Display name in the player's language */
-  name: string;
-  /** Target-language word (for language-learning worlds) */
-  targetWord?: string;
-  /** Target language code */
-  targetLanguage?: string;
-  /** Pronunciation guide */
-  pronunciation?: string;
-  /** Category (person, building, nature, item, animal, etc.) */
-  category: string;
-  /** Current activity being performed (e.g. 'cooking', 'sweeping') */
-  activity?: string;
-  /** Position within the photo as fraction 0-1 (x, y) */
-  x: number;
-  y: number;
-}
 
-/** A photo taken by the player. */
-export interface PlayerPhoto {
-  /** Unique photo id */
-  id: string;
-  /** Base64-encoded image data (data URL) */
-  imageData: string;
-  /** Thumbnail (smaller base64 data URL) */
-  thumbnail: string;
-  /** When the photo was taken (ISO string) */
-  takenAt: string;
-  /** Location where photo was taken */
-  location: {
-    settlementId?: string;
-    settlementName?: string;
-    buildingId?: string;
-    buildingName?: string;
-    position: Vec3;
-  };
-  /** Noun labels the player has added */
-  labels: PhotoNounLabel[];
-  /** Whether the player has marked this as a favorite */
-  favorite: boolean;
-  /** Optional player-written caption */
-  caption?: string;
-}
 
-/** Saved photo book state for GameSaveState */
-export interface SavedPhotoBookState {
-  photos: PlayerPhoto[];
-}
 
 // ─── NPC Animation & Behavior ───────────────────────────────────────────────
 
-/** Animation states for NPC character controllers. */
-export type AnimationState =
-  | 'idle'
-  | 'walk'
-  | 'run'
-  | 'talk'
-  | 'listen'
-  | 'work'
-  | 'sit'
-  | 'eat'
-  | 'wave'
-  | 'sleep';
 
 /** NPC role within a building interior. */
 export type InteriorNPCRole = 'employee' | 'owner' | 'visitor' | 'patron';
@@ -1693,43 +1209,10 @@ export type FurnitureInteractionType = 'seat' | 'bed' | 'bookshelf' | 'workstati
 
 // ─── Notice Board ───────────────────────────────────────────────────────────
 
-/** An article displayed on a settlement notice board. */
-export interface NoticeArticle {
-  id: string;
-  title: string;
-  titleTranslation: string;
-  body: string;
-  bodyTranslation: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  vocabularyWords: { word: string; meaning: string }[];
-  comprehensionQuestion?: {
-    question: string;
-    questionTranslation: string;
-    options: string[];
-    correctIndex: number;
-  };
-  author?: { characterId: string; name: string; occupation?: string };
-  settlementId?: string;
-  questHook?: { questId: string; questTitle: string; questTitleTranslation: string };
-  noticeType?: 'letter' | 'flyer' | 'official' | 'wanted' | 'advertisement';
-  readingXp?: number;
-  documentType?: 'notice' | 'story' | 'poem' | 'document' | 'book' | 'journal' | 'letter' | 'recipe';
-  assessmentHook?: { assessmentType: 'arrival' | 'departure'; buttonLabel: string; buttonLabelTranslation: string };
-}
 
 // ─── Local AI Provider ──────────────────────────────────────────────────────
 
-/** Options for local AI text generation (Electron Whisper/llama.cpp). */
-export interface LocalAIGenerateOptions {
-  temperature?: number;
-  maxTokens?: number;
-}
 
-/** Abstraction over local AI capabilities (Electron IPC or server-side). */
-export interface ILocalAIProvider {
-  isAvailable(): boolean;
-  generate(prompt: string, systemPrompt?: string, options?: LocalAIGenerateOptions): Promise<string>;
-}
 
 // ─── UI Configuration ───────────────────────────────────────────────────────
 
