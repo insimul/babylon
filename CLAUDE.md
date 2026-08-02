@@ -586,6 +586,44 @@ every engine plugin implemented and core did not. Conventions and gotchas:
   every placed node needs one, which is the KINP-CURIE-vs-local-id question. Don't
   guess an id-minting policy to close it.
 
+### The editor-core adoption spec (US-3, 101-editor-plugin-core)
+
+`packages/core/docs/editor-core-adoption.md` is what the four per-engine adoption
+tasklists open on. Drift-guarded by `src/editor/__tests__/editor-core-adoption.test.ts`
+(every non-barrel editor module needs an adoption line; every `export interface`
+in `editor/host-contracts.ts` must be named; one `### 2.x` note per engine).
+
+- **The language boundary is inherited, not re-derived** — `docs/UNIFICATION_ROADMAP.md`
+  decision 1 (answered by tasklist 100, bridge promoted to `native/corebridge/` by
+  104): a C ABI over **`libinsimulcore`**, TypeScript in embedded QuickJS behind it.
+  Adopting more of core = **adding a row to `native/corebridge/js/entry.js`'s method
+  table** and re-vendoring the bundle. Do not invent an editor-specific mechanism;
+  the roadmap names this tasklist when it says so.
+- **The ABI is one-way, so the callback-shaped modules DON'T cross it.**
+  `insimul_core_call` drives the JS job queue until the promise settles, host
+  functions are installed synchronously in C, and Unity's runtime ABI is
+  deliberately poll-only for IL2CPP. So `EditorSession`, `JobPoller` and
+  `ConversationController` stay host-side thin drivers; the pure parsers/reducers
+  and `binding`/`scene/placement`/`reimport/diff` cross. `host-contracts` is
+  implemented in the host's own language against a report that arrived as JSON —
+  never registered as a QuickJS callback.
+- **Edit-time inverts the runtime's cost profile**: no per-frame path, but one
+  multi-MB payload per click. The returned string is owned by the handle and valid
+  only until the next call — copy eagerly. Page (a `placeChunk`-style method) if it
+  ever gets too big; a streaming ABI would fork decision 1.
+- **The editor's existing HTTP boundary is NOT a licence for a second mechanism.**
+  The closed pipelines service stays behind HTTP; `@insimul/core` comes in over the
+  ABI. Two dependencies, only one moved.
+- Sizing: ~9,760 of 18,159 source lines deletable across the three engines (Unreal
+  4,264 + 2,927 tests = 67% of its module; Unity ~49%, and its adoption also fixes
+  the ~2,000 lines of edit-time policy compiled into every player build; Godot 58%,
+  collapsing its GDScript/C++ double implementation). Babylon deletes nothing —
+  it has no editor plugin (roadmap decision 3), so it is sequenced last.
+- **Net-new ≠ port.** The binding-editor view-model (641 lines, 3 engines, 0 in core)
+  is the recommended SECOND slice; Godot lacks an imported-world registry; Unreal
+  and Godot lack an edit-time content-library importer. Unreal's PCG/Landscape work
+  is engine-specific and is explicitly not a gap for the others.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`

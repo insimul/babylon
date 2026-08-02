@@ -520,5 +520,9 @@ with itself.
   stable id while every placed node and every re-import match key needs one. That
   is §3's open question (bare local ids versus KINP CURIEs) wearing a different
   hat, and it is not guessed here.
-- **Adoption.** Unchanged from §6: one tasklist per engine repo, specified by
-  US-3. Nothing in the three engine checkouts was modified by US-2.
+- **Adoption.** Unchanged from §6: one tasklist per engine repo. US-3 wrote that
+  specification — [`editor-core-adoption.md`](editor-core-adoption.md): the
+  inherited language boundary, a per-engine delete/implement/keep note with sizing,
+  the capability asymmetries that are net-new rather than ports, and the settled
+  not-shareable list. Nothing in the three engine checkouts was modified by either
+  story.
