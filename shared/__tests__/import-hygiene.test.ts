@@ -659,3 +659,359 @@ describe('dependency direction: @insimul/babylon depends on @insimul/core only (
     ).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-1 (93-runtime-logic-to-core) — core must not reach the Babylon RUNTIME.
+//
+// This tasklist moves ~26k LOC of engine-agnostic runtime (game-engine/logic/) INTO
+// packages/core. The risk that move introduces is a dependency INVERSION: one moved
+// module quietly importing back into the Babylon runtime, which turns the eventual
+// repo extraction from a lift into a rewrite. So the property is locked in FIRST.
+//
+// This is deliberately NARROWER and WIDER than the US-CE6 block above:
+//   - WIDER in scope — it scans the WHOLE packages/core directory (scripts/, tooling,
+//     `.mjs`, tests), not just `src/`. Everything that ships or runs from the package
+//     has to be liftable, not just the compiled surface.
+//   - NARROWER in subject — it is only about reaching the Babylon runtime, including
+//     the case US-CE6's bare-specifier list cannot see: an `@shared/<x>` import whose
+//     shim RESOLVES into packages/babylon/src. `@shared/game-engine/logic/Foo` names
+//     no Babylon package at all; it is a four-line re-export into the runtime.
+//
+// It reports file:line so a violation in a 2k-line moved module is findable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BABYLON_SRC_SEGMENT = ['packages', 'babylon', 'src'].join('/');
+const CORE_SRC_SEGMENT = ['packages', 'core', 'src'].join('/');
+
+/**
+ * Comment/string stripper that PRESERVES line numbering: every newline inside a
+ * removed block comment or template literal is kept, so the index of a line in the
+ * stripped text still matches the source file. (The `stripCommentsAndStrings` above
+ * collapses multi-line block comments, which is fine for its callers — none of them
+ * report line numbers.)
+ */
+function stripPreservingLines(src: string): string {
+  const stripped = stripCommentsAndStrings(src);
+  // Fast path: nothing multi-line was removed.
+  if (countNewlines(stripped) === countNewlines(src)) return stripped;
+  // Otherwise re-strip line-aware: blank out block-comment bodies in place.
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i];
+    const d = src[i + 1];
+    if (c === '/' && d === '/') {
+      while (i < n && src[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '/' && d === '*') {
+      i += 2;
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] === '\n') out += '\n';
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+    if (c === '`') {
+      // Keep the template literal's newlines so later lines stay aligned; its
+      // CONTENT is dropped so a specifier quoted inside a doc string never matches.
+      i++;
+      while (i < n && src[i] !== '`') {
+        if (src[i] === '\n') out += '\n';
+        if (src[i] === '\\') i++;
+        i++;
+      }
+      i++;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+function countNewlines(s: string): number {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) if (s[i] === '\n') n++;
+  return n;
+}
+
+/** Every source-ish file under packages/core (NOT just src/) — scripts and tests included. */
+function collectCorePackageFiles(): string[] {
+  const files: string[] = [];
+  const stack = [CORE_PKG];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name)) stack.push(p);
+      } else if (/\.(ts|tsx|mts|cts|js|mjs|cjs)$/.test(entry.name)) {
+        files.push(p);
+      }
+    }
+  }
+  return files.sort();
+}
+
+interface LocatedImport {
+  spec: string;
+  file: string;
+  line: number;
+}
+
+function collectLocatedCoreImports(): LocatedImport[] {
+  const imports: LocatedImport[] = [];
+  for (const file of collectCorePackageFiles()) {
+    const lines = stripPreservingLines(readFileSync(file, 'utf8')).split('\n');
+    lines.forEach((text, idx) => {
+      let m: RegExpExecArray | null;
+      ANY_IMPORT.lastIndex = 0;
+      while ((m = ANY_IMPORT.exec(text)) !== null) {
+        imports.push({ spec: m[1], file: relative(ROOT, file), line: idx + 1 });
+      }
+    });
+  }
+  return imports;
+}
+
+/**
+ * Does `shared/<rest>` re-export into the Babylon runtime? The 259 `shared/` shims that
+ * point at packages/babylon/src are the invisible half of this guard: importing one is
+ * importing the Babylon runtime under an alias that never says so.
+ */
+function sharedShimReachesBabylon(spec: string): boolean {
+  const rest = spec.slice('@shared/'.length).replace(/\.(js|jsx)$/, '');
+  const base = join(SHARED, rest);
+  const candidates = [`${base}.ts`, `${base}.tsx`, `${base}.d.ts`, join(base, 'index.ts'), join(base, 'index.tsx')];
+  const target = candidates.find((c) => existsSync(c) && statSync(c).isFile());
+  if (!target) return false;
+  const body = stripCommentsAndStrings(readFileSync(target, 'utf8'));
+  let m: RegExpExecArray | null;
+  ANY_IMPORT.lastIndex = 0;
+  while ((m = ANY_IMPORT.exec(body)) !== null) {
+    if (!m[1].startsWith('.')) continue;
+    const resolved = relative(ROOT, resolve(dirname(target), m[1])).split('\\').join('/');
+    if (resolved.startsWith(`${BABYLON_SRC_SEGMENT}/`)) return true;
+  }
+  return false;
+}
+
+/** Returns why this specifier reaches the Babylon runtime, or null if it doesn't. */
+function babylonRuntimeReach(spec: string, file: string): string | null {
+  if (spec === '@babylonjs' || spec.startsWith('@babylonjs/')) return 'Babylon.js engine package';
+  if (/^@insimul\/babylon(-game)?(\/|$)/.test(spec)) return 'the Babylon runtime package';
+  if (spec === '@insimul/typescript' || spec.startsWith('@insimul/typescript/'))
+    return 'a deprecated passthrough into the Babylon runtime';
+  if (spec.startsWith('.')) {
+    const resolved = relative(ROOT, resolve(dirname(join(ROOT, file)), spec)).split('\\').join('/');
+    if (resolved.startsWith(`${BABYLON_SRC_SEGMENT}/`)) return 'a relative path into packages/babylon/src';
+    return null;
+  }
+  if (spec === '@shared' || spec.startsWith('@shared/')) {
+    if (sharedShimReachesBabylon(spec)) return 'a shared/ shim that re-exports into packages/babylon/src';
+  }
+  return null;
+}
+
+describe('dependency direction: @insimul/core never reaches the Babylon runtime (US-1, 93-runtime-logic-to-core)', () => {
+  const located = collectLocatedCoreImports();
+
+  it('scans the whole packages/core directory, not just src/ (guard is wired up)', () => {
+    // Vacuous-pass sanity checks. `scripts/` (schema emission, quest goldens) sits
+    // OUTSIDE src/, so seeing it proves the wider walk actually happened.
+    expect(located.length).toBeGreaterThan(50);
+    const scanned = new Set(located.map((i) => i.file));
+    expect([...scanned].some((f) => f.startsWith('packages/core/scripts/'))).toBe(true);
+    expect([...scanned].some((f) => f.startsWith('packages/core/src/'))).toBe(true);
+  });
+
+  it('recognises a shared/ shim that resolves into packages/babylon/src (detector is not vacuous)', () => {
+    // The detector's whole value is catching the alias that names no Babylon package.
+    // Pin it against a real shim and a real core shim so it can't silently answer
+    // "false" for everything — which would make the assertion below meaningless.
+    expect(sharedShimReachesBabylon('@shared/game-engine/logic/GamePrologEngine')).toBe(true);
+    expect(sharedShimReachesBabylon('@shared/game-genres/types')).toBe(false);
+  });
+
+  it('no file under packages/core imports the Babylon runtime, directly or through a shared/ shim', () => {
+    const offenders = located
+      .map(({ spec, file, line }) => {
+        const reason = babylonRuntimeReach(spec, file);
+        return reason ? `${file}:${line}  imports '${spec}'  — ${reason}` : null;
+      })
+      .filter((x): x is string => x !== null);
+    const unique = [...new Set(offenders)].sort();
+    expect(
+      unique,
+      `@insimul/core must never depend on a runtime — runtimes depend on core, not the reverse.\n` +
+        `An import here inverts the arrow and turns the core repo extraction into a rewrite.\n` +
+        `Fix by moving the needed module INTO core (leaving a shim at its old shared/ path), or\n` +
+        `by inverting the dependency into an interface core defines and the adapter implements.\n` +
+        `NEVER by re-exporting from babylon back into core.\n\nOffenders:\n${unique.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-1 — shared/SHIM_INVENTORY.json drift guard.
+//
+// The inventory records, for every shared/ file, whether it re-exports into
+// packages/core/src, packages/babylon/src, both, or is still real source. That is the
+// map the core repo extraction uses to decide which `@shared/*` alias follows core and
+// which stays with the runtime — so it has to be regenerated whenever shims move
+// (which US-3 will do en masse), not left to rot.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('shim inventory: shared/SHIM_INVENTORY.json is current (US-1, 93-runtime-logic-to-core)', () => {
+  it('matches a fresh scan of shared/', async () => {
+    const { buildInventory } = (await import('../../scripts/build-shim-inventory.mjs')) as {
+      buildInventory: () => { counts: Record<string, number>; shims: Record<string, string[]> };
+    };
+    const fresh = buildInventory();
+    const committed = JSON.parse(readFileSync(join(SHARED, 'SHIM_INVENTORY.json'), 'utf8'));
+
+    expect(fresh.counts.total, 'inventory scanned nothing — the guard would pass vacuously').toBeGreaterThan(100);
+    expect(
+      { counts: fresh.counts, shims: fresh.shims },
+      'shared/SHIM_INVENTORY.json is stale. Run `npm run shims:inventory` and commit the result.',
+    ).toEqual({ counts: committed.counts, shims: committed.shims });
+  });
+
+  it("every file classified 'core' really re-exports into packages/core/src", () => {
+    const committed = JSON.parse(readFileSync(join(SHARED, 'SHIM_INVENTORY.json'), 'utf8'));
+    expect(committed.shims.core.length).toBeGreaterThan(20);
+    const wrong = committed.shims.core.filter((rel: string) => {
+      const body = stripCommentsAndStrings(readFileSync(join(ROOT, rel), 'utf8'));
+      return !body.includes(CORE_SRC_SEGMENT);
+    });
+    expect(wrong, `Misclassified as 'core' in shared/SHIM_INVENTORY.json:\n${wrong.join('\n')}`).toEqual([]);
+  });
+
+  it("the 'source' (not-yet-moved) list agrees with shared/GRANDFATHERED_SOURCE.json", () => {
+    // Two independent lists of "real source still in shared/". They are built by
+    // different rules (this one by shim-target, that one by the US-BC5 source-location
+    // guard), so a disagreement means one of them drifted.
+    const committed = JSON.parse(readFileSync(join(SHARED, 'SHIM_INVENTORY.json'), 'utf8'));
+    const grandfathered: { files: string[] } = JSON.parse(
+      readFileSync(join(SHARED, 'GRANDFATHERED_SOURCE.json'), 'utf8'),
+    );
+    const inShared = new Set(grandfathered.files.filter((f) => f.startsWith('shared/')));
+    const onlyInInventory = committed.shims.source.filter((f: string) => !inShared.has(f)).sort();
+    expect(
+      onlyInInventory,
+      `Files the inventory calls un-moved source but GRANDFATHERED_SOURCE.json does not list:\n${onlyInInventory.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-2 (93-runtime-logic-to-core) — shared/LOGIC_BOUNDARY.json drift guard.
+//
+// The classification says, for every module under game-engine/logic/, whether it is
+// engine-agnostic and moving (a), engine-agnostic but blocked on a dependency not yet
+// in core (b), or genuinely Babylon-coupled despite the @babylonjs import scan (c).
+// US-3 plans against it and the engine adapters size their work from it, so it must be
+// a live measurement rather than a snapshot of what was true one afternoon.
+//
+// The guard also enforces AC2 and AC3 of the story:
+//   - every class-(c) module carries a recorded disposition (named, not papered over);
+//   - every class-(b) blocker carries a prescribed resolution whose target is inside
+//     packages/core/src — i.e. the "re-export from babylon back into core" route, which
+//     would invert the dependency arrow US-1's guard protects, is unrepresentable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type BoundaryReport = {
+  counts: Record<string, number>;
+  blockers: {
+    file: string;
+    zone: string;
+    blocks: number;
+    resolution: { via: string; moveTo: string; why: string } | null;
+    blocked: string[];
+  }[];
+  files: {
+    file: string;
+    class: 'a' | 'b' | 'c';
+    disposition?: string | null;
+    verdict?: string | null;
+    valueCoupled?: boolean;
+    couplings?: { kind: string; detail: string; typeOnly: boolean; via: string; path: string }[];
+    blockers?: { file: string; typeOnly: boolean; path: string }[];
+  }[];
+};
+
+const LOGIC_DIR_SEGMENT = ['packages', 'babylon', 'src', 'engine', 'game-engine', 'logic'].join('/');
+const LOGIC_BOUNDARY_PATH = join(SHARED, 'LOGIC_BOUNDARY.json');
+const readBoundary = (): BoundaryReport => JSON.parse(readFileSync(LOGIC_BOUNDARY_PATH, 'utf8'));
+
+describe('logic boundary: shared/LOGIC_BOUNDARY.json is current (US-2, 93-runtime-logic-to-core)', () => {
+  it('matches a fresh classification of game-engine/logic/', async () => {
+    const { classify } = (await import('../../scripts/classify-logic-boundary.mjs')) as {
+      classify: () => BoundaryReport;
+    };
+    const fresh = classify();
+    const committed = readBoundary();
+
+    expect(fresh.counts.total, 'classifier scanned nothing — the guard would pass vacuously').toBeGreaterThan(50);
+    expect(
+      { counts: fresh.counts, blockers: fresh.blockers, files: fresh.files },
+      'shared/LOGIC_BOUNDARY.json is stale. Run `npm run logic:classify` and commit the result.',
+    ).toEqual({ counts: committed.counts, blockers: committed.blockers, files: committed.files });
+  });
+
+  it('names the specific coupling for every class-(c) module (AC2)', () => {
+    const committed = readBoundary();
+    const classC = committed.files.filter((f) => f.class === 'c');
+    expect(classC.length, 'no class-(c) modules found — the assertions below would be vacuous').toBeGreaterThan(0);
+
+    const unexplained = classC.filter((f) => !f.disposition || !f.verdict || !(f.couplings ?? []).length);
+    expect(
+      unexplained.map((f) => f.file),
+      'Class-(c) modules with no recorded coupling/disposition. Add an entry to COUPLING_VERDICTS in ' +
+        'scripts/classify-logic-boundary.mjs — a Babylon-coupled file must be named, not papered over:\n' +
+        unexplained.map((f) => `  ${f.file}`).join('\n'),
+    ).toEqual([]);
+
+    const badDisposition = classC.filter((f) => !['stays', 'invert', 'platform-surface'].includes(f.disposition ?? ''));
+    expect(badDisposition.map((f) => f.file), 'Unknown disposition value').toEqual([]);
+  });
+
+  it('prescribes a core-bound resolution for every class-(b) blocker (AC3)', () => {
+    const committed = readBoundary();
+    expect(committed.blockers.length, 'no blockers found — the assertions below would be vacuous').toBeGreaterThan(0);
+
+    const unresolved = committed.blockers.filter((b) => !b.resolution?.moveTo || !b.resolution?.why);
+    expect(
+      unresolved.map((b) => b.file),
+      'Class-(b) blockers with no prescribed resolution. Add an entry to BLOCKER_RESOLUTIONS in ' +
+        'scripts/classify-logic-boundary.mjs before US-3 moves anything that depends on them:\n' +
+        unresolved.map((b) => `  ${b.file} (blocks ${b.blocks})`).join('\n'),
+    ).toEqual([]);
+
+    // The one resolution route the story forbids: satisfying core by re-exporting out of
+    // the Babylon package. Every prescribed target has to land inside core.
+    const wrongDirection = committed.blockers.filter((b) => !b.resolution!.moveTo.startsWith(`${CORE_SRC_SEGMENT}/`));
+    expect(
+      wrongDirection.map((b) => `${b.file} -> ${b.resolution!.moveTo}`),
+      'A blocker resolution points outside packages/core/src. Class-(b) dependencies are resolved by ' +
+        'moving them into core or inverting them — never by re-exporting from babylon back into core, ' +
+        "which would invert the dependency arrow US-1's guard exists to protect:\n" +
+        wrongDirection.map((b) => `  ${b.file} -> ${b.resolution!.moveTo}`).join('\n'),
+    ).toEqual([]);
+  });
+
+  it('classifies every non-test module under game-engine/logic/ exactly once', () => {
+    const committed = readBoundary();
+    const onDisk = walk(join(ROOT, LOGIC_DIR_SEGMENT))
+      .map((f) => relative(ROOT, f).split('\\').join('/'))
+      .filter((f) => !/\.test\.tsx?$/.test(f) && !f.includes('/__tests__/'))
+      .sort();
+    const classified = committed.files.map((f) => f.file).sort();
+    expect(classified, 'LOGIC_BOUNDARY.json does not cover the directory exactly').toEqual(onDisk);
+    expect(committed.counts.a + committed.counts.b + committed.counts.c).toBe(committed.counts.total);
+  });
+});

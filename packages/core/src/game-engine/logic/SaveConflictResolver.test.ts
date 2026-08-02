@@ -12,7 +12,7 @@ import {
   type SaveConflict,
   type ConflictDialogHandler,
 } from '/game-engine/logic/SaveConflictResolver';
-import type { GameSaveState } from '@shared/game-engine/types';
+import type { GameSaveState } from '../runtime-types';
 
 let passed = 0;
 let failed = 0;

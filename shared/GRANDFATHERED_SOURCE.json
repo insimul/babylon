@@ -1,5 +1,5 @@
 {
-  "description": "Grandfathered NON-SHIM source files that still live under shared/ (or the deprecated packages/{typescript,babylon-game}/src) as of babylon-consolidation US-BC5. The two-package endgame allows non-shim source ONLY under packages/{core,babylon}; these are pre-existing engine-agnostic GAME/DOMAIN modules (language-learning, assessment, quest, narrative, onboarding, procedural, telemetry) awaiting a FUTURE core/domain-package extraction. The source-location guard (shared/__tests__/import-hygiene.test.ts, US-BC5) fails if a NEW non-shim file lands outside packages/{core,babylon}, and fails if an entry here stops being a non-shim file (was moved out or converted to a shim) \u2014 so this list may only SHRINK, deliberately. Do NOT add new entries to make the guard pass; move the code into packages/{core,babylon} and leave a shim instead.",
+  "description": "Grandfathered NON-SHIM source files that still live under shared/ (or the deprecated packages/{typescript,babylon-game}/src) as of babylon-consolidation US-BC5. The two-package endgame allows non-shim source ONLY under packages/{core,babylon}; these are pre-existing engine-agnostic GAME/DOMAIN modules (language-learning, assessment, quest, narrative, onboarding, procedural, telemetry) awaiting a FUTURE core/domain-package extraction. The source-location guard (shared/__tests__/import-hygiene.test.ts, US-BC5) fails if a NEW non-shim file lands outside packages/{core,babylon}, and fails if an entry here stops being a non-shim file (was moved out or converted to a shim) — so this list may only SHRINK, deliberately. Do NOT add new entries to make the guard pass; move the code into packages/{core,babylon} and leave a shim instead.",
   "files": [
     "shared/assessment/assessment-types.ts",
     "shared/assessment/cefr-mapping.ts",
@@ -8,7 +8,6 @@
     "shared/assessment/offline-scoring.ts",
     "shared/assessment/periodic-encounter.ts",
     "shared/assessment/proficiency-report.ts",
-    "shared/asset-paths.ts",
     "shared/feature-modules/adaptive-difficulty/index.ts",
     "shared/feature-modules/adaptive-difficulty/types.ts",
     "shared/feature-modules/conversation-analytics/index.ts",
@@ -43,13 +42,10 @@
     "shared/language/learning-profile.ts",
     "shared/language/level-rewards.ts",
     "shared/language/notification-labels.ts",
-    "shared/language/phonetic-similarity.ts",
     "shared/language/proficiency-dashboard-data.ts",
-    "shared/language/pronunciation-scoring.ts",
     "shared/language/quest-language-feedback.ts",
     "shared/language/quest-localization.ts",
     "shared/language/quest-skill-rewards.ts",
-    "shared/language/quest-templates.ts",
     "shared/language/review-session-manager.ts",
     "shared/language/speech-complexity.ts",
     "shared/language/ui-localization.ts",

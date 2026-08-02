@@ -392,6 +392,116 @@ To keep core `@shared`-free, US-CE6 removed the last pure-type edges two ways:
   the editor-layer `assessment/` module into core. Keep stand-ins in sync if the
   Babylon-side shape changes.
 
+### The logic/ boundary classification (US-2, 93-runtime-logic-to-core)
+
+`scripts/classify-logic-boundary.mjs` (`npm run logic:classify`) walks the transitive
+first-party closure of every module under
+`packages/babylon/src/engine/game-engine/logic/` and writes `shared/LOGIC_BOUNDARY.json`:
+class **(a)** whole closure already in logic/ or core, **(b)** blocked on real source not
+yet in core, **(c)** genuinely Babylon-coupled. Narrative + the US-3 plan:
+`packages/core/docs/logic-boundary-classification.md`. Drift-guarded in
+`shared/__tests__/import-hygiene.test.ts`.
+
+Reusable lessons from writing it:
+
+- **"Zero `@babylonjs` imports" proves almost nothing on its own.** Coupling arrives via
+  an `import type` from `rendering/`, via a `@shared/*` shim that resolves into
+  `packages/babylon/src`, or via a browser global — none of which name an engine package.
+  Any future "is this tree portable?" question needs a closure walk, not a grep.
+- **Track `import type` edges separately from value edges.** A type-only path erases at
+  runtime and is breakable with a structural stand-in (the `visual-types.ts` precedent);
+  a value path is a real dependency. 4 of the 10 class-(c) modules are type-only, and one
+  of them (`AmbientLifeBehaviorSystem`) drags a dozen `@babylonjs` paths into its reported
+  closure through a single `import type`. Key the DFS on `(file, typeOnlySoFar)` — with a
+  plain `seen` set, whichever path is visited first silently decides.
+- **Shims must be transparent to a closure walk, or the arrow reads backwards.**
+  `game-engine/data-source.ts` is one line re-exporting *into* core; counting it as a
+  dependency claims core depends on babylon. Detect a shim structurally (strip
+  import/export-from statements; if nothing is left, it carries no source) rather than by
+  directory, since shim chains cross `shared/ → babylon/ → core`.
+- **Make the human judgement a table the guard checks.** `COUPLING_VERDICTS` (one entry
+  per class-(c) module) and `BLOCKER_RESOLUTIONS` (one per class-(b) blocker, with a
+  `moveTo` the guard asserts is inside `packages/core/src`) live in the script next to the
+  analysis. A newly-introduced coupling therefore fails CI as "undocumented" rather than
+  landing silently, and the forbidden resolution — re-exporting from babylon back into
+  core — is unrepresentable.
+
+### The shared runtime now lives in core (US-3, 93-runtime-logic-to-core)
+
+The move US-2 planned is done: **59 of the 70 `game-engine/logic/` modules are
+`packages/core/src/game-engine/logic/`**, plus the eight blockers
+(`runtime-types`, `system-contracts`, `action-selection`, `action-matrix`,
+`quest-action-mapping` under `core/src/game-engine/`; `phonetic-similarity`,
+`pronunciation-scoring`, `quest-templates` under `core/src/language/`;
+`asset-paths` at `core/src/`). Every old path is a one-line re-export shim, so the
+`shared/game-engine/logic/X → babylon → core` chain resolves unchanged. Classifier
+now reads 59 (a) / 1 (b) / 10 (c).
+
+- **Shims from babylon into core use the `@insimul/core/<subpath>` specifier**, not a
+  relative path — the export-shell Vite config already aliases `@insimul/core` at the
+  vendored `/src/insimul-core`, so an exported game keeps building (verified with
+  `packages/babylon npm run test:export-shell`). Shims from `shared/` into core stay
+  relative (`../packages/core/src/...`), matching the existing US-CE convention.
+- **The moved modules are NOT in core's flat `index.ts` barrel** — 59 runtime systems
+  collide on `Action`, `GameEvent`, `ItemCategory`, … They are subpath-only
+  (`@insimul/core/game-engine/logic/QuestCompletionEngine`), the same call US-CE6 made
+  for `game-genres/types` and the feature-module type modules.
+- **Lifting a subset out of a `@ts-nocheck` file: compute the closure, don't eyeball it.**
+  The ~20 symbols `logic/` names from `game-engine/types.ts` expand to a **52**-declaration
+  transitive closure (`GameSaveState` alone drags fourteen `Saved*` shapes). A script walked
+  it and asserted it reaches none of the five duplicate-shape names before anything was
+  copied; `Vec3`/`NeedType`/`ResourceType` were already in `game-engine/visual-types.ts`, so
+  `runtime-types.ts` re-exports them instead of redeclaring. The Babylon `types.ts` then
+  re-exports the 52 **explicitly**, not via `export *` — a future duplicate is then a compile
+  error rather than a silently-shadowed name.
+- **One planned move was wrong and had to be dropped.** US-2's "none of the duplicated
+  types is in the subset `logic/` imports" is false for `StreetNetworkLayout.ts`, which
+  imports `StreetNode`/`StreetNetwork`/`StreetSegment` directly (hence its
+  `as unknown as StreetNode` casts). It stays in babylon until US-RS4 dedupes them.
+  Re-read a plan's premise against the files before executing it.
+- **Legacy tsx harnesses travel with their module and need the exclude re-pointed in
+  BOTH vitest configs** — the root one and the destination package's scoped one. The three
+  `game-engine/logic/*.test.ts` harnesses have now moved twice for this reason.
+- **Prove the move was import-path-only** rather than asserting it:
+  `git diff --cached -M -U0 --diff-filter=R` and filter out import/`from` lines — anything
+  left is a real edit that belongs in the story notes.
+
+### The runtime contract for engine adapters (US-4, 93-runtime-logic-to-core)
+
+`packages/core/docs/runtime-contract.md` is what a Unity/Unreal/Godot adapter author
+reads instead of the Babylon source: what core provides (all 59 runtime modules grouped
+by capability), what the adapter provides back, what is deliberately out of scope
+(rendering + play-time geometry), what is net-new capability vs. a port, and what still
+blocks a four-way runtime (tau-prolog vs. libinsimul; the 7 un-inverted modules).
+
+- **Two interface files, opposite directions — do not merge them.**
+  `game-engine/system-contracts.ts` = the nine systems each engine **ports** for itself
+  (`ICombatSystem`, `IQuestSystem`, …). `game-engine/host-contracts.ts` (new) = the five
+  hooks the shared runtime **calls back into its host** (`IDebugSink`, `IHostLifecycle`,
+  `ISpeechSynthesizer`, `IResourceStore`, `ICombatStatSink`), plus `EngineHostAdapter`
+  bundling them. Persistence is NOT among them — that is the older `IDataSource`.
+  Both files are subpath-only, not in the flat `index.ts` barrel.
+- **Derive host interfaces from the actual coupling, not from taxonomy.** Each hook is
+  the exact surface a class-(c) module calls today (`IResourceStore` has two methods
+  because `CraftingSystem` calls two). The AC's "rendering, input, audio, persistence"
+  categories map onto real seams once you read them: the `window.electronAPI.aiTTS` probe
+  in `AssessmentEngine` *is* the audio hook; `beforeunload` in `LanguageProgressTracker`
+  *is* the persistence-lifecycle hook. Make every field of the adapter optional with a
+  documented fallback so an adapter can come up in stages.
+- **Declared ≠ wired, and the doc must say so.** The seven modules needing these hooks
+  are still in `packages/babylon`; inverting them is a behaviour change and belongs to
+  its own story. Saying that plainly (§2.1) is worth more than a doc that reads as if
+  the seam already exists.
+- **A contract doc needs a drift guard or it rots.**
+  `packages/core/src/game-engine/__tests__/runtime-contract.test.ts` fails if a module
+  under `src/game-engine/logic/` or an `export interface I*` in `host-contracts.ts` is
+  missing from the doc, and asserts its own module walk found >50 files so it can't pass
+  vacuously. Falsified both ways (add an undocumented module + an undocumented interface,
+  watch both fail, remove).
+- **`wc -l *.ts | grep -v '\.test\.ts'` keeps wc's own `total` line**, which still counts
+  the tests you filtered out — that is how "18,459 lines" got into a draft when the real
+  non-test total is 17,946. Sum the per-file counts yourself when a number goes in a doc.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`

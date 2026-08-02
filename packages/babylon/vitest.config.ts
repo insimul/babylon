@@ -33,16 +33,11 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
-    // Legacy tsx harnesses that moved with the engine (US-BC3): no describe/it and a
-    // broken `/game-engine/...` absolute import. `src/**` now matches them, so exclude
-    // explicitly or `vitest run` fails on collection.
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      'src/engine/game-engine/logic/VisualVocabularyDetector.test.ts',
-      'src/engine/game-engine/logic/VocabularyCollectionSystem.test.ts',
-      'src/engine/game-engine/logic/SaveConflictResolver.test.ts',
-    ],
+    // The three legacy tsx harnesses that used to be excluded here moved on again with
+    // their modules (US-3 of 93-runtime-logic-to-core: game-engine/logic ->
+    // packages/core/src/game-engine/logic). They are now excluded by the scoped
+    // packages/core/vitest.config.ts instead.
+    exclude: ['**/node_modules/**', '**/dist/**'],
     passWithNoTests: true,
   },
 });
