@@ -19,10 +19,10 @@
  * Same `(kb, seed, now)` ⇒ byte-identical `questContent` / `factsToAssert`.
  *
  * This file lives in `@insimul/core` and imports ONLY core siblings (the
- * tau-prolog engine, the fact parser). No Babylon / game-engine / DOM imports.
+ * Prolog engine seam, the fact parser). No Babylon / game-engine / DOM imports.
  */
 
-import { TauPrologEngine } from '../prolog/tau-engine';
+import { createPrologEngine, type PrologEngine } from '../prolog/prolog-engine';
 import {
   parsePrologFile,
   type PrologArg,
@@ -101,46 +101,53 @@ export async function generateRadiantQuests(
   // Deterministic processing order, independent of source layout.
   templates.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-  const engine = new TauPrologEngine();
-  const consulted = await engine.consult(program);
-  if (!consulted.success) {
-    throw new Error(`radiant: KB consult failed: ${consulted.error}`);
-  }
-
-  const quests: GeneratedRadiantQuest[] = [];
-  for (const tpl of templates) {
-    if (quests.length >= maxQuests) break;
-
-    // 1. Exclusion — any exclusion goal that succeeds suppresses this template.
-    let excluded = false;
-    for (const goal of tpl.exclusions) {
-      if (await succeeds(engine, goal)) {
-        excluded = true;
-        break;
-      }
+  // A generation tick builds a throwaway KB, so it must RELEASE it — wasm has
+  // no finalizers (see PrologEngine.destroy), and a director that ticks every
+  // few seconds would otherwise leak a handle per tick.
+  const engine = await createPrologEngine();
+  try {
+    const consulted = await engine.consult(program);
+    if (!consulted.success) {
+      throw new Error(`radiant: KB consult failed: ${consulted.error}`);
     }
-    if (excluded) continue;
 
-    // 2. Cooldown — an active `radiant_cooldown_until` in the future suppresses.
-    const cooldownUntils = await solveAll(engine, `radiant_cooldown_until(${tpl.id}, T)`);
-    const active = cooldownUntils
-      .map((b) => Number(b['T']))
-      .filter((t) => Number.isFinite(t));
-    if (active.some((t) => t > opts.now)) continue;
+    const quests: GeneratedRadiantQuest[] = [];
+    for (const tpl of templates) {
+      if (quests.length >= maxQuests) break;
 
-    // 3. Preconditions — solve the conjunction; enumerate candidate slot fills.
-    const candidates = await solveCandidates(engine, tpl);
-    if (candidates.length === 0) continue; // unsatisfiable this tick → skip
+      // 1. Exclusion — any exclusion goal that succeeds suppresses this template.
+      let excluded = false;
+      for (const goal of tpl.exclusions) {
+        if (await succeeds(engine, goal)) {
+          excluded = true;
+          break;
+        }
+      }
+      if (excluded) continue;
 
-    // 4. Pick one candidate with a per-template seeded RNG.
-    const rng = mulberry32(hashSeed(opts.seed) ^ hashSeed(tpl.id));
-    const chosen = candidates[Math.floor(rng() * candidates.length)];
+      // 2. Cooldown — an active `radiant_cooldown_until` in the future suppresses.
+      const cooldownUntils = await solveAll(engine, `radiant_cooldown_until(${tpl.id}, T)`);
+      const active = cooldownUntils
+        .map((b) => Number(b['T']))
+        .filter((t) => Number.isFinite(t));
+      if (active.some((t) => t > opts.now)) continue;
 
-    // 5. Instantiate the quest content + provenance / cooldown bookkeeping.
-    quests.push(buildQuest(tpl, chosen, opts.now, active));
+      // 3. Preconditions — solve the conjunction; enumerate candidate slot fills.
+      const candidates = await solveCandidates(engine, tpl);
+      if (candidates.length === 0) continue; // unsatisfiable this tick → skip
+
+      // 4. Pick one candidate with a per-template seeded RNG.
+      const rng = mulberry32(hashSeed(opts.seed) ^ hashSeed(tpl.id));
+      const chosen = candidates[Math.floor(rng() * candidates.length)];
+
+      // 5. Instantiate the quest content + provenance / cooldown bookkeeping.
+      quests.push(buildQuest(tpl, chosen, opts.now, active));
+    }
+
+    return { quests };
+  } finally {
+    engine.destroy?.();
   }
-
-  return { quests };
 }
 
 // ── Template parsing (KB source → structured templates) ──────────────────────
@@ -236,7 +243,7 @@ function parseMeta(arg: PrologArg | undefined): TemplateMeta {
  * engine's enumeration order.
  */
 async function solveCandidates(
-  engine: TauPrologEngine,
+  engine: PrologEngine,
   tpl: RadiantTemplate,
 ): Promise<Array<Record<string, string | number>>> {
   if (tpl.preconditions.length === 0) return [];
@@ -428,7 +435,7 @@ function argToProlog(arg: PrologArg): string {
 
 // ── Prolog goal helpers over the engine ──────────────────────────────────────
 
-async function succeeds(engine: TauPrologEngine, goal: string): Promise<boolean> {
+async function succeeds(engine: PrologEngine, goal: string): Promise<boolean> {
   try {
     const r = await engine.query(goal, 1);
     return r.success && r.bindings.length > 0;
@@ -438,7 +445,7 @@ async function succeeds(engine: TauPrologEngine, goal: string): Promise<boolean>
 }
 
 async function solveAll(
-  engine: TauPrologEngine,
+  engine: PrologEngine,
   goal: string,
 ): Promise<Array<Record<string, string | number | boolean | null>>> {
   try {

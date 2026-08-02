@@ -2,15 +2,28 @@
  * Game Prolog Engine
  *
  * Client-side Prolog engine for the Babylon.js game runtime.
- * Wraps tau-prolog (via shared TauPrologEngine) to provide:
+ * Wraps a core {@link PrologEngine} to provide:
  *   - Loading Prolog knowledge base on game start
  *   - Real-time fact assertion/retraction as game state changes
  *   - Rule condition evaluation via Prolog queries
  *   - Action prerequisite checking
  *   - Quest completion evaluation
+ *
+ * WHICH interpreter runs is chosen at CONSTRUCTION, never by a build flag
+ * (US-1 → US-3, 91-babylon-prolog-wasm). Today there is one: `wasm`,
+ * libinsimul/Trealla compiled to wasm32 — the same engine Unity, Unreal, Godot
+ * and the Rust server run. tau-prolog was the other until US-3 removed it.
+ *
+ * Because a wasm module cannot be instantiated synchronously, there is no
+ * synchronous path to a working engine: use `await GamePrologEngine.create()`.
+ * The constructor now REQUIRES an already-built engine.
  */
 
-import { TauPrologEngine } from '@shared/prolog/tau-engine';
+import {
+  createPrologEngine,
+  type CreatePrologEngineOptions,
+  type PrologEngine,
+} from '@insimul/core/prolog/prolog-engine';
 import { getNPCReasoningRules, getPersonalityFacts, getRelationshipFacts, getEmotionalStateFacts, getEnvironmentFacts } from '@shared/prolog/npc-reasoning';
 import type { WeatherCondition } from '@shared/npc-awareness-context';
 import { getTimePeriod } from '@shared/npc-awareness-context';
@@ -54,7 +67,7 @@ export interface GameState {
 }
 
 export class GamePrologEngine {
-  private engine: TauPrologEngine;
+  private engine: PrologEngine;
   private initialized = false;
   private eventBusUnsubscribe: (() => void) | null = null;
   private eventBusRef: GameEventBus | null = null;
@@ -86,8 +99,33 @@ export class GamePrologEngine {
    */
   private actionToActivityMap = new Map<string, string>();
 
-  constructor() {
-    this.engine = new TauPrologEngine();
+  /**
+   * @param engine the already-built interpreter to run on. There is no default:
+   *   the wasm module cannot be instantiated synchronously, so a synchronous
+   *   path to a working engine would have to race its own startup. Use
+   *   {@link GamePrologEngine.create}, which awaits the module load.
+   */
+  constructor(engine: PrologEngine) {
+    this.engine = engine;
+  }
+
+  /**
+   * Build a GamePrologEngine on the selected interpreter.
+   *
+   * Async because instantiating a wasm module is. A load failure REJECTS —
+   * there is no fall-through to a Prolog-less mode and no second interpreter to
+   * silently fall back to.
+   *
+   *   const engine = await GamePrologEngine.create();                // default (wasm)
+   *   const engine = await GamePrologEngine.create({ kind: 'wasm' }); // explicit
+   */
+  static async create(options: CreatePrologEngineOptions = {}): Promise<GamePrologEngine> {
+    return new GamePrologEngine(await createPrologEngine(options));
+  }
+
+  /** Which interpreter this instance is running on. */
+  get engineKind(): PrologEngine['kind'] {
+    return this.engine.kind;
   }
 
   /**
@@ -2110,7 +2148,8 @@ sumlist([H|T], S) :- sumlist(T, S1), S is S1 + H.
 
   /**
    * Assert taxonomy facts for an item (category, material, baseType, rarity, IS-A chain).
-   * Safe to call multiple times; duplicate facts are idempotent in tau-prolog.
+   * Safe to call multiple times; the engine wrapper stores facts in a set, so a
+   * duplicate assert is idempotent.
    */
   private async assertItemTaxonomy(itemName: string, taxonomy: ItemTaxonomy): Promise<void> {
     if (taxonomy.category) {

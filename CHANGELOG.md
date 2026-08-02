@@ -99,6 +99,47 @@ so a web creator installs exactly one thing (plan: `docs/PLATFORM_SPLIT_AND_ENGI
   package families and restates that going public awaits the history-audit /
   third-party-purge hygiene.
 
+### Changed — one Prolog engine everywhere (tasklist 91, `@insimul/core` + `@insimul/babylon`)
+
+The web runtime no longer ships its own Prolog interpreter. It executes **libinsimul
+(Trealla) compiled to wasm32** — the same engine source Unity, Unreal, Godot and the
+Rust server run — so a world reasons identically on every platform.
+
+- **`@insimul/core/prolog/prolog-engine`** is the seam: `createPrologEngine({ kind })`
+  picks the interpreter **at construction**, never by a build flag. `PrologEngine` is
+  the interface (the old `TauPrologEngine` surface, extracted verbatim), so no caller
+  outside the Prolog module changed shape.
+- **The wasm artifact is committed** at `packages/core/src/prolog/vendor/prolog-wasm/`
+  and ships with the package (`files: ["src"]`) — a game builds with no native
+  checkout. A missing artifact rejects with `PrologWasmUnavailableError`; it never
+  degrades quietly.
+- **Engine construction is async.** `await GamePrologEngine.create()` replaces
+  `new GamePrologEngine()`, whose remaining constructor now REQUIRES an already-built
+  engine — a wasm module cannot be instantiated synchronously.
+- **A throwaway KB must be released**: `PrologEngine.destroy?()`. wasm has no
+  finalizers, so a tool or harness that builds many engines leaks handles without it.
+  A long-lived runtime engine (the browser builds one) never needs it.
+- **Behaviour deltas** a caller could observe, all verified rather than assumed:
+  `sum_list/2` in Insimul's own packs is now `insimul_sum_list/2` (Trealla owns
+  `sum_list/2` as a builtin); error *strings* differ though the ISO error class never
+  does; an anonymous or `_`-prefixed variable no longer appears in a binding set; an
+  unbound variable is `null` rather than its own name; a partly-malformed consulted
+  source contributes nothing rather than its leading clauses. Solution ORDER, binding
+  shape, atom/number rendering and consult accumulation are unchanged. Full report:
+  `packages/core/docs/tau-wasm-parity.md`.
+- **Bundle cost**, measured with the real export-shell `vite build`: −315,431 B of JS
+  (raw) versus the pre-tasklist baseline, plus a new 2,091,359 B `.wasm` asset
+  (561,937 B gzipped) fetched during boot — net ≈ +521 KB gzip over the wire, knowingly
+  traded for one engine instead of two that disagree.
+
+### Removed
+
+- **`tau-prolog`** — dropped from the dependencies, along with `tau-engine.ts`,
+  `tau-prolog-patch.ts`, `tau-prolog.d.ts` and their `@shared/prolog/*` shims. The
+  `TauPrologEngine` export is gone from `@insimul/core/prolog`; build engines with
+  `createPrologEngine()`. A guard in `shared/__tests__/import-hygiene.test.ts` keeps a
+  second interpreter from creeping back.
+
 ### Deprecated
 
 - **`@insimul/typescript`** → install `@insimul/babylon`, import `@insimul/babylon/conversation`.

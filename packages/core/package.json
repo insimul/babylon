@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "schemas": "vite-node scripts/emit-schemas.ts",
+    "wasm:vendor": "node scripts/vendor-prolog-wasm.mjs",
     "quest-goldens": "vite-node scripts/emit-quest-goldens.ts"
   },
   "keywords": [

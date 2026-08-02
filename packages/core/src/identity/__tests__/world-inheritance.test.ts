@@ -16,9 +16,22 @@
  * pins the SHIPPED emitters against the SHIPPED rule pack.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { TauPrologEngine } from '../../prolog/tau-engine';
+import { createPrologEngine, type PrologEngine } from '../../prolog/prolog-engine';
+
+// wasm has no finalizers: every engine a test builds must be released, or the
+// module's indirect function table runs out of slots (see PrologEngine.destroy).
+const live: PrologEngine[] = [];
+async function newEngine(): Promise<PrologEngine> {
+  const engine = await createPrologEngine();
+  live.push(engine);
+  return engine;
+}
+afterEach(() => {
+  for (const e of live) e.destroy?.();
+  live.length = 0;
+});
 import { IDENTITY_PREDICATES_PROLOG } from '../identity-predicates';
 import { EQUIVALENCE_PREDICATES_PROLOG } from '../equivalence-predicates';
 import { WORLD_CONTEXT_PREDICATES_PROLOG } from '../world-predicates';
@@ -84,8 +97,8 @@ function program(extra: string[] = []): string {
 /** The playthrough's override: in THIS save the keep fell (§5: a fork). */
 const OVERRIDE = claimFact(RENAUD, 'garrisons', RUINS, PLAYTHROUGH);
 
-async function engineWith(extra: string[] = []): Promise<TauPrologEngine> {
-  const engine = new TauPrologEngine();
+async function engineWith(extra: string[] = []): Promise<PrologEngine> {
+  const engine = await newEngine();
   const consulted = await engine.consult(program(extra));
   expect(consulted.success, consulted.error).toBe(true);
   return engine;

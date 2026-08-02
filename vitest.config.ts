@@ -30,19 +30,15 @@ export default defineConfig({
       // Per-package vitest suites.
       'packages/babylon/src/**/*.test.{ts,tsx}',
       'packages/babylon-game/src/**/*.test.{ts,tsx}',
-      // @insimul/core vitest suites (US-CE4 schema/drift tests, etc.). The legacy
-      // tau-engine.test.ts harness under packages/core/src/prolog is excluded below.
+      // @insimul/core vitest suites (US-CE4 schema/drift tests, etc.).
       'packages/core/src/**/*.test.ts',
     ],
     // These *.test.ts files are legacy tsx harnesses (run via `npx tsx <file>`, no
     // describe/it), NOT vitest suites — excluding them keeps `vitest run` green.
-    // tau-engine.test.ts moved with tau-engine into packages/core/src/prolog (US-CE2);
-    // it is not matched by `include` above, but stays listed here to document intent.
     // Migrate one to vitest (import describe/it/expect from 'vitest') to opt it in.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'packages/core/src/prolog/tau-engine.test.ts',
       // Legacy tsx harnesses that travel with their modules. They import via a broken
       // `/game-engine/...` absolute path and have no describe/it — keep them excluded
       // from `vitest run`. They moved shared/game-engine -> packages/babylon (US-BC3)

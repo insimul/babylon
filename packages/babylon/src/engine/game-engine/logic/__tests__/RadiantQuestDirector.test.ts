@@ -40,7 +40,7 @@ radiant_exclusion(rt_fetch, radiant_generated(_, rt_fetch, _)).
 `;
 
 async function makeEngine(): Promise<GamePrologEngine> {
-  const engine = new GamePrologEngine();
+  const engine = await GamePrologEngine.create();
   await engine.initialize({
     characters: [],
     settlements: [],

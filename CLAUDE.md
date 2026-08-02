@@ -65,12 +65,13 @@ When you move a module `shared/foo.ts` into `packages/core/src/foo.ts`:
 
 Two gotchas when the moved set is large (e.g. the `shared/prolog/` toolchain, US-CE2):
 
-- **Side-effect-only modules** (no `import`/`export`, just top-level statements — e.g.
-  `tau-prolog-patch.ts` patches `globalThis`) are NOT modules to `tsc`, so `export *
-  from './x'` yields TS2306 and a bare re-export shim fails the same way. Use a
-  side-effect import instead — in the barrel omit it entirely (its real importer, e.g.
-  `tau-engine.ts`, already does `import './tau-prolog-patch'`), and make its shim
-  `import '../../packages/core/src/prolog/tau-prolog-patch';` (not `export *`).
+- **Side-effect-only modules** (no `import`/`export`, just top-level statements — the
+  worked example was `tau-prolog-patch.ts`, which patched `globalThis`; deleted in
+  US-3 of 91-babylon-prolog-wasm, so this is a recipe without a live instance) are NOT
+  modules to `tsc`, so `export * from './x'` yields TS2306 and a bare re-export shim
+  fails the same way. Use a side-effect import instead — omit it from the barrel
+  entirely (its real importer already does `import './x'`) and make its shim
+  `import '../../packages/core/src/<path>';` (not `export *`).
 - **Ambiguous barrel names**: a flat `export *` barrel over many modules DOES error
   (TS2308) when two modules export the same name (e.g. `ValidationResult`,
   `PredicateArg`). Resolve by explicitly re-exporting one variant
@@ -198,7 +199,7 @@ Gotchas:
   `src/conformance/__tests__/predicate-schema-hash.test.ts`) — regenerate and
   commit it with any predicate change.
 - **Corpus rule: bindings stay scalar.** Never bind a query variable straight to
-  an `id/3` term — `extractBindings` in `tau-engine.ts` collapses a compound to
+  an `id/3` term — `collapseTerm` in `wasm-engine.ts` collapses a compound to
   its functor name (`"id"`). Project the column through a rule
   (`quest_available(L) :- quest(id(ent,_,L),_,_,_,active).`); literal `id/3`
   terms *inside the query goal* are fine. Documented in `conformance/README.md`
@@ -311,16 +312,21 @@ gotchas:
   the runner (`src/conformance/__tests__/*.test.ts`) reads the JSON via a relative
   path up to `conformance/`. Don't put `*.test.ts` under `conformance/` — the root
   gate won't run it.
-- **tau-prolog gotchas** (verified while authoring the corpus):
-  - `library(lists)` predicates (`member/2`, `length/2`, `nth0/3`, …) need
-    `:- use_module(library(lists)).` **in the program**, even though
-    `tau-engine.ts` calls `loadLists(pl)` at import — the module is registered
-    globally but not loaded into a fresh session without the directive.
-  - An anonymous `_` **in the query goal** leaks into `QueryResult.bindings` as
-    `{"_":"_"}`. To project one column cleanly, route it through a rule
-    (`qa(Q) :- quest(Q,_,_,_,active).`) — `_` inside a **rule body** does not leak.
+- **Engine gotchas** (the first two are tau-prolog history — US-3 removed tau, and
+  the corpus still carries the workarounds because they cost nothing and keep it
+  portable to an engine that needs them):
+  - `library(lists)` predicates (`member/2`, `length/2`, `nth0/3`, …) are resident
+    in libinsimul/Trealla. tau-prolog needed `:- use_module(library(lists)).` **in
+    the program**; cases still carry the directive.
+  - An anonymous `_` **in the query goal** used to leak into `QueryResult.bindings`
+    as `{"_":"_"}` under tau; the current engine omits `_`-prefixed names (so it
+    also drops a *named* `_Y`). Routing a projected column through a rule
+    (`qa(Q) :- quest(Q,_,_,_,active).`) is no longer forced but is still how the
+    corpus reads.
   - Atoms bind as JSON strings, integers as JSON numbers; quoted atoms
-    (`'Find the Sword'`) come back unquoted.
+    (`'Find the Sword'`) come back unquoted. An UNBOUND variable is `null`.
+  - One case needs a printed amendment (`log/1` is a Trealla builtin) — see the
+    `AMENDMENTS` table in `prolog-corpus.test.ts` and `conformance/README.md`.
 - Migration conformance: `migrateSaveFile` (in `save-file.ts`) walks the
   `save-file-migrations.ts` registry to `SAVE_FILE_VERSION`; the v1 fixture
   exercises both steps (language-progress backfill, snapshot version stamping).
@@ -472,7 +478,8 @@ now reads 59 (a) / 1 (b) / 10 (c).
 reads instead of the Babylon source: what core provides (all 59 runtime modules grouped
 by capability), what the adapter provides back, what is deliberately out of scope
 (rendering + play-time geometry), what is net-new capability vs. a port, and what still
-blocks a four-way runtime (tau-prolog vs. libinsimul; the 7 un-inverted modules).
+blocks a four-way runtime (originally "tau-prolog vs. libinsimul", resolved by
+tasklist 91; the 7 un-inverted modules remain).
 
 - **Two interface files, opposite directions — do not merge them.**
   `game-engine/system-contracts.ts` = the nine systems each engine **ports** for itself
@@ -847,3 +854,152 @@ release orchestrator both import it, so they can never disagree about what ships
 - A test that must run from the repo root (not a package) goes in `shared/__tests__/`
   **and** must be added to the root `vitest.config.ts` `include` list by name — that
   array lists shared-tree suites explicitly, it has no `shared/**` glob.
+
+## One Prolog engine behind a seam (US-1 → US-3, 91-babylon-prolog-wasm)
+
+`packages/core/src/prolog/prolog-engine.ts` is the interface, and since US-3 there
+is exactly ONE implementation behind it: `WasmPrologEngine` (libinsimul/Trealla
+compiled to wasm32 — the same engine Unity/Unreal/Godot/the Rust server run).
+tau-prolog was the second until US-3 deleted it; the git history of that file is
+where it lives now, and `docs/tau-wasm-parity.md` is why the removal was safe.
+
+**The seam stays even at one engine.** The choice is made **at construction**
+(`createPrologEngine({ kind })`, `GamePrologEngine.create({ kind })`), never by a
+build flag, because that is what let US-2 run two engines over the same inputs in
+ONE process. Keep `PrologEngineKind` a union and `ENGINES` in
+`__tests__/wasm-engine.test.ts` a list, so adding an engine is a row rather than a
+rewrite.
+
+- **The wasm artifact is COMMITTED**, at
+  `packages/core/src/prolog/vendor/prolog-wasm/` — a deliberate departure from the
+  fetch-not-commit convention the native engine plugins use. Rationale, rejected
+  alternatives, and the refresh recipe: `packages/core/docs/prolog-wasm-acquisition.md`.
+  Refresh with `packages/core $ npm run wasm:vendor -- --from <insimul-native>/dist/wasm`.
+- **It lives INSIDE `src/` on purpose.** The game-export pipeline vendors
+  `packages/core/src` as `src/insimul-core` (see `export-shell-smoke.mjs`); an
+  artifact one level up resolves in this repo and vanishes from every exported game.
+  `files: ["src"]` already ships it, so publishing needed no change.
+- **Never fall back on a wasm load failure.** `loadPrologWasm()` rejects with
+  `PrologWasmUnavailableError`, whose message names the two commands that rebuild
+  the artifact. There is nothing left to fall back TO, and there must not be: a
+  silent second engine would reintroduce the split this tasklist ended. (Falsified
+  by moving `insimul.wasm` aside: 4 tests go red with the hint.)
+- **`WasmPrologEngine` mirrors `tau-engine`'s bookkeeping deliberately** — same
+  consult accumulation, same de-dup, same full-KB `rebuild()` — even though Trealla
+  supports incremental assert/retract. Identical bookkeeping keeps every observed
+  divergence attributable to the *interpreter* rather than to the wrapper.
+- **Bindings stay scalar in both engines.** `collapseTerm` mirrors tau's
+  `extractBindings`: compound → functor name, list → `'.'` (`'[]'` when empty). The
+  corpus rule ("project a compound through a rule, never bind to it") is unchanged.
+- **The contract suite is `describe.each` over BOTH engines**
+  (`src/prolog/__tests__/wasm-engine.test.ts`), so a behaviour cannot be true of one
+  and false of the other without a red test.
+- **Engine construction is async now.** `BabylonGame.initializeSystems()` does
+  `await GamePrologEngine.create()`; the synchronous `new GamePrologEngine()` still
+  works but only accepts an already-built engine (tau by default).
+- Building the artifact needs emsdk + cmake and a network clone of the pinned
+  Trealla commit; do it out-of-source (`scripts/build_wasm.sh --build-dir <abs path>`)
+  so a sibling checkout is never dirtied.
+
+### What the two engines actually disagree about (US-2, 91-babylon-prolog-wasm)
+
+Both engines were run over the 76-case Prolog corpus **in one process** and
+diffed, plus the shape axes a corpus cannot reach. Full report + classification:
+`packages/core/docs/tau-wasm-parity.md`. **No class-(c) divergence — US-3 is not
+blocked.** Three harnesses ran, all under the root `npm test`:
+`src/conformance/__tests__/prolog-engine-parity.test.ts` (the corpus diff, with
+the `DIVERGENCES` classification table: an unlisted difference fails as
+"undocumented", a class-`'c'` entry fails outright),
+`src/prolog/__tests__/engine-behaviour-parity.test.ts` (shape axes + the 8 rule
+packs `GamePrologEngine.initialize()` consults), and
+`src/prolog/__tests__/engine-builtin-collisions.test.ts`.
+
+**Two of those three are gone or renamed at US-3** (see the next section): a diff
+needs two engines. Only `engine-builtin-collisions.test.ts` is unchanged; the
+behaviour file survives as `engine-behaviour.test.ts`. To re-run the diff itself,
+check out `a43eb3e`. The findings below are unchanged and still describe the
+engine the browser now ships.
+
+- **Trealla registers arithmetic/list functors as STATIC BUILTIN PREDICATES**
+  (`log/1`, `sin/1`, `max/2`, `gcd/2`, `sum_list/2`, …); tau-prolog registers
+  them as evaluable functors only. A pack that defines one raises
+  `permission_error(modify, static_procedure, …)`, and since **libinsimul's
+  consult is transactional** the ONE clause kills the WHOLE pack — and then
+  every later consult on that engine, because both wrappers re-consult the
+  accumulated program. `advanced-predicates.ts` shipped exactly this
+  (`sum_list/2`, defined because tau has none), so on wasm *no rule pack loaded
+  at all*. It is now `insimul_sum_list/2`. **Never shadow an engine builtin;
+  prefix ours `insimul_`.** The guard asks the REAL engine about all 612
+  `buildPredicateSchemaSnapshot()` names rather than carrying a list that would
+  rot — and note Trealla is not self-consistent, `assertz(log(1))` is accepted
+  while `asserta(log(0))` raises, so probe both directions.
+- **A failed consult used to brick the wasm engine.** Transactional consult +
+  "keep every consulted program and re-consult the union" meant the bad source
+  stayed in `consultedPrograms` and every later `query()` re-reported its syntax
+  error, while tau kept working. `WasmPrologEngine.consult()` now rolls a failed
+  program (and the dynamic decls it introduced) back. A wrapper artifact, not an
+  interpreter difference — which is exactly why it had to go.
+- **wasm KBs need explicit release.** wasm has no finalizers; one engine per
+  corpus case dies with `RuntimeError: table index is out of bounds` partway
+  through 76. Hence the optional `PrologEngine.destroy?()`. A long-lived engine
+  (the browser builds one) never needs it; a harness that builds many does.
+- **tau was WRONG twice, and wasm fixes both**: the anonymous `_` in a query goal
+  leaked into bindings as `{"_":"_"}` (wasm omits `_`-prefixed names — so it also
+  drops a *named* `_Y`), and an unbound variable bound to its own name as a string
+  (`X: "X"`, indistinguishable from a real atom) where wasm reports `null`.
+- **Error wording differs on every path; the ISO error CLASS never does.** tau
+  wraps in `throw(…)`, renders indicators canonically (`/(nosuch,1)`) and blames
+  `top_level/0`. Survivable only because nothing in the repo string-matches
+  `.error` — verified by scan. Don't start.
+- **Solution ORDER does not diverge** on any of the 21 multi-solution corpus
+  cases, contrary to what insimul/server's CLAUDE.md leads you to expect. The
+  harness fails if that ever changes, with a floor of 15 multi-solution cases so
+  it cannot pass vacuously.
+- **The corpus is deliberately left unamended here.** It is the source copy the
+  native repos vendor byte-identically; amending it to please one engine would
+  erase the evidence downstream. Since US-3 the TS runner handles its one case the
+  way `insimul-native` handles its three legs — an `AMENDMENTS` table applied in
+  memory with a printed `[AMEND]` line, never a skip. See below.
+
+### tau-prolog is gone (US-3, 91-babylon-prolog-wasm)
+
+`DEFAULT_PROLOG_ENGINE` is `'wasm'`; `tau-engine.ts`, `tau-prolog-patch.ts`,
+`tau-prolog.d.ts`, their two `shared/prolog/` shims and the `tau-prolog` root
+dependency are deleted. A standing guard in
+`shared/__tests__/import-hygiene.test.ts` (`no tau-prolog: the web runtime has
+exactly one Prolog engine`) fails on a source file importing it, on any package
+manifest declaring it, and on any of the deleted modules reappearing — all three
+falsified when written.
+
+- **`GamePrologEngine`'s constructor now REQUIRES an engine.** There is no
+  synchronous path to a working one (a wasm module cannot be instantiated
+  synchronously), so every call site is `await GamePrologEngine.create()`.
+- **A throwaway KB must be `destroy?()`ed.** wasm has no finalizers. The
+  per-call-site engines — `export-validator`, `rule-converter.validatePrologSyntax`,
+  `radiant-engine.generateRadiantQuests`, and every test helper — build in a
+  `try/finally`. A radiant director ticking every few seconds would otherwise leak
+  a handle per tick.
+- **The corpus runner amends, in memory, and PRINTS it.** `prolog-corpus.test.ts`
+  carries `AMENDMENTS` (one entry: `asserta-prepends`'s `log/1` → `entry`, matching
+  `insimul-native`'s three harnesses) and runs every case **unamended first**, so a
+  stale entry fails as stale and a newly-broken case fails as unamended rather than
+  being silently patched. Falsified both ways.
+- **What a two-engine harness becomes when one engine goes.** The corpus DIFF
+  (`prolog-engine-parity.test.ts`) was deleted — it had no meaning with one engine,
+  and the evidence is the committed report plus commit `a43eb3e`. The BEHAVIOUR
+  file was kept: `engine-behaviour-parity.test.ts` → `engine-behaviour.test.ts`,
+  each assertion reduced to its wasm half, with the tau value preserved in the
+  comment. Delete a diff; keep a contract.
+- **Bundle delta, measured with the real export-shell `vite build`** (three
+  commits, same fixture): US-3 alone is **−461,576 B JS raw / −69,856 B gzip**,
+  nearly all of it out of the ENTRY chunk (tau was statically imported by
+  `GamePrologEngine`, so it was never code-split). Across the whole tasklist:
+  −315,431 B JS raw, **plus a new 2,091,359 B `.wasm` (561,937 gzip)** fetched
+  during boot — net **≈ +521 KB gzip** over the wire. Numbers and method:
+  `docs/tau-wasm-parity.md` § Epilogue.
+- **`insimul/server`'s CLAUDE.md needs a correction** (it claims the engines
+  disagree, and cites that for delegating its harness routes to Node). It is not in
+  this worktree; the correction it should carry is written out in
+  `docs/tau-wasm-parity.md` § "Follow-up owed to insimul/server" — order does NOT
+  diverge, wording does but the ISO class never, and the two real differences were
+  tau being wrong.
