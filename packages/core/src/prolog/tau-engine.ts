@@ -19,23 +19,14 @@
 import './tau-prolog-patch';
 import pl from 'tau-prolog';
 import loadLists from 'tau-prolog/modules/lists.js';
+import type { EngineStats, PrologEngine, PrologEngineKind, QueryBindings, QueryResult } from './prolog-engine';
 (loadLists as any)(pl);
 
-export interface QueryBindings {
-  [variable: string]: string | number | boolean | null;
-}
-
-export interface QueryResult {
-  success: boolean;
-  bindings: QueryBindings[];
-  error?: string;
-}
-
-export interface EngineStats {
-  factCount: number;
-  ruleCount: number;
-  dynamicPredicates: string[];
-}
+// The three result shapes moved to ./prolog-engine (US-1, 91-babylon-prolog-wasm)
+// so the wasm engine can share them without depending on tau-prolog. Re-exported
+// here because `@shared/prolog/tau-engine` is the import path every existing
+// caller uses.
+export type { QueryBindings, QueryResult, EngineStats } from './prolog-engine';
 
 /**
  * Extracts variable bindings from a tau-prolog answer term.
@@ -66,7 +57,9 @@ function extractBindings(answer: any): QueryBindings {
   return result;
 }
 
-export class TauPrologEngine {
+export class TauPrologEngine implements PrologEngine {
+  readonly kind: PrologEngineKind = 'tau';
+
   private session: any;
   private dynamicPredicates: Set<string> = new Set();
   // Accumulated consulted programs. rebuild() reconstructs the FULL KB from

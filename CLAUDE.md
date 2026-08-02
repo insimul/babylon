@@ -847,3 +847,43 @@ release orchestrator both import it, so they can never disagree about what ships
 - A test that must run from the repo root (not a package) goes in `shared/__tests__/`
   **and** must be added to the root `vitest.config.ts` `include` list by name — that
   array lists shared-tree suites explicitly, it has no `shared/**` glob.
+
+## Two Prolog engines behind one seam (US-1, 91-babylon-prolog-wasm)
+
+`packages/core/src/prolog/prolog-engine.ts` is the interface both interpreters
+implement — `TauPrologEngine` (tau-prolog, pure JS) and `WasmPrologEngine`
+(libinsimul/Trealla compiled to wasm32, the same engine Unity/Unreal/Godot/the
+Rust server run). The choice is made **at construction**
+(`createPrologEngine({ kind })`, `GamePrologEngine.create({ kind })`), never by a
+build flag: the parity story needs both engines alive in ONE process.
+
+- **The wasm artifact is COMMITTED**, at
+  `packages/core/src/prolog/vendor/prolog-wasm/` — a deliberate departure from the
+  fetch-not-commit convention the native engine plugins use. Rationale, rejected
+  alternatives, and the refresh recipe: `packages/core/docs/prolog-wasm-acquisition.md`.
+  Refresh with `packages/core $ npm run wasm:vendor -- --from <insimul-native>/dist/wasm`.
+- **It lives INSIDE `src/` on purpose.** The game-export pipeline vendors
+  `packages/core/src` as `src/insimul-core` (see `export-shell-smoke.mjs`); an
+  artifact one level up resolves in this repo and vanishes from every exported game.
+  `files: ["src"]` already ships it, so publishing needed no change.
+- **Never fall back to tau-prolog on a wasm load failure.** `loadPrologWasm()`
+  rejects with `PrologWasmUnavailableError`, whose message names the two commands
+  that rebuild the artifact. A fallback would make a parity diff compare tau against
+  itself and pass vacuously — the same vacuous-guard failure mode as an unfalsified
+  test. (Falsified by moving `insimul.wasm` aside: 4 tests go red with the hint.)
+- **`WasmPrologEngine` mirrors `tau-engine`'s bookkeeping deliberately** — same
+  consult accumulation, same de-dup, same full-KB `rebuild()` — even though Trealla
+  supports incremental assert/retract. Identical bookkeeping keeps every observed
+  divergence attributable to the *interpreter* rather than to the wrapper.
+- **Bindings stay scalar in both engines.** `collapseTerm` mirrors tau's
+  `extractBindings`: compound → functor name, list → `'.'` (`'[]'` when empty). The
+  corpus rule ("project a compound through a rule, never bind to it") is unchanged.
+- **The contract suite is `describe.each` over BOTH engines**
+  (`src/prolog/__tests__/wasm-engine.test.ts`), so a behaviour cannot be true of one
+  and false of the other without a red test.
+- **Engine construction is async now.** `BabylonGame.initializeSystems()` does
+  `await GamePrologEngine.create()`; the synchronous `new GamePrologEngine()` still
+  works but only accepts an already-built engine (tau by default).
+- Building the artifact needs emsdk + cmake and a network clone of the pinned
+  Trealla commit; do it out-of-source (`scripts/build_wasm.sh --build-dir <abs path>`)
+  so a sibling checkout is never dirtied.

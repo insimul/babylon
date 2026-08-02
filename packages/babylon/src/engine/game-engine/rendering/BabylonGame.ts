@@ -5481,8 +5481,12 @@ export class BabylonGame {
       });
     });
 
-    // Initialize Prolog engine and connect to event bus
-    this.prologEngine = new GamePrologEngine();
+    // Initialize Prolog engine and connect to event bus.
+    // AWAITED on purpose: the wasm engine (91-babylon-prolog-wasm) loads a
+    // module asynchronously, so construction must not be assumed synchronous.
+    // A failure to build the engine propagates out of initializeSystems()
+    // rather than leaving the game running Prolog-less.
+    this.prologEngine = await GamePrologEngine.create();
     this.prologEngine.subscribeToEventBus(this.eventBus);
 
     // Prolog objective completion → sync to QuestCompletionEngine for UI updates

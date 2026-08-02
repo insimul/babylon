@@ -1,0 +1,23 @@
+{
+  "name": "@insimul/prolog-wasm",
+  "version": "0.1.0",
+  "description": "libinsimul — the Trealla Prolog core, built for wasm32 (the same engine the native engine plugins run)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./index.mjs",
+    "./api": "./insimul-api.mjs",
+    "./glue": "./insimul.mjs",
+    "./insimul.wasm": "./insimul.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "insimul-api.mjs",
+    "insimul.mjs",
+    "insimul.wasm",
+    "VERSION",
+    "LICENSE"
+  ]
+}
