@@ -1,5 +1,5 @@
 {
-  "//": "Standalone typecheck for @insimul/core (npm run typecheck). Mirrors the root tsconfig.check.json compiler options so core type-checks identically in isolation and as part of the whole-repo check. The `@shared/*` path resolves the few contract modules that still live in shared/ (e.g. language/proficiency-model, language/spaced-repetition) until later core-extraction stories move them in. Core owns NO Babylon/React/DOM code, so `lib` deliberately excludes 'dom'.",
+  "//": "Standalone typecheck for @insimul/core (npm run typecheck). Mirrors the root tsconfig.check.json compiler options so core type-checks identically in isolation and as part of the whole-repo check. Core owns NO Babylon/React/DOM code, so `lib` deliberately excludes 'dom'. There is deliberately NO `@shared/*` path mapping (US-CE6 removed core's last @shared edge; US-1 of 93-runtime-logic-to-core removed the now-dead mapping): with it gone, a `@shared/...` import in core fails this standalone typecheck, not just the import-hygiene guard. Do not re-add it — move the module into core instead.",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -13,10 +13,7 @@
     "resolveJsonModule": true,
     "lib": ["esnext"],
     "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["../../shared/*"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
