@@ -106,6 +106,29 @@ The Babylon package reaches them through one-line re-export shims left at the ol
 `game-engine/logic/*` paths, so `@shared/*` consumers and the export pipeline
 resolve unchanged.
 
+## Writing an engine adapter
+
+[`docs/runtime-contract.md`](./docs/runtime-contract.md) is the document to read
+before starting a Unity, Unreal or Godot adapter. It states what core provides
+(all 59 runtime modules, grouped by capability), what the adapter must provide
+back, what is deliberately out of scope, and what still blocks a genuinely
+shared four-way runtime.
+
+Two interface files hold the seam, and they run in opposite directions:
+
+| file | who implements | what it declares |
+| --- | --- | --- |
+| `src/game-engine/system-contracts.ts` | the engine, for itself | The nine systems each engine **ports** from the Babylon reference — combat, rules, quest, inventory, crafting, resources, survival, dialogue, actions. |
+| `src/game-engine/host-contracts.ts` | the engine, **for core** | The five hooks the shared runtime calls back into its host — `IDebugSink`, `IHostLifecycle`, `ISpeechSynthesizer`, `IResourceStore`, `ICombatStatSink`. Persistence is the older `IDataSource` in `game-engine/data-source.ts`. |
+
+Both are subpath-only imports (`@insimul/core/game-engine/host-contracts`), for
+the same name-collision reason as the runtime modules. The host hooks are
+declared but **not yet wired**: the seven modules that need them are still in
+`packages/babylon` (§2.1 of the contract explains why, and what an adapter gets
+in the meantime). A drift guard —
+`src/game-engine/__tests__/runtime-contract.test.ts` — fails if a runtime module
+or a host hook is missing from the document.
+
 The engine-agnostic type subset those modules need lives in
 `src/game-engine/runtime-types.ts`: 52 declarations lifted out of the Babylon
 `types.ts` as a real, **checked** module. The `@ts-nocheck` on the Babylon file

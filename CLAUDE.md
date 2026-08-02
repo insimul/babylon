@@ -466,6 +466,42 @@ now reads 59 (a) / 1 (b) / 10 (c).
   `git diff --cached -M -U0 --diff-filter=R` and filter out import/`from` lines — anything
   left is a real edit that belongs in the story notes.
 
+### The runtime contract for engine adapters (US-4, 93-runtime-logic-to-core)
+
+`packages/core/docs/runtime-contract.md` is what a Unity/Unreal/Godot adapter author
+reads instead of the Babylon source: what core provides (all 59 runtime modules grouped
+by capability), what the adapter provides back, what is deliberately out of scope
+(rendering + play-time geometry), what is net-new capability vs. a port, and what still
+blocks a four-way runtime (tau-prolog vs. libinsimul; the 7 un-inverted modules).
+
+- **Two interface files, opposite directions — do not merge them.**
+  `game-engine/system-contracts.ts` = the nine systems each engine **ports** for itself
+  (`ICombatSystem`, `IQuestSystem`, …). `game-engine/host-contracts.ts` (new) = the five
+  hooks the shared runtime **calls back into its host** (`IDebugSink`, `IHostLifecycle`,
+  `ISpeechSynthesizer`, `IResourceStore`, `ICombatStatSink`), plus `EngineHostAdapter`
+  bundling them. Persistence is NOT among them — that is the older `IDataSource`.
+  Both files are subpath-only, not in the flat `index.ts` barrel.
+- **Derive host interfaces from the actual coupling, not from taxonomy.** Each hook is
+  the exact surface a class-(c) module calls today (`IResourceStore` has two methods
+  because `CraftingSystem` calls two). The AC's "rendering, input, audio, persistence"
+  categories map onto real seams once you read them: the `window.electronAPI.aiTTS` probe
+  in `AssessmentEngine` *is* the audio hook; `beforeunload` in `LanguageProgressTracker`
+  *is* the persistence-lifecycle hook. Make every field of the adapter optional with a
+  documented fallback so an adapter can come up in stages.
+- **Declared ≠ wired, and the doc must say so.** The seven modules needing these hooks
+  are still in `packages/babylon`; inverting them is a behaviour change and belongs to
+  its own story. Saying that plainly (§2.1) is worth more than a doc that reads as if
+  the seam already exists.
+- **A contract doc needs a drift guard or it rots.**
+  `packages/core/src/game-engine/__tests__/runtime-contract.test.ts` fails if a module
+  under `src/game-engine/logic/` or an `export interface I*` in `host-contracts.ts` is
+  missing from the doc, and asserts its own module walk found >50 files so it can't pass
+  vacuously. Falsified both ways (add an undocumented module + an undocumented interface,
+  watch both fail, remove).
+- **`wc -l *.ts | grep -v '\.test\.ts'` keeps wc's own `total` line**, which still counts
+  the tests you filtered out — that is how "18,459 lines" got into a draft when the real
+  non-test total is 17,946. Sum the per-file counts yourself when a number goes in a doc.
+
 ## `@insimul/babylon` — the one-package-per-web-engine consolidation (babylon-consolidation)
 
 The web/Babylon side is collapsing into ONE package, `packages/babylon`
