@@ -1,51 +1,73 @@
-# @insimul/runtime
+# Insimul for Babylon.js
 
-The Insimul runtime: the engine-agnostic contract, the web/Babylon game runtime, and
-the per-engine export templates that ship **inside** games built with the Insimul
-platform. It is designed to build, type-check, and test **standalone** — with zero
-references back into the authoring platform (`insimul-platform`).
+> Drop AI-driven NPC conversations, quest logic, and persistent save files into a
+> [Babylon.js](https://www.babylonjs.com/) game — backed by a world whose canonical state
+> lives in a knowledge base, not scattered across your code.
 
-## The two-package model
+This repository is the **web runtime** of Insimul, a system for building fictional worlds
+and games in which the "truth" of the world — who knows whom, which quests are open, what's
+in the tavern — is held in a Prolog knowledge base rather than hardcoded. If you build for
+the web with Babylon.js and want NPCs that actually talk (with pluggable LLM / voice
+backends), quests and inventory that behave consistently, and save files that survive schema
+changes, this is the library that gives you all of that in one install.
 
-The runtime is consolidating around **one contract package plus one runtime package per
-engine**, so a creator installs exactly one thing for their engine:
+You do **not** need to know anything about the wider Insimul project to use it. If you know
+JavaScript/TypeScript and a little Babylon.js, you know enough.
 
-| Package | Path | Role |
-| --- | --- | --- |
-| `@insimul/core` | `packages/core` | **The contract.** Engine-agnostic save-file format, Prolog runtime, World IR, quest/language models, zod schemas + JSON Schema. Imports **no** engine (`@babylonjs/*`), UI (`react`), or DOM libs — so native plugins can consume it without dragging Babylon.js along. |
-| `@insimul/babylon` | `packages/babylon` | **The web engine runtime.** Everything a web creator needs, in one package: `./conversation` (LLM/TTS/STT SDK), `./data` (DataSource, save-file persistence, loading UI, `BabylonWorld` React mount), `./engine` (the Babylon renderer, game logic, systems, voice), `./templates` (the Vite/Electron export shell). Depends only on `@insimul/core`. |
-| `@insimul/unity` · `@insimul/unreal` · `@insimul/godot` | `packages/{unity,unreal,godot}` | **Native engine plugins.** C#/C++/GDScript SDK + export templates that consume the same `@insimul/core` contract (not TypeScript). |
+## What it gives you
 
-The arrows point one way: **`@insimul/babylon` → `@insimul/core`, and `@insimul/core` →
-nothing.** Two filesystem guards in `shared/__tests__/import-hygiene.test.ts` enforce
-this (see [Guards](#guards)).
+- **Talking NPCs, standalone.** A conversation SDK with pluggable **chat (LLM)**, **TTS**,
+  and **STT** providers — server-hosted, fully in-browser, or local. It has no dependency on
+  Babylon or React, so you can drop it into any game loop.
+- **A world engine, not a scripting mess.** Quests, dialogue, inventory and containers,
+  crafting/farming/fishing/mining, relationships, game time, and truth propagation — all
+  driven by queries against a world's knowledge base, so behaviour stays consistent as the
+  world grows.
+- **Save files that don't rot.** A versioned save-file format with migrations, persistence,
+  and loading UI. Old saves migrate forward instead of breaking.
+- **A Babylon.js renderer + a one-component mount.** `BabylonWorld` is the whole game surface
+  — rendering, quests, and save persistence — as a single React component.
 
-### Deprecated passthrough packages
+## How it works
 
-Two packages from the pre-consolidation layout are kept **only** as thin re-export
-shims so existing installs keep resolving. **Do not add them to new projects** —
-install `@insimul/babylon` and import the subpath instead:
+Three ideas explain most of the design:
 
-| Deprecated package | Install this instead | Import this instead |
-| --- | --- | --- |
-| `@insimul/typescript` | `@insimul/babylon` | `@insimul/babylon/conversation` |
-| `@insimul/babylon-game` | `@insimul/babylon` | `@insimul/babylon/data` |
+- **The world's truth lives in a knowledge base.** Canonical state is a set of facts and
+  rules in Prolog; game logic *asks questions of it* instead of hand-maintaining state. This
+  is what keeps a large world coherent.
+- **One reasoning engine, everywhere.** That knowledge base is evaluated by a single Prolog
+  engine — [Trealla](https://github.com/trealla-prolog/trealla) compiled to WebAssembly — so
+  a world behaves **identically** in the browser and on native engines. The wasm build ships
+  inside the package; there is no native toolchain to set up.
+- **Rules and rendering are separate packages.** The engine-agnostic contract and shared
+  logic live in `@insimul/core`; the Babylon.js renderer and web glue live in
+  `@insimul/babylon`, which depends on core and nothing else. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture.
 
-Every old import path (`@insimul/typescript/*`, `@insimul/babylon-game/*`, and the
-`@shared/game-engine/*` / `@shared/voice/*` module paths) still resolves through a
-one-line re-export shim, snapshotted and guarded so a shim can never silently go
-missing. See the [shim / deprecation timeline](#shim--deprecation-timeline).
+As a web developer you install **one package, `@insimul/babylon`**, and reach for the piece
+you need through a subpath.
 
-## Quickstart — plug Insimul into your existing web game
+## Getting started
 
-Install the one package:
+The `@insimul/*` packages are published to **GitHub Packages**, so your project needs an
+`.npmrc` pointing the `@insimul` scope at that registry (copy
+[`.npmrc.example`](.npmrc.example)) with a `GITHUB_TOKEN` that has `read:packages`:
+
+```ini
+@insimul:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Then install the one package:
 
 ```bash
 npm install @insimul/babylon
 ```
 
-**Option A — mount a full Insimul world (React).** `BabylonWorld` is the whole game
-surface (rendering + quests + save persistence) as one component:
+### A minimal example
+
+**Mount a full world (React).** `BabylonWorld` is rendering + quests + save persistence in
+one component:
 
 ```tsx
 import { BabylonWorld } from '@insimul/babylon/data/BabylonWorld';
@@ -55,22 +77,15 @@ export function Game() {
     <BabylonWorld
       worldId="my-world"
       worldName="My World"
-      token={null}              // null = standalone/offline (no server auth)
-      assetMounts={[]}          // asset bundles the game loads
+      token={null}        // null = standalone / offline (no server auth)
+      assetMounts={[]}    // asset bundles the game loads
       onBack={() => history.back()}
     />
   );
 }
 ```
 
-`react` is an **optional peer dependency** — only the React entry points
-(`BabylonWorld`, `LoadingScreen`, the save-migration modal) need it. Importing
-`@insimul/babylon/data` (the DataSource / save-file barrel) or
-`@insimul/babylon/conversation` never pulls React in.
-
-**Option B — use the conversation SDK standalone.** Drop Insimul NPC conversations
-(pluggable LLM / TTS / STT providers, server or fully in-browser) into any game loop —
-no Babylon, no React:
+**Or just the NPC conversations** — no Babylon, no React:
 
 ```ts
 import { InsimulClient } from '@insimul/babylon/conversation';
@@ -81,142 +96,51 @@ client.setCharacter(npcId, worldId);
 await client.sendText('Hello!');
 ```
 
-**Option C — read/write save files against the contract.** For tooling or a native
-engine, depend on `@insimul/core` directly (the engine-agnostic save-file format,
-Prolog runtime, and World IR with emitted JSON Schemas):
+`react` and the in-browser LLM backend (`@mlc-ai/web-llm`) are **optional peers** — you only
+install them if you use the entry points that need them.
 
-```ts
-import { migrateSaveFile, SAVE_FILE_VERSION } from '@insimul/core';
-```
+## The pieces
 
-## Development
+You install `@insimul/babylon`, but the code is two packages with one-way dependencies:
 
-Install dependencies (workspace-hoisted; `@insimul/*` scoped packages come from
-GitHub Packages — see `.npmrc.example`):
+| Package | Install for | Highlights |
+| --- | --- | --- |
+| [**`@insimul/babylon`**](packages/babylon) | building a web game | `@insimul/babylon/conversation` (the NPC SDK), `/data` (save + `BabylonWorld`), `/engine` (the Babylon renderer), `/templates` (export shell). |
+| [**`@insimul/core`**](packages/core) | tooling or a native engine | The engine-agnostic contract: save-file format + migrations, World types, the Prolog toolchain, and the shared runtime systems. No Babylon, React, or DOM. |
 
-```bash
-npm install
-```
+Each package has its own README with a full API tour — start there when you want depth.
 
-> **Workspace install gotcha.** The npm workspace root is the **parent** directory (it
-> lists `insimul-runtime` and `insimul-runtime/packages/*` as workspaces), so deps hoist
-> to the parent `node_modules` and `insimul-runtime/` has no `node_modules` or lockfile
-> of its own. Run `npm install` from the parent, never inside `insimul-runtime` (a nested
-> install creates a rogue partial `node_modules` and typecheck fails with bogus
-> "Cannot find module"). See `scripts/ralph/progress.txt` → Codebase Patterns.
+## Learn by example / deeper usage
 
-### Type-check the whole repo standalone
+- [**`packages/babylon/README.md`**](packages/babylon/README.md) — every entry point of the
+  web runtime, with quickstarts for each.
+- [**`packages/core/README.md`**](packages/core/README.md) — the contract, the shared
+  runtime, the transport schemas, and how to consume it from a non-web engine.
+- [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md) — why it's two packages, the one-way
+  dependency rule, the single wasm Prolog engine, and how to migrate off the older package
+  names.
 
-```bash
-npm run check
-```
+## Repository layout
 
-Runs `tsc --noEmit` against `tsconfig.check.json`, which covers `shared/` plus the TS
-packages' `src/` with the `@shared/* -> ./shared/*` and `@insimul/*` aliases the
-platform uses. It is the gate that keeps the runtime self-contained: every
-`@shared/...` import must resolve to a file **in this repo** (no back-references into
-`insimul-platform`).
+| Path | Contents |
+| --- | --- |
+| [`packages/babylon/`](packages/babylon) | `@insimul/babylon` — the web/Babylon.js runtime you install. |
+| [`packages/core/`](packages/core) | `@insimul/core` — the engine-agnostic contract and shared runtime. |
+| `packages/typescript/`, `packages/babylon-game/` | Deprecated re-export shims for the old package names ([migration](docs/ARCHITECTURE.md#migrating-from-the-older-package-names)). |
+| [`docs/`](docs) | Architecture, development, and release documentation. |
+| `shared/` | Straggler modules and the import-hygiene guards, mid-migration into the two packages. |
 
-Engine template trees (`packages/{unity,unreal,godot}/templates` and the C#/C++/GDScript
-sources) are excluded — not TypeScript. The Babylon export templates
-(`packages/babylon/templates`) are also excluded: they use aliases that only resolve
-inside a *generated* game project (see `test:export-shell` below).
+## Going deeper
 
-> **Known type debt.** Two files (`packages/babylon/src/engine/game-engine/types.ts`,
-> `.../ir-types.ts`) carry a temporary in-file `// @ts-nocheck` for genuine pre-existing
-> duplicate-interface bugs whose correct fix is a deliberate refactor with runtime-behavior
-> risk. Draining those — and resolving the `GameQuestManager` type-only surface (its impl
-> is injected platform-side at export) — is tracked follow-up. Do **not** add new
-> `@ts-nocheck` directives.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the repository is put together.
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — building, type-checking, testing, and the guards.
+- [`docs/PUBLISHING.md`](docs/PUBLISHING.md) · [`docs/RELEASING.md`](docs/RELEASING.md) — the npm and native release processes.
+- [`CHANGELOG.md`](CHANGELOG.md) — the release-by-release record.
 
-### Run the tests
+The native-engine runtimes for the same worlds (Unity / Unreal / Godot) are separate
+sibling projects that consume the same `@insimul/core` contract; you don't need them to
+build for the web.
 
-```bash
-npm test              # vitest run — package suites + the import-hygiene / guard suite
-npm run test:export-shell   # real `vite build` of a fixture mirroring an exported game
-```
+## License
 
-`test:export-shell` proves the export pipeline survives the consolidation: it builds a
-fixture that vendors the consolidated package at `src/insimul-babylon` and bundles the
-whole first-party graph (`BabylonGame` + engine + data + conversation + core) under the
-new-layout Vite aliases. A full standalone `BabylonGame` boot is **not** achievable in
-this repo by design — the export environment (`.d.ts`-only surfaces like
-`GameQuestManager`, generated sentry/mlc stubs) is platform-assembled; that end-to-end
-check lives in the platform golden-export gate.
-
-### Guards
-
-`shared/__tests__/import-hygiene.test.ts` locks in the invariants that keep the
-consolidation from regressing:
-
-- **`@shared` self-containment** — every `@shared/...` import resolves to a file in this
-  repo; nothing imports the platform-only `@shared/schema`.
-- **Dependency direction** — `@insimul/core` imports nothing from `@babylonjs/*`,
-  `react`, `@shared/*`, or a sibling package; `@insimul/babylon` imports **no first-party
-  package but `@insimul/core`** (its own subpaths and `@shared/*` aside), never a
-  deprecated passthrough or a native-engine sibling.
-- **Source location** — non-shim source may live **only** under
-  `packages/{core,babylon}`. A new module landing back in `shared/` or a deprecated
-  package fails the guard; the pre-existing straggler domain files are grandfathered in
-  `shared/GRANDFATHERED_SOURCE.json`, a list that may only shrink.
-- **Shim completeness** — the moved surfaces are snapshotted
-  (`packages/babylon-game/OLD_EXPORT_SURFACE.json`,
-  `packages/babylon/OLD_ENGINE_EXPORT_SURFACE.json`); the guard fails if any old
-  importable path stops being a thin re-export shim.
-
-### Publish gate
-
-```bash
-npm run publish:dry-run
-```
-
-Runs `npm publish --dry-run` for each of the four web packages and asserts the tarball
-ships the entry + every `exports` target + `README`/`LICENSE`, and ships **no** tests,
-conformance corpus, or dev tooling. For the two deprecated passthroughs it also asserts
-the deprecation metadata names `@insimul/babylon` and that every shipped shim still
-resolves into it once installed. It publishes nothing.
-
-> **Public release is gated on repository hygiene.** Every package pins
-> `publishConfig.access: "restricted"` and the gate fails if that changes. Going
-> public awaits the **git-history audit** and the **third-party purge** — a public
-> package exposes the whole commit history, which has not yet been reviewed for
-> credentials, private world content, or licensed third-party corpora. See
-> [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
-
-### Release
-
-```bash
-npm run release:dry-run
-```
-
-Rehearses a whole release — preflight (manifest versions vs the `web` block of
-`VERSIONS.json`, `access: restricted`, a `web-v*` tag on a clean HEAD), the publish
-gate, then the `npm publish` / `npm deprecate` commands **printed rather than run**.
-A real release is cut by pushing a `web-v<train>` tag (e.g. `web-v2026.07.22`), which
-runs `.github/workflows/release-web-packages.yml`: it verifies, and only publishes if
-the `INSIMUL_PUBLISH_ENABLED` repository variable is `"true"` **and** a reviewer
-approves the `npm-release` environment — so no tag, push, or manual run publishes by
-accident. `shared/__tests__/release-workflow.test.ts` fails if any of those guards
-goes missing. Versioning policy and the full process:
-[`docs/PUBLISHING.md`](docs/PUBLISHING.md), [`docs/RELEASING.md`](docs/RELEASING.md).
-
-## Shim / deprecation timeline
-
-1. **Now (consolidated, shims live).** `@insimul/babylon` is the one web-runtime package.
-   `@insimul/typescript` and `@insimul/babylon-game` still publish as 100% re-export
-   shims; `@shared/game-engine/*` and `@shared/voice/*` module paths still resolve
-   through shims. Nothing an existing consumer imports breaks.
-2. **Deprecation surfaced.** The deprecated packages are published with an `npm deprecate`
-   notice pointing at the `@insimul/babylon` subpath. New code should import
-   `@insimul/babylon` only.
-3. **Straggler extraction (future).** The engine-agnostic game/domain layer still under
-   `shared/` (language-learning, assessment, quest, narrative, onboarding, procedural,
-   telemetry — see `shared/GRANDFATHERED_SOURCE.json`) moves into `@insimul/core` (or a
-   future domain package), shrinking the grandfathered list toward zero.
-4. **Shim removal (major version).** Once no consumer imports the old paths, the shims
-   and the deprecated `@insimul/{typescript,babylon-game}` packages are dropped in a
-   major release — leaving the clean two-package (`@insimul/core` + `@insimul/babylon`)
-   model.
-
-See `CHANGELOG.md` for the release-by-release record and
-`docs/PLATFORM_SPLIT_AND_ENGINE_PLUGINS.md` §A1.5 for the master plan.
+[Apache-2.0](LICENSE).
