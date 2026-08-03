@@ -41,6 +41,29 @@ asserts every `@shared/...` import resolves in-repo and nothing imports `@shared
   package cwd, and exits 1 with "No test files found". See
   `packages/typescript/vitest.config.ts` and `packages/core/vitest.config.ts`.
 
+## `packages/core` IS A SUBMODULE — `github.com/insimul/core`
+
+Since 2026-08-02 `packages/core` is a git submodule, not a directory of this repo.
+Everything below still applies (the path, the aliases, the shim pattern, the
+guards are all unchanged — that is why the mount point was kept identical), with
+three differences that matter:
+
+- **A change to core is a commit in ANOTHER repo.** Commit inside
+  `packages/core` first, then commit the updated gitlink here. A babylon commit
+  that bumps the gitlink without the core commit having been pushed leaves a
+  pointer nobody else can resolve.
+- **A fresh worktree needs `git submodule update --init --recursive`**, or
+  `packages/core` is an empty directory and all ~264 `@insimul/core/...` imports
+  fail at once. Chief does this automatically for submodule worktrees since
+  `d24b286`; a hand-made `git worktree add` does NOT.
+- **Core must stay standalone for real, not just inside this workspace.** It has
+  its own `npm install`, so a dependency it uses must be in ITS `package.json` —
+  relying on one hoisted from this root passes here and fails in the core repo.
+  That is exactly how `@types/node` was missing while `npm run typecheck` was
+  green. Likewise, never resolve a path through `packages/core/` from inside
+  core: it is the repo root there, and three levels up from `src/x/__tests__` is
+  core's own root, not this one.
+
 ## `@insimul/core` and the re-export-shim pattern (core-extraction)
 
 The engine-agnostic contract is being carved out of `shared/` into
