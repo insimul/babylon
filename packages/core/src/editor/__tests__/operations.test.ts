@@ -18,9 +18,13 @@ import { describe, expect, it } from 'vitest';
 
 import { V1_OPERATIONS, USED_OPERATION_IDS, resolveOperation } from '../operations';
 
+// Resolve from THIS FILE to core's own root, never through a guessed repo root:
+// `<root>/packages/core/...` only exists while core is a package inside babylon,
+// and core is meant to stand alone (it is its own repo). src/editor/__tests__ ->
+// core root is exactly three levels up.
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, '..', '..', '..', '..', '..');
-const operationsJsonPath = join(repoRoot, 'packages', 'core', 'openapi', 'operations.json');
+const coreRoot = join(here, '..', '..', '..');
+const operationsJsonPath = join(coreRoot, 'openapi', 'operations.json');
 
 type OpTuple = { method: string; path: string };
 
