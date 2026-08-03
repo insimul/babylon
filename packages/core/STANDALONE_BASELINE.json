@@ -1,7 +1,0 @@
-{
-  "description": "Baseline for the @insimul/core STANDALONE check (scripts/check-core-standalone.mjs, US-1 of 93-runtime-logic-to-core). Recorded by running `npm run typecheck` and `npx vitest run` with cwd = packages/core — NOT the repo-wide run, which resolves the @shared/@insimul aliases and so proves nothing about isolation. Counts may only GROW; a drop means suites stopped being discoverable from within the package. Update this file (with a reason) only when suites are deliberately removed.",
-  "recordedAt": "2026-08-02",
-  "recordedBy": "US-1 (93-runtime-logic-to-core), before the game-engine/logic move in US-3",
-  "testFiles": 35,
-  "tests": 544
-}
